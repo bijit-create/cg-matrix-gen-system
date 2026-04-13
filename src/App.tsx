@@ -2211,8 +2211,25 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                   <CheckCircle2 size={48} className="mb-4" />
                   <h3 className="text-2xl font-bold mb-2">Pipeline Complete</h3>
                   <p className="mb-6">Successfully generated {questions.length} items calibrated and ready for banking.</p>
-                  <button className="bg-[#1B5E20] text-white px-6 py-3 font-bold uppercase tracking-wide hover:bg-[#2E7D32] transition-colors">
-                    Export to Item Bank
+                  <button
+                    onClick={async () => {
+                      const { exportToExcelAndZip } = await import('./utils/exporter');
+                      await exportToExcelAndZip({
+                        questions,
+                        questionImages,
+                        metadata: {
+                          lo, skill, count: parseInt(count), construct,
+                          grade: parsedMetadata?.gradeCode,
+                          subject: parsedMetadata?.subjectCode,
+                          skillCode: parsedMetadata?.skillCode,
+                          loCode: parsedMetadata?.loCode,
+                        },
+                        qaResults,
+                      });
+                    }}
+                    className="bg-[#1B5E20] text-white px-6 py-3 font-bold uppercase tracking-wide hover:bg-[#2E7D32] transition-colors flex items-center gap-2"
+                  >
+                    <FileDown size={20} /> Export to Item Bank (.zip)
                   </button>
                 </div>
               )}
