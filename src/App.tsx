@@ -852,22 +852,54 @@ const PipelineRunnerView = () => {
   };
 
   // --- Instant type switching (no API call) ---
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
+
   const handleSwitchType = async (qId: string, newType: string) => {
-    const { formatQuestion } = await import('./agents/questionFormatter');
-    // Find atom from current cell data or from questions
     const fromCell = currentCellData?.questions?.find((q: any) => q.id === qId);
     const fromQuestions = questions.find(q => q.id === qId);
     const q = fromCell || fromQuestions;
-    if (!q?._atom) return;
-    const reformatted = formatQuestion(q._atom, newType);
-    if (currentCellData && fromCell) {
-      setCurrentCellData(prev => prev ? {
-        ...prev,
-        questions: prev.questions.map((cq: any) => cq.id === qId ? reformatted : cq)
-      } : prev);
-    }
-    if (fromQuestions) {
-      setQuestions(prev => prev.map(eq => eq.id === qId ? reformatted : eq));
+    if (!q) return;
+    if (q.type === newType) return; // already this type
+
+    setSwitchingId(qId);
+    try {
+      const { generateAgentResponse } = await import('./agents/api');
+      const { Prompts } = await import('./agents/prompts');
+      const { GenerationSchema } = await import('./agents/schemas');
+
+      const typeInstructions: Record<string, string> = {
+        mcq: 'MCQ with 4 options (A,B,C,D). 1 correct (correct=true). Wrong options need "why_wrong". Fill "options" array.',
+        fill_blank: 'Fill-in-the-blank. Put ##answer## in stem where blank goes. Set answer field.',
+        error_analysis: 'Error analysis. Show student work in "steps" array (3-4 steps). 1-2 steps wrong (correct=false) with "fix".',
+        match: 'Match-the-following. Provide "pairs" array with 4-5 strings like "Rice → Plant-based".',
+        arrange: 'Arrange-in-order. Provide "items" array with 4-5 items in correct sequence.',
+      };
+
+      const prompt = `${Prompts.GenerationAgent}
+Regenerate this question as a "${newType}" question. Same topic and content, different format.
+${typeInstructions[newType] || typeInstructions.mcq}
+Original question: "${q.stem}"
+Cell: ${q.cell}. Grade: ${parsedMetadata?.gradeCode || 'unknown'}.
+LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
+
+      const newQ = await generateAgentResponse(prompt, JSON.stringify({ id: qId, type: newType, cell: q.cell }), GenerationSchema);
+
+      const updated = { ...newQ, cell: q.cell, type: newType };
+
+      if (currentCellData && fromCell) {
+        setCurrentCellData(prev => prev ? {
+          ...prev,
+          questions: prev.questions.map((cq: any) => cq.id === qId ? updated : cq)
+        } : prev);
+      }
+      if (fromQuestions) {
+        setQuestions(prev => prev.map(eq => eq.id === qId ? updated : eq));
+      }
+      setLogs(prev => [...prev, { agent: 'Generation Agent', action: `Switched ${qId} to ${newType}.`, time: new Date().toLocaleTimeString() }]);
+    } catch (e: any) {
+      setLogs(prev => [...prev, { agent: 'System', action: `Switch failed: ${e.message?.slice(0, 50)}`, time: new Date().toLocaleTimeString() }]);
+    } finally {
+      setSwitchingId(null);
     }
   };
 
@@ -1766,20 +1798,29 @@ const PipelineRunnerView = () => {
                                 >
                                   <Trash2 size={10} /> Reject
                                 </button>
-                                <span className="text-[10px] text-[var(--ink-muted)]">Switch to:</span>
-                                {['mcq', 'fill_blank', 'error_analysis', 'match', 'arrange'].map(t => (
-                                  <button
-                                    key={t}
-                                    onClick={() => handleSwitchType(q.question_id || q.id, t)}
-                                    className={`px-1.5 py-0.5 text-[10px] font-mono border transition-colors ${
-                                      (q.type || 'mcq') === t
-                                        ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
-                                        : 'border-[var(--line-dark)] hover:bg-[var(--line)]'
-                                    }`}
-                                  >
-                                    {t.replace('_', ' ')}
-                                  </button>
-                                ))}
+                                {switchingId === (q.question_id || q.id) ? (
+                                  <span className="text-[10px] text-[var(--accent)] flex items-center gap-1">
+                                    <Loader2 size={10} className="animate-spin" /> Switching type...
+                                  </span>
+                                ) : (
+                                  <>
+                                    <span className="text-[10px] text-[var(--ink-muted)]">Switch to:</span>
+                                    {['mcq', 'fill_blank', 'error_analysis', 'match', 'arrange'].map(t => (
+                                      <button
+                                        key={t}
+                                        disabled={switchingId !== null}
+                                        onClick={() => handleSwitchType(q.question_id || q.id, t)}
+                                        className={`px-1.5 py-0.5 text-[10px] font-mono border transition-colors disabled:opacity-30 ${
+                                          (q.type || 'mcq') === t
+                                            ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
+                                            : 'border-[var(--line-dark)] hover:bg-[var(--line)]'
+                                        }`}
+                                      >
+                                        {t.replace('_', ' ')}
+                                      </button>
+                                    ))}
+                                  </>
+                                )}
                               </div>
                             </div>
                           );
