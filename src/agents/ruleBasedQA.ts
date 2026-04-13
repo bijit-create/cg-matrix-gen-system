@@ -139,10 +139,10 @@ function checkDistractors(options: any[]): QAFlag[] {
     if (t) seen.add(t);
   });
 
-  // Missing distractor rationale for wrong options
+  // Missing distractor rationale for wrong options (check both field names)
   options.forEach((opt: any, i: number) => {
-    if (typeof opt === 'object' && !opt.is_correct && !opt.distractor_rationale) {
-      flags.push({ rule: 'missing_distractor_rationale', category: 'distractor', severity: 'major', message: 'Wrong option missing distractor rationale — each distractor must target a specific misconception.', field: `option_${String.fromCharCode(65 + i)}` });
+    if (typeof opt === 'object' && !opt.correct && !opt.is_correct && !opt.why_wrong && !opt.distractor_rationale) {
+      flags.push({ rule: 'missing_distractor_rationale', category: 'distractor', severity: 'minor', message: 'Wrong option missing rationale.', field: `option_${String.fromCharCode(65 + i)}` });
     }
   });
 

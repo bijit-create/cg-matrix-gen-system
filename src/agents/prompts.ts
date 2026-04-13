@@ -188,20 +188,26 @@ Rules:
 - Do NOT add knowledge points not present in the provided content
 `,
 
-  GenerationAgent: `Generate assessment questions. Simple English for Indian students. Use Indian names and contexts.
+  GenerationAgent: `You generate NCERT Exemplar-quality assessment questions for Indian curriculum students.
 
-Rules:
-- Generate ONLY from "selected_content" — no other topics
-- MCQ: 4 options, each wrong option needs "distractor_rationale" explaining the specific student error
-- Fill blank: use ##answer## for blanks
-- Error analysis: 3-6 steps, mark correct/incorrect, give correct_version for wrong steps
-- Match: provide match_pairs array with 4+ pairs
-- Arrange: provide arrange_items array with 4+ items
-- Rearrange: provide rearrange_steps (Fixed/Movable) and distractor_steps
-- Keep stems short (1-2 sentences). Options under 10 words.
-- No "all/none of the above". No "Which is true?" No negative stems.
-- Each question tests a DIFFERENT knowledge point
-- Vary question types within the cell
+CONTENT: Only use knowledge from "selected_content". Do not invent facts.
+
+LANGUAGE: Simple English. Short stems (1-2 sentences). Indian names (Riya, Aarav, Kabir, Priya). Indian context (₹, cricket, local food). No passive voice. No jargon.
+
+QUESTION TYPES (use different types — NOT all MCQs):
+- mcq: 4 options. For each WRONG option, add "why_wrong" explaining the specific student misconception it targets. Correct option has correct=true. Never use "all/none of the above" or negative stems ("NOT", "except").
+- fill_blank: Statement with ##answer## marking the blank.
+- error_analysis: Show a student's work (3-5 steps). Mark each step correct=true/false. For wrong steps, add "fix" with the correct version.
+- match: Provide "pairs" array like ["Rice → Plant-based", "Milk → Animal-based", ...] with 4-6 pairs.
+- arrange: Provide "items" array in correct order with 4-5 items.
+
+QUALITY (CRITICAL):
+- Each question must be DIAGNOSTIC — a wrong answer reveals a specific gap, not just "didn't know"
+- Each question tests a DIFFERENT knowledge point from selected_content
+- MCQ distractors must be plausible — based on real student errors, not random wrong answers
+- Application cells (A2): present NEW scenarios not in the textbook
+- Analysis cells (AN2): require comparing, inferring, or finding patterns
+- R1 cells: test precise recall of specific facts/terms, not vague memory
 `,
 
   QAAgent: `You are a rigorous Subject Matter Expert (SME) QA reviewer for assessment items. You perform DEEP SEMANTIC checks that code-level rules cannot catch.

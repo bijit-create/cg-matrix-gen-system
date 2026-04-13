@@ -342,14 +342,29 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
             selected_content: cellScope
         };
 
-        // Build a SHORT cell-specific prompt (not the full GenerationAgent prompt)
-        const cellPrompt = `Generate ${count} ${cell} questions. Simple English, Indian context.
-Topic: ${this.config.skill}
-Content: ${cellScope.slice(0, 600)}
-Cell ${cell}: ${thisCellDef}
-Types: mcq (4 options, why_wrong for each wrong one), fill_blank (##answer##), error_analysis (steps with correct/fix), match (pairs), arrange (items).
-Use varied types. Keep stems short. Each wrong MCQ option needs "why_wrong" explaining the student error.
-${misconceptions.length > 0 ? 'Misconceptions to target: ' + misconceptions.join('; ') : ''}`;
+        // Build cell-specific context to append to the system prompt
+        const cellContext = `
+TASK: Generate exactly ${count} question(s) for cell ${cell}.
+Cell definition: ${thisCellDef}
+Skill: ${this.config.skill}
+Grade: ${grade}, Subject: ${subjectName}
+
+CONTENT TO TEST (generate questions ONLY from these points):
+${cellScope.slice(0, 800)}
+
+${misconceptions.length > 0 ? 'MISCONCEPTIONS to target in distractors:\n' + misconceptions.join('\n') : ''}
+
+TYPE GUIDANCE for ${cell}:
+${cell === 'R1' ? 'Use: mcq, fill_blank. Test recall of specific facts/terms.' : ''}
+${cell === 'U1' ? 'Use: mcq, fill_blank. Test explanation of concepts.' : ''}
+${cell === 'U2' ? 'Use: mcq, match, arrange. Test comparison/classification.' : ''}
+${cell === 'A2' ? 'Use: mcq, error_analysis. Present NEW scenarios to apply rules.' : ''}
+${cell === 'A3' ? 'Use: error_analysis. Multi-step problems.' : ''}
+${cell === 'AN2' ? 'Use: mcq, error_analysis. Require inferring/analyzing patterns.' : ''}
+${cell === 'AN3' ? 'Use: error_analysis. Detect errors in reasoning.' : ''}
+Use AT LEAST 2 different question types if generating 2+ items.`;
+
+        const cellPrompt = Prompts.GenerationAgent + cellContext;
 
         let cellQuestions: any[] = [];
         for (let attempt = 0; attempt < 2; attempt++) {
