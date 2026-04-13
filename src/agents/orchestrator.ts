@@ -386,6 +386,50 @@ LANGUAGE: Simple English, Indian names, short stems, no negative phrasing.`;
             .filter(r => r.status === 'fulfilled' && r.value)
             .map(r => (r as PromiseFulfilledResult<any>).value);
 
+        // Auto-generate images for picture_mcq questions
+        const pictureMcqs = cellQuestions.filter(q => q.type === 'picture_mcq');
+        if (pictureMcqs.length > 0) {
+            this.log('Image Agent', `Generating images for ${pictureMcqs.length} picture MCQ(s)...`);
+            const { generateImageContent } = await import('./api');
+            const { normalizeToCanvas } = await import('./imageGen');
+            const imageResults: Record<string, string> = {};
+
+            for (const q of pictureMcqs) {
+                const qId = q.id || q.question_id;
+                // Generate stem image
+                try {
+                    const stemPrompt = `A simple flat vector educational diagram for: "${q.stem}". Minimalist style, solid white background, clear bold labels, child-friendly, 4:3 aspect ratio. Show the question visually with a "?" mark.`;
+                    const rawImg = await generateImageContent(stemPrompt);
+                    const { dataUrl } = await normalizeToCanvas(rawImg);
+                    imageResults[qId] = dataUrl;
+                    this.log('Image Agent', `${qId}: stem image ✓`);
+                } catch (e: any) {
+                    this.log('Image Agent', `${qId}: stem image failed`);
+                }
+
+                // Generate option images
+                if (q.options) {
+                    for (const opt of q.options) {
+                        const desc = opt.image_desc || opt.text;
+                        if (!desc) continue;
+                        const optKey = `${qId}_opt_${opt.label || 'X'}`;
+                        try {
+                            const optPrompt = `A simple flat vector illustration of "${desc}". Minimalist, solid white background, clear bold outlines, child-friendly, no text labels, 4:3 aspect ratio.`;
+                            const rawImg = await generateImageContent(optPrompt);
+                            const { dataUrl } = await normalizeToCanvas(rawImg);
+                            imageResults[optKey] = dataUrl;
+                        } catch {
+                            // Skip failed option images
+                        }
+                    }
+                    this.log('Image Agent', `${qId}: option images done`);
+                }
+            }
+            if (Object.keys(imageResults).length > 0 && this.config.onData) {
+                this.config.onData('questionImages', imageResults);
+            }
+        }
+
         // Run rule-based QA
         const ruleResults = runRuleBasedQA(cellQuestions, this.config.lo);
         const cellQA = cellQuestions.map((q: any) => {
