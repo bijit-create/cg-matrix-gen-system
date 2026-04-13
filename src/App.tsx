@@ -907,21 +907,35 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
   // --- Per-question image generation (on-demand) ---
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
 
-  const handleGenerateImage = async (qId: string) => {
-    const q = questions.find(q => q.id === qId);
+  const handleGenerateImage = async (qId: string, customPrompt?: string) => {
+    // Find question from either current cell or approved questions
+    const fromCell = currentCellData?.questions?.find((q: any) => (q.id || q.question_id) === qId);
+    const fromQuestions = questions.find(q => q.id === qId);
+    const q = fromCell || fromQuestions;
     if (!q) return;
     setGeneratingImageId(qId);
     try {
-      const { generateQuestionImage } = await import('./agents/imageGen');
-      const result = await generateQuestionImage(q.stem);
-      if (result.status === 'generated' || result.status === 'svg') {
-        setQuestionImages(prev => ({ ...prev, [qId]: result.dataUrl! }));
-        setLogs(prev => [...prev, { agent: 'Image Agent', action: `Generated image for ${qId}.`, time: new Date().toLocaleTimeString() }]);
+      if (customPrompt) {
+        // Direct prompt (for option images, edits, etc.)
+        const { generateFromPrompt } = await import('./agents/imageGen');
+        const result = await generateFromPrompt(customPrompt);
+        if (result.status === 'generated' && result.dataUrl) {
+          setQuestionImages(prev => ({ ...prev, [qId]: result.dataUrl! }));
+          setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: ${result.sizeKb}KB (800x600 PNG)`, time: new Date().toLocaleTimeString() }]);
+        }
       } else {
-        setLogs(prev => [...prev, { agent: 'Image Agent', action: `Skipped ${qId}: ${result.reason}`, time: new Date().toLocaleTimeString() }]);
+        // Analyze question and generate
+        const { generateQuestionImage } = await import('./agents/imageGen');
+        const result = await generateQuestionImage(q.stem);
+        if (result.status === 'generated' && result.dataUrl) {
+          setQuestionImages(prev => ({ ...prev, [qId]: result.dataUrl! }));
+          setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: ${result.sizeKb}KB (800x600 PNG)`, time: new Date().toLocaleTimeString() }]);
+        } else {
+          setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: ${result.reason || 'skipped'}`, time: new Date().toLocaleTimeString() }]);
+        }
       }
     } catch (e: any) {
-      setLogs(prev => [...prev, { agent: 'Image Agent', action: `Failed for ${qId}: ${e.message}`, time: new Date().toLocaleTimeString() }]);
+      setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: failed — ${e.message?.slice(0, 50)}`, time: new Date().toLocaleTimeString() }]);
     } finally {
       setGeneratingImageId(null);
     }

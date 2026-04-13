@@ -3,152 +3,215 @@ import { GoogleGenAI, Type } from '@google/genai';
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('geminiApiKey');
 const ai = new GoogleGenAI({ apiKey: apiKey || 'dummy-key' });
 
-async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 3000): Promise<T> {
+// --- Retry with exponential backoff (handles 429 rate limits) ---
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 4000): Promise<T> {
   try {
     return await fn();
   } catch (error: any) {
     if (retries > 0) {
       const isRateLimit = error?.message?.includes('429') || error?.status === 429;
-      const actualDelay = isRateLimit ? delay * 2 : delay;
-      await new Promise(resolve => setTimeout(resolve, actualDelay));
+      const wait = isRateLimit ? delay * 2 : delay;
+      await new Promise(r => setTimeout(r, wait));
       return withRetry(fn, retries - 1, delay * 1.5);
     }
     throw error;
   }
 }
 
-export interface ImageResult {
-  status: 'generated' | 'svg' | 'skipped' | 'failed';
-  dataUrl?: string;
-  reason?: string;
+// --- Normalize any image to 800x600 PNG (4:3) ---
+export async function normalizeToCanvas(base64DataUrl: string): Promise<{ dataUrl: string; sizeKb: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 800;
+      canvas.height = 600;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return reject('No 2d context');
+
+      // White background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 800, 600);
+
+      // Scale image to fit within 800x600 maintaining aspect ratio
+      const scale = Math.min(800 / img.width, 600 / img.height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      const x = (800 - w) / 2;
+      const y = (600 - h) / 2;
+      ctx.drawImage(img, x, y, w, h);
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const sizeKb = Math.round((dataUrl.length * 0.75) / 1024);
+      resolve({ dataUrl, sizeKb });
+    };
+    img.onerror = () => reject('Failed to load image');
+    img.src = base64DataUrl;
+  });
 }
 
+// --- Step 1: Analyze question to decide image type ---
 export async function analyzeVisualIntent(question: string): Promise<{
   status: 'generate_image' | 'generate_svg' | 'skip';
   reason: string;
-  image_prompt?: string;
-  svg_prompt?: string;
+  prompt?: string;
 }> {
   try {
-    const response = await withRetry(() => ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `Analyze this educational question and decide if a visual image would help students understand it.
+    const result = await withRetry(async () => {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Analyze this educational question and decide how to create a visual support image.
 
-Rules:
-- GENERATE_IMAGE: For questions where a diagram, flowchart, illustration, or picture of real-world objects helps represent the problem. Good for: science processes, real-world math scenarios, comparisons, data representation.
-- GENERATE_SVG: For geometry (angles, shapes, coordinates), precise graphs, mathematical equations/expressions, number lines, or tables.
-- SKIP: For pure text/recall questions, simple definitions, basic arithmetic without visual context, or when an image adds no value.
+GENERATE_IMAGE: For diagrams, flowcharts, illustrations of real-world objects, food items, animals, plants, scenarios. The image should SHOW the problem visually — not solve it. Include "?" or blank boxes where the answer goes.
+GENERATE_SVG: For geometry (angles, shapes), precise graphs, mathematical equations, number lines, tables, data charts.
+SKIP: For pure text/recall, simple definitions, or when no visual adds value.
 
-If GENERATE_IMAGE, write a detailed image prompt:
-- Start with "A simple flat vector educational diagram of..."
-- Style: minimalist, solid white background, clear bold text, child-friendly
-- Include labels, numbers, and "?" marks where appropriate
-- Use Indian context where relevant (rupees symbol ₹, Indian names, local items)
-- DO NOT show the answer in the image
-- Keep text in simple English
-
-If GENERATE_SVG, write an SVG prompt:
-- Describe exact shapes, coordinates, labels needed
-- Clean responsive SVG, white background, 4:3 aspect ratio
-- Use sans-serif fonts, clear colors
+If GENERATE_IMAGE, write a prompt starting with "A simple flat vector educational diagram..." — minimalist, white background, bold labels, 4:3 aspect ratio, child-friendly, include "?" marks. Use Indian context where relevant.
+If GENERATE_SVG, describe the SVG needed — viewBox="0 0 800 600", white background, Arial font, clean colors.
 
 Question: "${question}"`,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            status: { type: Type.STRING, enum: ['generate_image', 'generate_svg', 'skip'] },
-            reason: { type: Type.STRING },
-            image_prompt: { type: Type.STRING },
-            svg_prompt: { type: Type.STRING }
-          },
-          required: ['status', 'reason']
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              status: { type: Type.STRING, enum: ['generate_image', 'generate_svg', 'skip'] },
+              reason: { type: Type.STRING },
+              prompt: { type: Type.STRING }
+            },
+            required: ['status', 'reason']
+          }
         }
-      }
-    }));
-
-    if (response.text) return JSON.parse(response.text);
-    return { status: 'skip', reason: 'Empty response' };
+      });
+      if (response.text) return JSON.parse(response.text);
+      return { status: 'skip', reason: 'Empty response' };
+    });
+    return result;
   } catch {
     return { status: 'skip', reason: 'Analysis failed' };
   }
 }
 
-export async function generateImage(prompt: string): Promise<ImageResult> {
-  try {
-    const response = await withRetry(() => ai.models.generateContent({
-      model: 'gemini-2.5-flash-preview-image-generation',
-      contents: { parts: [{ text: prompt }] },
-      config: {
-        responseModalities: ['IMAGE', 'TEXT'],
-        imageConfig: { aspectRatio: '4:3' }
-      }
-    }));
-
-    for (const part of (response as any).candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return {
-          status: 'generated',
-          dataUrl: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`
-        };
-      }
+// --- Step 2a: Generate AI image (4:3 aspect ratio) ---
+export async function generateImage(prompt: string): Promise<string> {
+  const response = await withRetry(() => ai.models.generateContent({
+    model: 'gemini-2.5-flash-preview-image-generation',
+    contents: { parts: [{ text: prompt }] },
+    config: {
+      responseModalities: ['IMAGE', 'TEXT'],
+      imageConfig: { aspectRatio: '4:3' }
     }
-    return { status: 'failed', reason: 'No image in response' };
-  } catch (e: any) {
-    return { status: 'failed', reason: e.message };
+  }));
+
+  for (const part of (response as any).candidates?.[0]?.content?.parts || []) {
+    if (part.inlineData) {
+      return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+    }
   }
+  throw new Error('No image generated');
 }
 
-export async function generateSvg(prompt: string): Promise<ImageResult> {
-  try {
-    const response = await withRetry(() => ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `You are an expert SVG coder. Create a clean, responsive SVG diagram.
+// --- Step 2b: Generate SVG (800x600, 4:3) ---
+export async function generateSvg(prompt: string): Promise<string> {
+  const response = await withRetry(() => ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: `You are an expert SVG coder. Create a clean, precise SVG diagram.
 
 Rules:
-- Return ONLY valid SVG code, no markdown wrapping
-- Use viewBox="0 0 800 600" (4:3 aspect ratio)
-- White background, clean modern colors
-- Use Arial/sans-serif fonts, clear labels
-- Include text, measurements, and "?" where needed
-- Child-friendly, simple design
+- Return ONLY raw SVG code — no markdown, no wrapping
+- viewBox="0 0 800 600" (4:3 aspect ratio)
+- White background rectangle as first element
+- Clean modern colors, readable stroke widths
+- Arial/sans-serif fonts, 16-24px for labels
+- Include text labels, measurements, "?" marks where needed
+- Child-friendly, simple, educational style
 
 Prompt: ${prompt}`,
-    }));
+  }));
 
-    let svgCode = response.text?.trim() || '';
-    if (svgCode.startsWith('```svg')) svgCode = svgCode.replace(/^```svg\n?/, '').replace(/\n?```$/, '');
-    else if (svgCode.startsWith('```')) svgCode = svgCode.replace(/^```\n?/, '').replace(/\n?```$/, '');
+  let svg = response.text?.trim() || '';
+  if (svg.startsWith('```')) svg = svg.replace(/^```(?:svg)?\n?/, '').replace(/\n?```$/, '');
+  if (!svg.startsWith('<svg')) throw new Error('Invalid SVG');
 
-    if (!svgCode.startsWith('<svg')) {
-      return { status: 'failed', reason: 'Invalid SVG generated' };
-    }
-
-    const base64Svg = btoa(unescape(encodeURIComponent(svgCode)));
-    return {
-      status: 'svg',
-      dataUrl: `data:image/svg+xml;base64,${base64Svg}`
-    };
-  } catch (e: any) {
-    return { status: 'failed', reason: e.message };
-  }
+  return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
 }
 
-export async function generateQuestionImage(question: string): Promise<ImageResult> {
+// --- Step 3: Edit existing image with a prompt ---
+export async function editImage(base64Image: string, editPrompt: string): Promise<string> {
+  const match = base64Image.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+  if (!match) throw new Error('Invalid image format');
+
+  const response = await withRetry(() => ai.models.generateContent({
+    model: 'gemini-2.5-flash-preview-image-generation',
+    contents: {
+      parts: [
+        { inlineData: { data: match[2], mimeType: match[1] } },
+        { text: editPrompt }
+      ]
+    },
+    config: {
+      responseModalities: ['IMAGE', 'TEXT'],
+      imageConfig: { aspectRatio: '4:3' }
+    }
+  }));
+
+  for (const part of (response as any).candidates?.[0]?.content?.parts || []) {
+    if (part.inlineData) {
+      return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+    }
+  }
+  throw new Error('Edit failed');
+}
+
+// --- Full pipeline: question → analyze → generate → normalize ---
+export async function generateQuestionImage(question: string): Promise<{
+  status: 'generated' | 'skipped' | 'failed';
+  dataUrl?: string;
+  sizeKb?: number;
+  reason?: string;
+}> {
   const intent = await analyzeVisualIntent(question);
 
-  if (intent.status === 'skip') {
+  if (intent.status === 'skip' || !intent.prompt) {
     return { status: 'skipped', reason: intent.reason };
   }
 
-  if (intent.status === 'generate_svg' && intent.svg_prompt) {
-    return await generateSvg(intent.svg_prompt);
-  }
+  try {
+    let rawDataUrl: string;
 
-  if (intent.status === 'generate_image' && intent.image_prompt) {
-    return await generateImage(intent.image_prompt);
-  }
+    if (intent.status === 'generate_svg') {
+      rawDataUrl = await generateSvg(intent.prompt);
+    } else {
+      rawDataUrl = await generateImage(intent.prompt);
+    }
 
-  return { status: 'skipped', reason: 'No prompt generated' };
+    // Normalize to 800x600 PNG
+    const { dataUrl, sizeKb } = await normalizeToCanvas(rawDataUrl);
+    return { status: 'generated', dataUrl, sizeKb };
+  } catch (e: any) {
+    return { status: 'failed', reason: e.message };
+  }
+}
+
+// --- Generate image from a direct prompt (for option images, etc.) ---
+export async function generateFromPrompt(prompt: string): Promise<{
+  status: 'generated' | 'failed';
+  dataUrl?: string;
+  sizeKb?: number;
+  reason?: string;
+}> {
+  try {
+    const rawDataUrl = await generateImage(prompt);
+    const { dataUrl, sizeKb } = await normalizeToCanvas(rawDataUrl);
+    return { status: 'generated', dataUrl, sizeKb };
+  } catch (e: any) {
+    // Fallback to SVG
+    try {
+      const svgUrl = await generateSvg(prompt);
+      const { dataUrl, sizeKb } = await normalizeToCanvas(svgUrl);
+      return { status: 'generated', dataUrl, sizeKb };
+    } catch {
+      return { status: 'failed', reason: e.message };
+    }
+  }
 }
