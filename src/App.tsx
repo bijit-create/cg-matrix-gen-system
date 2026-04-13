@@ -874,11 +874,11 @@ const PipelineRunnerView = () => {
 
       const typeInstructions: Record<string, string> = {
         mcq: 'MCQ with 4 options (A,B,C,D). 1 correct (correct=true). Wrong options need "why_wrong". Fill "options" array.',
-        picture_mcq: 'Picture-based MCQ. Short stem question. 4 options where each option represents a VISUAL item. For each option add "image_desc" describing what picture to show (e.g. "a bowl of rice", "a glass of milk"). Set needs_image=true. Fill "options" array.',
-        fill_blank: 'Fill-in-the-blank. Put ##answer## in stem where blank goes. Set answer field.',
-        error_analysis: 'Error analysis. Show student work in "steps" array (3-4 steps). 1-2 steps wrong (correct=false) with "fix".',
-        match: 'Match-the-following. Provide "pairs" array with 4-5 strings like "Rice → Plant-based".',
-        arrange: 'Arrange-in-order. Provide "items" array with 4-5 items in correct sequence.',
+        picture_mcq: 'Picture-based MCQ. Short stem. 4 visual options. Each needs "image_desc" (e.g. "a bowl of rice"). Set needs_image=true. Fill "options" array.',
+        fill_blank: 'Fill-in-the-blank. Format: "If X then the answer is ##answer##." Set answer field.',
+        error_analysis: `Error Analysis. Show a student's step-by-step work in "steps" array (4-6 steps). Each step = {text, correct: true/false}. Make 1-2 steps INCORRECT with "fix" field. Stem: "[Name] solved this problem. Some steps are incorrect. Select those steps." Steps must show complete reasoning, not just statements. Example: [{"text":"Wheat comes from plants","correct":true},{"text":"Milk comes from plants because cows eat grass","correct":false,"fix":"Milk is an animal product because it comes from cows"}]`,
+        match: 'Match-the-following. Fill "pairs" array: ["Wheat → Plant-based", "Milk → Animal-based", ...].',
+        arrange: 'Arrange-in-order. Fill "items" array in correct sequence: ["Step 1: ...", "Step 2: ...", ...].',
       };
 
       const prompt = `${Prompts.GenerationAgent}
