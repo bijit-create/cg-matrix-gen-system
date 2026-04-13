@@ -2241,45 +2241,17 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
 };
 
 const ConfigView = () => {
-  const [newKey, setNewKey] = useState('');
-  const [keys, setKeys] = useState<{ masked: string; limited: boolean; requests: number }[]>([]);
   const [cacheStats, setCacheStats] = useState({ size: 0, hits: 0, misses: 0, maxEntries: 100 });
   const [queueStats, setQueueStats] = useState({ active: 0, pending: 0 });
 
   const refreshStats = async () => {
-    const { keyManager } = await import('./services/apiKeyManager');
     const { responseCache } = await import('./services/responseCache');
     const { requestQueue } = await import('./services/requestQueue');
-    setKeys(keyManager.getKeys());
     setCacheStats(responseCache.getStats());
     setQueueStats(requestQueue.getStats());
   };
 
   useEffect(() => { refreshStats(); const t = setInterval(refreshStats, 3000); return () => clearInterval(t); }, []);
-
-  const handleAddKey = async () => {
-    if (!newKey.trim()) return;
-    const { keyManager } = await import('./services/apiKeyManager');
-    keyManager.addKey(newKey.trim());
-    setNewKey('');
-    refreshStats();
-  };
-
-  const handleRemoveKey = async (masked: string) => {
-    const { keyManager } = await import('./services/apiKeyManager');
-    const allKeys = keyManager.getKeys();
-    const idx = allKeys.findIndex(k => k.masked === masked);
-    if (idx >= 0) {
-      // reconstruct key from localStorage
-      try {
-        const stored = JSON.parse(localStorage.getItem('geminiApiKeys') || '[]');
-        if (stored[idx]) {
-          keyManager.removeKey(stored[idx]);
-          refreshStats();
-        }
-      } catch {}
-    }
-  };
 
   const handleClearCache = async () => {
     const { responseCache } = await import('./services/responseCache');
@@ -2294,36 +2266,21 @@ const ConfigView = () => {
         <p className="col-header">API keys, agent settings, cache management</p>
       </header>
 
-      {/* API Keys */}
-      <div className="tech-border bg-[var(--surface)] p-6 mb-6">
-        <h3 className="font-bold uppercase tracking-wide mb-4 flex items-center gap-2">
-          <Database size={16} /> API Keys ({keys.length})
+      {/* API Keys — Server-Side */}
+      <div className="tech-border bg-[#E8F5E9] border-[var(--success)] p-6 mb-6">
+        <h3 className="font-bold uppercase tracking-wide mb-3 flex items-center gap-2">
+          <ShieldCheck size={16} className="text-[var(--success)]" /> API Keys (Server-Side)
         </h3>
-        <div className="flex gap-2 mb-4">
-          <input
-            type="text"
-            value={newKey}
-            onChange={e => setNewKey(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleAddKey()}
-            placeholder="Paste Gemini API key (AIza...)"
-            className="flex-1 tech-border bg-[var(--bg)] p-2.5 font-mono text-sm focus:outline-none focus:border-[var(--accent)]"
-          />
-          <button onClick={handleAddKey} disabled={!newKey.trim()} className="px-4 py-2 bg-[var(--ink)] text-[var(--bg)] text-sm font-bold uppercase disabled:opacity-30">
-            Add Key
-          </button>
-        </div>
-        <div className="flex flex-col gap-2">
-          {keys.map((k, i) => (
-            <div key={i} className={`flex items-center justify-between p-3 tech-border ${k.limited ? 'bg-[#FFF3E0] border-[#F57F17]' : 'bg-[var(--bg)]'}`}>
-              <div className="flex items-center gap-3">
-                <span className="font-mono text-sm">{k.masked}</span>
-                {k.limited && <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#F57F17] text-white">Rate Limited</span>}
-                <span className="text-xs text-[var(--ink-muted)]">{k.requests} requests</span>
-              </div>
-              <button onClick={() => handleRemoveKey(k.masked)} className="text-xs text-[var(--danger)] hover:underline">Remove</button>
-            </div>
-          ))}
-          {keys.length === 0 && <p className="text-sm text-[var(--ink-muted)] italic">No keys configured. Add at least one Gemini API key.</p>}
+        <p className="text-sm mb-3">API keys are managed securely on the server via Vercel Environment Variables. They never reach the browser.</p>
+        <div className="text-xs font-mono bg-[var(--bg)] p-3 tech-border">
+          <p>Set these in Vercel Dashboard → Settings → Environment Variables:</p>
+          <ul className="mt-2 flex flex-col gap-1">
+            <li><strong>GEMINI_API_KEY</strong> — Primary key</li>
+            <li><strong>GEMINI_API_KEY_1</strong> — Rotation key 1</li>
+            <li><strong>GEMINI_API_KEY_2</strong> — Rotation key 2</li>
+            <li><strong>GEMINI_API_KEY_3</strong> — Rotation key 3 (optional)</li>
+          </ul>
+          <p className="mt-2 text-[var(--ink-muted)]">The server rotates between all configured keys automatically.</p>
         </div>
       </div>
 
@@ -2343,7 +2300,7 @@ const ConfigView = () => {
               <div className="text-3xl font-light">{queueStats.pending}</div>
             </div>
           </div>
-          <p className="text-xs text-[var(--ink-muted)] mt-3">Max 2 concurrent per key. {keys.length} key(s) = max {keys.length * 2} parallel.</p>
+          <p className="text-xs text-[var(--ink-muted)] mt-3">Max 3 concurrent requests. Server rotates between configured keys.</p>
         </div>
         <div className="tech-border bg-[var(--surface)] p-6">
           <h3 className="font-bold uppercase tracking-wide mb-4 flex items-center gap-2">
