@@ -273,13 +273,10 @@ Distractor sourcing hierarchy (in priority order):
 
 DO NOT create random or obviously wrong distractors. Each distractor must ATTRACT students who hold a specific misconception.
 
-CONTENT GROUNDING (HIGHEST PRIORITY — STRICTLY ENFORCED):
-- The "approved_content_scope" field contains the ONLY knowledge points you are allowed to test. These have been reviewed and approved by the SME as in-scope and grade-appropriate.
-- EVERY question MUST test one or more items from approved_content_scope. Do NOT generate questions about ANY concept not in this list.
-- Use "chapter_content" for the exact wording, terminology, examples, and data — but only within the boundaries of approved_content_scope.
-- If a concept is in chapter_content but NOT in approved_content_scope, it is OUT OF SCOPE — do not use it.
-- sourced_references from the search tool are SECONDARY enrichment — only use them if they relate to approved scope items.
-- If approved_content_scope is empty or not provided, fall back to the construct and subskills only.
+CONTENT GROUNDING:
+- "selected_content" contains the ONLY knowledge points for THIS cell. Generate questions ONLY from these points.
+- Do NOT generate questions about any concept not in selected_content.
+- If selected_content is empty, fall back to the skill and LO.
 
 LANGUAGE RULES (CRITICAL):
 - Write in SIMPLE, CLEAR English suitable for Indian curriculum students

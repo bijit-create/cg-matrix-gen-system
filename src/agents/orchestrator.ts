@@ -307,17 +307,42 @@ For each: exact question text, source citation, cognitive level, what makes it g
             }
         }
 
-        // Compact the scope to just a bullet list of key points (max 1500 chars)
-        const compactScope = approvedContentScope
-            .map((k: any) => `- ${k.knowledge_point}`)
-            .join('\n')
-            .slice(0, 1500);
+        // --- Step 1: Content Selection per cell (lightweight, no question generation) ---
+        this.log('Content Selector', 'Selecting content for each cell...');
+        const cellContentMap: Record<string, string[]> = {};
+        const allScopePoints = approvedContentScope.map((k: any) => k.knowledge_point);
 
-        // Compact chapter content to just key terms (max 800 chars)
-        const compactChapter = this.summarizeContent(this.config.chapterContent || '', 800);
+        for (const [cell] of cellsToGenerate) {
+            const thisCellDef = cellDataMap[cell]?.definition || cell;
+            try {
+                const selection = await generateAgentResponse(
+                    `You are selecting knowledge points for a specific CG matrix cell. Pick 3-8 knowledge points that are MOST appropriate for this cell's cognitive level. Return a JSON array of strings (just the selected points).
 
+Cell: ${cell}
+Cell Definition: ${thisCellDef}
+Grade: ${grade}, Subject: ${subjectName}
+
+Rules:
+- R1 cells: pick facts, definitions, labels that can be recalled
+- U1/U2 cells: pick concepts that can be explained or compared
+- A2 cells: pick rules/procedures that can be applied to new cases
+- AN2 cells: pick relationships/patterns that can be analyzed
+- Select DIFFERENT points than other cells where possible`,
+                    JSON.stringify(allScopePoints),
+                    { type: 'ARRAY' as any, items: { type: 'STRING' as any } }
+                );
+                cellContentMap[cell] = selection || allScopePoints.slice(0, 5);
+                this.log('Content Selector', `${cell}: ${selection.length} points selected.`);
+            } catch {
+                cellContentMap[cell] = allScopePoints.slice(0, 5);
+                this.log('Content Selector', `${cell}: fallback to first 5 points.`);
+            }
+        }
+
+        // --- Step 2: Generate questions per batch using only selected content ---
         for (const batch of batches) {
-            const thisCellDef = cellDataMap[batch.cell]?.definition || `${batch.cell} level questions`;
+            const thisCellDef = cellDataMap[batch.cell]?.definition || batch.cell;
+            const cellScope = (cellContentMap[batch.cell] || []).join('\n- ');
             this.log('Generation Agent', `Generating ${batch.num} item(s) for ${batch.cell}...`);
 
             const genPayload = {
@@ -325,17 +350,14 @@ For each: exact question text, source citation, cognitive level, what makes it g
                 skill: this.config.skill,
                 grade: grade || 'unknown',
                 subject: subjectName || 'unknown',
-                construct: typeof this.artifacts.construct === 'string' ? this.artifacts.construct : this.artifacts.construct?.construct_statement || '',
                 cell: batch.cell,
                 cell_definition: thisCellDef,
                 count: batch.num,
                 start_id: batch.startId,
                 misconceptions: approvedMisconceptions.slice(0, 4).map((m: any) => m.text || m.misconception_text || ''),
-                scope: compactScope,
-                content: compactChapter
+                selected_content: cellScope
             };
 
-            // Try up to 2 times
             for (let attempt = 0; attempt < 2; attempt++) {
                 try {
                     const cellQuestions = await this.runAgent('Generation Agent', Prompts.GenerationAgent, genPayload, GenerationSchema);
@@ -343,10 +365,7 @@ For each: exact question text, source citation, cognitive level, what makes it g
                     break;
                 } catch (e: any) {
                     if (attempt === 0) {
-                        this.log('Generation Agent', `Attempt 1 failed for ${batch.cell}: ${e.message?.slice(0, 60)}. Retrying minimal...`);
-                        // Minimal payload for retry
-                        delete (genPayload as any).content;
-                        (genPayload as any).scope = compactScope.slice(0, 500);
+                        this.log('Generation Agent', `Attempt 1 failed for ${batch.cell}: ${e.message?.slice(0, 60)}. Retrying...`);
                     } else {
                         this.log('Generation Agent', `Failed for ${batch.cell} after 2 attempts.`);
                     }
