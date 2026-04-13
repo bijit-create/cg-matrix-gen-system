@@ -342,10 +342,10 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
 
         // Assign types to each question position
         const typeMap: Record<string, string[]> = {
-            R1: ['mcq', 'fill_blank', 'mcq', 'match', 'mcq'],
-            U1: ['mcq', 'fill_blank', 'mcq', 'fill_blank', 'mcq'],
-            U2: ['mcq', 'match', 'arrange', 'mcq', 'match'],
-            A2: ['mcq', 'error_analysis', 'mcq', 'error_analysis', 'mcq'],
+            R1: ['mcq', 'fill_blank', 'picture_mcq', 'match', 'mcq'],
+            U1: ['mcq', 'fill_blank', 'picture_mcq', 'fill_blank', 'mcq'],
+            U2: ['mcq', 'match', 'picture_mcq', 'arrange', 'mcq'],
+            A2: ['mcq', 'error_analysis', 'picture_mcq', 'error_analysis', 'mcq'],
             A3: ['error_analysis', 'mcq', 'error_analysis'],
             AN2: ['mcq', 'error_analysis', 'mcq', 'error_analysis'],
             AN3: ['error_analysis', 'error_analysis', 'mcq'],
@@ -361,11 +361,12 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
             const contentPoint = cellScope[qi % cellScope.length] || cellScope[0] || this.config.skill;
 
             const typeInstructions: Record<string, string> = {
-                mcq: `Generate an MCQ with 4 options (A,B,C,D). Exactly 1 correct (correct=true). Each wrong option needs "why_wrong" explaining the student error/misconception. Fill the "options" array.`,
-                fill_blank: `Generate a fill-in-the-blank question. Put ##answer## where the blank goes in the stem. Set answer to the correct word/phrase.`,
-                error_analysis: `Generate an error analysis question. Show a student's work in 3-4 steps (in "steps" array). 1-2 steps should have correct=false with "fix" showing the correct version. Stem should say "Find the incorrect step."`,
-                match: `Generate a match-the-following question. Provide 4-5 pairs in the "pairs" array as strings like "Rice → Plant-based". Stem should say "Match the following."`,
-                arrange: `Generate an arrange-in-order question. Provide 4-5 items in the "items" array in correct order. Stem should say "Arrange in the correct order."`,
+                mcq: `Generate an MCQ with 4 options (A,B,C,D). Exactly 1 correct (correct=true). Each wrong option needs "why_wrong". Fill "options" array.`,
+                picture_mcq: `Generate a PICTURE-BASED MCQ. Short stem asking student to identify/pick from images. 4 options where each is a visual item. For EACH option, include "image_desc" describing the picture to show (e.g. "a bowl of rice", "a glass of milk", "a whole fish"). Set needs_image=true. Fill "options" array.`,
+                fill_blank: `Generate a fill-in-the-blank. Put ##answer## in stem where blank goes. Set answer field.`,
+                error_analysis: `Generate error analysis. Show student's work in "steps" array (3-4 steps). 1-2 wrong steps (correct=false) with "fix". Stem: "Find the incorrect step."`,
+                match: `Generate match-the-following. "pairs" array with 4-5 strings like "Rice → Plant-based". Stem: "Match the following."`,
+                arrange: `Generate arrange-in-order. "items" array with 4-5 items in correct order. Stem: "Arrange in the correct order."`,
             };
 
             const prompt = `${Prompts.GenerationAgent}

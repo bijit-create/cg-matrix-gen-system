@@ -869,6 +869,7 @@ const PipelineRunnerView = () => {
 
       const typeInstructions: Record<string, string> = {
         mcq: 'MCQ with 4 options (A,B,C,D). 1 correct (correct=true). Wrong options need "why_wrong". Fill "options" array.',
+        picture_mcq: 'Picture-based MCQ. Short stem question. 4 options where each option represents a VISUAL item. For each option add "image_desc" describing what picture to show (e.g. "a bowl of rice", "a glass of milk"). Set needs_image=true. Fill "options" array.',
         fill_blank: 'Fill-in-the-blank. Put ##answer## in stem where blank goes. Set answer field.',
         error_analysis: 'Error analysis. Show student work in "steps" array (3-4 steps). 1-2 steps wrong (correct=false) with "fix".',
         match: 'Match-the-following. Provide "pairs" array with 4-5 strings like "Rice → Plant-based".',
@@ -1805,7 +1806,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                 ) : (
                                   <>
                                     <span className="text-[10px] text-[var(--ink-muted)]">Switch to:</span>
-                                    {['mcq', 'fill_blank', 'error_analysis', 'match', 'arrange'].map(t => (
+                                    {['mcq', 'picture_mcq', 'fill_blank', 'error_analysis', 'match', 'arrange'].map(t => (
                                       <button
                                         key={t}
                                         disabled={switchingId !== null}
@@ -1938,29 +1939,33 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                               {q.options.map((opt: any, i: number) => {
                                 const optText = typeof opt === 'string' ? opt : opt.text;
                                 const optLabel = typeof opt === 'string' ? String.fromCharCode(65 + i) : (opt.label || String.fromCharCode(65 + i));
-                                const isCorrect = typeof opt === 'string' ? false : opt.is_correct;
-                                const misconceptionNote = typeof opt === 'object' ? opt.targeted_misconception : null;
-                                const distractorRationale = typeof opt === 'object' ? opt.distractor_rationale : null;
+                                const isCorrect = typeof opt === 'string' ? false : (opt.correct || opt.is_correct);
+                                const whyWrong = typeof opt === 'object' ? (opt.why_wrong || opt.distractor_rationale || opt.targeted_misconception) : null;
+                                const imageDesc = typeof opt === 'object' ? opt.image_desc : null;
                                 const optImageKey = `${q.id}_opt_${optLabel}`;
                                 const optImage = questionImages[optImageKey];
 
                                 return (
                                   <div key={i} className={`text-sm tech-border flex flex-col ${
                                     isCorrect ? 'border-[var(--success)] bg-[#E8F5E9]' : 'bg-[var(--surface)]'
-                                  } ${q.type === 'picture_mcq' ? 'p-2' : 'p-2.5'}`}>
+                                  } ${q.type === 'picture_mcq' ? 'p-3' : 'p-2.5'}`}>
                                     <div className="flex items-start gap-2">
                                       <span className={`font-bold shrink-0 ${isCorrect ? 'text-[var(--success)]' : ''}`}>{optLabel}.</span>
                                       <div className="flex-1">
                                         {optImage && (
-                                          <img src={optImage} alt={optLabel} className="w-full max-h-24 object-contain rounded mb-1.5" />
+                                          <img src={optImage} alt={optLabel} className="w-full max-h-28 object-contain rounded mb-1.5" />
+                                        )}
+                                        {imageDesc && !optImage && (
+                                          <div className="mb-1.5 p-2 bg-[#E3F2FD] rounded text-[10px] text-[#1565C0] italic flex items-center gap-1">
+                                            <BrainCircuit size={10} /> Image: {imageDesc}
+                                          </div>
                                         )}
                                         <span>{optText}</span>
-                                        {misconceptionNote && <span className="text-[10px] text-[var(--ink-muted)] italic ml-1">[{misconceptionNote}]</span>}
                                       </div>
                                     </div>
-                                    {distractorRationale && !isCorrect && (
+                                    {whyWrong && !isCorrect && (
                                       <div className="mt-1.5 pt-1.5 border-t border-[var(--line)] text-[10px] text-[#7B1FA2] italic">
-                                        Distractor rationale: {distractorRationale}
+                                        {whyWrong}
                                       </div>
                                     )}
                                   </div>

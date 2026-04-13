@@ -129,7 +129,8 @@ export const GenerationSchema: Schema = {
                 label: { type: Type.STRING },
                 text: { type: Type.STRING },
                 correct: { type: Type.BOOLEAN },
-                why_wrong: { type: Type.STRING }
+                why_wrong: { type: Type.STRING },
+                image_desc: { type: Type.STRING }
             },
             required: ["label", "text", "correct"]
         }},
