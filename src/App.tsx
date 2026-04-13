@@ -413,6 +413,10 @@ const PipelineRunnerView = () => {
   const [questionImages, setQuestionImages] = useState<Record<string, string>>({});
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
 
+  // --- Cell-by-cell generation ---
+  const [cellQueue, setCellQueue] = useState<{ cell: string, count: number }[]>([]);
+  const [currentCellData, setCurrentCellData] = useState<{ cell: string, questions: any[], qa: any[], index: number } | null>(null);
+
   // --- Search & Resource Sourcing ---
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{ title: string, url: string, type: 'pdf' | 'youtube' | 'web', snippet: string, selected: boolean }[]>([]);
@@ -528,20 +532,21 @@ const PipelineRunnerView = () => {
             }
             if (key === 'questions') {
                 setQuestions(data.map((q: any) => ({
-                    id: q.question_id,
-                    cell: q.cg_cell,
-                    type: q.question_type || 'mcq',
+                    id: q.id || q.question_id,
+                    cell: q.cell || q.cg_cell,
+                    type: q.type || q.question_type || 'mcq',
                     stem: q.stem,
                     options: q.options || [],
-                    correct_answer: q.correct_answer,
-                    rationale: q.rationale,
-                    targeted_subskill: q.targeted_subskill,
-                    difficulty: q.difficulty,
+                    correct_answer: q.answer || q.correct_answer,
+                    rationale: q.rationale || '',
+                    targeted_subskill: q.targeted_subskill || '',
                     steps: q.steps || [],
-                    rearrange_steps: q.rearrange_steps || [],
-                    distractor_steps: q.distractor_steps || [],
-                    match_pairs: q.match_pairs || [],
-                    arrange_items: q.arrange_items || []
+                    match_pairs: q.pairs ? q.pairs.map((p: string, i: number) => {
+                        const [l, r] = p.split(' → ');
+                        return { left: l || p, right: r || '' };
+                    }) : q.match_pairs || [],
+                    arrange_items: q.items || q.arrange_items || [],
+                    needs_image: q.needs_image
                 })));
             }
             if (key === 'qaResults') {
@@ -549,6 +554,12 @@ const PipelineRunnerView = () => {
             }
             if (key === 'questionImages') {
                 setQuestionImages(prev => ({ ...prev, ...data }));
+            }
+            if (key === 'cellQueue') {
+                setCellQueue(data);
+            }
+            if (key === 'cellQuestions') {
+                setCurrentCellData(data);
             }
             if (key === 'contentScope') {
                 setContentScope(data);
@@ -804,12 +815,26 @@ const PipelineRunnerView = () => {
       return;
     }
 
-    // Gate 3 (step 5): Hess Matrix + Misconceptions approved → run Generation
+    // Gate 3 (step 5): Hess Matrix + Misconceptions approved → setup cell-by-cell generation
     if (currentStep === 5 && orchestratorRef.current) {
       setStatus('running');
       setCurrentStep(7);
       try {
-        await orchestratorRef.current.executePhase3(cgPlan, misconceptions);
+        await orchestratorRef.current.executePhase3Setup(cgPlan, misconceptions);
+      } catch (e: any) {
+        setLogs(prev => [...prev, { agent: 'System', action: `Error: ${e.message}`, time: new Date().toLocaleTimeString() }]);
+        setStatus('error' as any);
+      }
+      return;
+    }
+
+    // Gate per-cell (step 7): Approve current cell's questions → generate next cell
+    if (currentStep === 7 && orchestratorRef.current && currentCellData) {
+      const approvedQs = currentCellData.questions; // SME may have rejected some via handleRejectQuestion
+      setLogs(prev => [...prev, { agent: 'Human SME', action: `Approved ${approvedQs.length} items for cell ${currentCellData.cell}. Moving to next cell.`, time: new Date().toLocaleTimeString() }]);
+      setStatus('running');
+      try {
+        await orchestratorRef.current.approveAndNextCell(approvedQs);
       } catch (e: any) {
         setLogs(prev => [...prev, { agent: 'System', action: `Error: ${e.message}`, time: new Date().toLocaleTimeString() }]);
         setStatus('error' as any);
@@ -1631,7 +1656,123 @@ const PipelineRunnerView = () => {
                 </div>
               )}
 
-              {/* Gate 3: Final Generated Set */}
+              {/* Cell-by-cell generation review */}
+              {currentStep === 7 && currentCellData && (
+                <div className="mb-8">
+                  <div className="flex justify-between items-center mb-4 border-b border-[var(--line-dark)] pb-2">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-lg font-bold">
+                        Cell {currentCellData.index + 1}/{cellQueue.length}: {currentCellData.cell}
+                      </h3>
+                      <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[var(--accent)] text-white`}>
+                        {cellData[currentCellData.cell]?.definition?.slice(0, 60) || currentCellData.cell}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-mono text-[var(--ink-muted)]">
+                      <span>{currentCellData.questions.length} items</span>
+                      {questions.length > 0 && (
+                        <span className="text-[var(--success)]">({questions.length} approved so far)</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Cell progress bar */}
+                  <div className="flex gap-1 mb-4">
+                    {cellQueue.map((cq, i) => (
+                      <div
+                        key={cq.cell}
+                        className={`flex-1 h-2 rounded-full transition-colors ${
+                          i < currentCellData.index ? 'bg-[var(--success)]' :
+                          i === currentCellData.index ? 'bg-[var(--accent)]' :
+                          'bg-[var(--line)]'
+                        }`}
+                        title={`${cq.cell}: ${cq.count} questions`}
+                      />
+                    ))}
+                  </div>
+
+                  {status === 'running' && (
+                    <div className="flex items-center justify-center gap-2 py-8 text-[var(--ink-muted)]">
+                      <Loader2 size={20} className="animate-spin" />
+                      <span className="font-mono text-sm">Generating {currentCellData.cell} questions...</span>
+                    </div>
+                  )}
+
+                  {status === 'waiting' && currentCellData.questions.length > 0 && (
+                    <>
+                      <div className="grid grid-cols-1 gap-4 mb-4">
+                        {currentCellData.questions.map((q: any) => {
+                          const qa = currentCellData.qa?.find((r: any) => r.question_id === (q.question_id || q.id));
+                          return (
+                            <div key={q.question_id || q.id} className={`tech-border bg-[var(--bg)] p-4 ${qa && !qa.pass ? 'border-[var(--warning)]' : ''}`}>
+                              <div className="flex justify-between items-start mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-sm font-mono bg-[var(--ink)] text-[var(--bg)] px-2 py-0.5">{q.question_id || q.id}</span>
+                                  <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#E3F2FD] text-[#1565C0]">
+                                    {q.question_type || 'mcq'}
+                                  </span>
+                                </div>
+                                <span className="text-xs font-mono bg-[var(--ink)] text-[var(--bg)] px-2 py-0.5 rounded">{q.cg_cell}</span>
+                              </div>
+                              <p className="text-sm mb-3 font-medium">{q.stem}</p>
+                              {q.options?.length > 0 && (
+                                <div className="flex flex-col gap-1 mb-2">
+                                  {q.options.map((opt: any, i: number) => (
+                                    <div key={i} className={`text-sm p-2 tech-border ${opt.is_correct ? 'border-[var(--success)] bg-[#E8F5E9]' : 'bg-[var(--surface)]'}`}>
+                                      <span className="font-bold">{opt.label || String.fromCharCode(65+i)}.</span> {opt.text}
+                                      {opt.distractor_rationale && !opt.is_correct && (
+                                        <div className="text-[10px] text-[#7B1FA2] italic mt-1">Distractor: {opt.distractor_rationale}</div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {q.rationale && <div className="text-xs text-[var(--ink-muted)] bg-[var(--surface)] p-2 tech-border"><strong>Rationale:</strong> {q.rationale}</div>}
+                              {qa && qa.issues?.length > 0 && (
+                                <div className="mt-2 text-xs text-[#E65100] bg-[#FFF3E0] p-2 tech-border">
+                                  {qa.issues.map((issue: string, i: number) => <div key={i}>{issue}</div>)}
+                                </div>
+                              )}
+                              {/* Per-question actions for cell review */}
+                              <div className="mt-2 pt-2 border-t border-[var(--line-dark)] flex items-center gap-2 flex-wrap">
+                                <button
+                                  onClick={() => {
+                                    setCurrentCellData(prev => prev ? {
+                                      ...prev,
+                                      questions: prev.questions.filter((cq: any) => (cq.question_id || cq.id) !== (q.question_id || q.id))
+                                    } : prev);
+                                  }}
+                                  className="px-2 py-0.5 text-[10px] font-bold uppercase border border-[var(--danger)] text-[var(--danger)] hover:bg-[#FFEBEE] flex items-center gap-1"
+                                >
+                                  <Trash2 size={10} /> Reject
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-[var(--ink-muted)] font-mono">
+                          {currentCellData.questions.length} items for {currentCellData.cell} | Cell {currentCellData.index + 1} of {cellQueue.length}
+                        </span>
+                        <button
+                          onClick={handleApprove}
+                          className="bg-[var(--ink)] text-[var(--bg)] px-6 py-2 text-sm font-bold uppercase tracking-wide hover:bg-[var(--success)] transition-colors flex items-center gap-2"
+                        >
+                          <CheckSquare size={16} />
+                          {currentCellData.index + 1 < cellQueue.length
+                            ? `Approve & Next Cell (${cellQueue[currentCellData.index + 1]?.cell})`
+                            : 'Approve & Run Final QA'
+                          }
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Gate 4: Final Generated Set */}
               {(currentStep >= 9 || status === 'completed') && questions.length > 0 && (
                 <div className="mb-8">
                   <div className="flex justify-between items-center mb-4 border-b border-[var(--line-dark)] pb-2">

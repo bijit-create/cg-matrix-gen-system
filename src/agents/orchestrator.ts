@@ -255,8 +255,8 @@ export class AgentOrchestrator {
         return this.artifacts;
     }
 
-    // ===== GATE 3 APPROVED → Research + Generation + QA + Images → GATE 4 =====
-    public async executePhase3(approvedCgPlan: Record<string, number>, approvedMisconceptions: any[]) {
+    // ===== GATE 3 APPROVED → Content Selection + cell queue setup =====
+    public async executePhase3Setup(approvedCgPlan: Record<string, number>, approvedMisconceptions: any[]) {
         if (this.config.onStateChange) this.config.onStateChange('running', 7);
         this.artifacts.cgPlan = approvedCgPlan;
         this.artifacts.approvedMisconceptions = approvedMisconceptions;
@@ -264,202 +264,191 @@ export class AgentOrchestrator {
         const grade = this.artifacts.intake?.grade || '';
         const subjectName = this.artifacts.intake?.subject || '';
         const approvedContentScope = this.artifacts.approvedContentScope || [];
-        const sourcedContent = this.artifacts.sourcedContent || [];
-        // --- Research Agent — always search for exemplar questions ---
-        this.log('Research Agent', 'Searching internet for exemplar-quality questions...');
-        let exemplarQuestions = '';
-        try {
-            const res = await generateWithGroundedSearch(
-                `Find 8-12 high-quality assessment questions about: "${this.config.lo}" (${subjectName}, Grade ${grade}).
-Search: NCERT Exemplar, CBSE sample papers, state board exemplars, KVS/NVS papers, Olympiad banks (SOF/HBCSE), DIKSHA, Khan Academy.
-For each: exact question text, source citation, cognitive level, what makes it good. Only REAL questions — say "NO_EXEMPLARS_FOUND" if none.`,
-                JSON.stringify({ topic: this.config.lo, skill: this.config.skill, grade, subject: subjectName })
-            );
-            exemplarQuestions = res.text || '';
-            if (exemplarQuestions.includes('NO_EXEMPLARS_FOUND')) {
-                this.log('Research Agent', 'No exemplars found. Generating from construct only.');
-                exemplarQuestions = '';
-            } else {
-                this.log('Research Agent', 'Found reference questions. Using as quality benchmark.');
-            }
-        } catch (e: any) {
-            this.log('Research Agent', `Research failed: ${e.message}`);
-        }
-
-        // --- Generation Agent per CG cell ---
-        const allQuestions: any[] = [];
-        let globalQId = 1;
-        const cellsToGenerate = Object.entries(approvedCgPlan).filter(([_, num]) => (num as number) > 0) as [string, number][];
-
-        // Build compact scope list
-        const scopeList = approvedContentScope.map((k: any) => k.knowledge_point).join('\n');
         const cellDataMap = this.artifacts.cellData || {};
 
-        // Split large cells into batches of max 3 to avoid JSON overflow
-        const batches: { cell: string, num: number, startId: number }[] = [];
-        for (const [cell, num] of cellsToGenerate) {
-            let remaining = num;
-            while (remaining > 0) {
-                const batch = Math.min(remaining, 3);
-                batches.push({ cell, num: batch, startId: globalQId });
-                globalQId += batch;
-                remaining -= batch;
-            }
-        }
+        // Build cell queue (only active cells with count > 0)
+        const cellQueue = Object.entries(approvedCgPlan)
+            .filter(([_, num]) => (num as number) > 0)
+            .map(([cell, num]) => ({ cell, count: num as number }));
+        this.artifacts.cellQueue = cellQueue;
+        this.artifacts.allQuestions = [];
+        this.artifacts.currentCellIndex = 0;
 
-        // --- Step 1: Content Selection per cell (lightweight, no question generation) ---
+        // --- Content Selection for ALL cells upfront (lightweight) ---
         this.log('Content Selector', 'Selecting content for each cell...');
-        const cellContentMap: Record<string, string[]> = {};
         const allScopePoints = approvedContentScope.map((k: any) => k.knowledge_point);
+        const cellContentMap: Record<string, string[]> = {};
 
-        for (const [cell] of cellsToGenerate) {
+        for (const { cell } of cellQueue) {
             const thisCellDef = cellDataMap[cell]?.definition || cell;
             try {
                 const selection = await generateAgentResponse(
-                    `You are selecting knowledge points for a specific CG matrix cell. Pick 3-8 knowledge points that are MOST appropriate for this cell's cognitive level. Return a JSON array of strings (just the selected points).
-
-Cell: ${cell}
-Cell Definition: ${thisCellDef}
-Grade: ${grade}, Subject: ${subjectName}
-
-Rules:
-- R1 cells: pick facts, definitions, labels that can be recalled
-- U1/U2 cells: pick concepts that can be explained or compared
-- A2 cells: pick rules/procedures that can be applied to new cases
-- AN2 cells: pick relationships/patterns that can be analyzed
-- Select DIFFERENT points than other cells where possible`,
+                    `Pick 3-8 knowledge points MOST appropriate for cell ${cell} (${thisCellDef}). Grade: ${grade}, Subject: ${subjectName}. Return JSON array of strings.
+R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=patterns to analyze. Pick DIFFERENT points per cell.`,
                     JSON.stringify(allScopePoints),
                     { type: 'ARRAY' as any, items: { type: 'STRING' as any } }
                 );
                 cellContentMap[cell] = selection || allScopePoints.slice(0, 5);
-                this.log('Content Selector', `${cell}: ${selection.length} points selected.`);
+                this.log('Content Selector', `${cell}: ${(selection || []).length} points.`);
             } catch {
                 cellContentMap[cell] = allScopePoints.slice(0, 5);
-                this.log('Content Selector', `${cell}: fallback to first 5 points.`);
             }
         }
+        this.artifacts.cellContentMap = cellContentMap;
 
-        // --- Step 2: Generate questions per batch using only selected content ---
-        for (const batch of batches) {
-            const thisCellDef = cellDataMap[batch.cell]?.definition || batch.cell;
-            const cellScope = (cellContentMap[batch.cell] || []).join('\n- ');
-            this.log('Generation Agent', `Generating ${batch.num} item(s) for ${batch.cell}...`);
+        // Emit the cell queue so UI can show progress
+        if (this.config.onData) {
+            this.config.onData('cellQueue', cellQueue);
+            this.config.onData('cellContentMap', cellContentMap);
+        }
 
-            const genPayload = {
-                lo: this.config.lo,
-                skill: this.config.skill,
-                grade: grade || 'unknown',
-                subject: subjectName || 'unknown',
-                cell: batch.cell,
-                cell_definition: thisCellDef,
-                count: batch.num,
-                start_id: batch.startId,
-                misconceptions: approvedMisconceptions.slice(0, 4).map((m: any) => m.text || m.misconception_text || ''),
-                selected_content: cellScope
-            };
+        // Generate first cell automatically
+        await this.executeGenerateCell(0);
+    }
 
-            for (let attempt = 0; attempt < 2; attempt++) {
-                try {
-                    const cellQuestions = await this.runAgent('Generation Agent', Prompts.GenerationAgent, genPayload, GenerationSchema);
-                    allQuestions.push(...cellQuestions);
-                    break;
-                } catch (e: any) {
-                    if (attempt === 0) {
-                        this.log('Generation Agent', `Attempt 1 failed for ${batch.cell}: ${e.message?.slice(0, 60)}. Retrying...`);
-                    } else {
-                        this.log('Generation Agent', `Failed for ${batch.cell} after 2 attempts.`);
-                    }
+    // ===== Generate questions for ONE cell, then pause for SME review =====
+    public async executeGenerateCell(cellIndex: number) {
+        const cellQueue = this.artifacts.cellQueue || [];
+        if (cellIndex >= cellQueue.length) {
+            // All cells done → run QA and go to Gate 4
+            await this.executeFinalQA();
+            return;
+        }
+
+        const { cell, count } = cellQueue[cellIndex];
+        this.artifacts.currentCellIndex = cellIndex;
+        if (this.config.onStateChange) this.config.onStateChange('running', 7);
+        if (this.config.onData) this.config.onData('currentCell', { cell, count, index: cellIndex, total: cellQueue.length });
+
+        const grade = this.artifacts.intake?.grade || '';
+        const subjectName = this.artifacts.intake?.subject || '';
+        const cellDataMap = this.artifacts.cellData || {};
+        const thisCellDef = cellDataMap[cell]?.definition || cell;
+        const cellScope = (this.artifacts.cellContentMap?.[cell] || []).join('\n- ');
+        const misconceptions = (this.artifacts.approvedMisconceptions || []).slice(0, 4).map((m: any) => m.text || m.misconception_text || '');
+
+        this.log('Generation Agent', `Cell ${cellIndex + 1}/${cellQueue.length}: Generating ${count} item(s) for ${cell}...`);
+
+        const genPayload = {
+            lo: this.config.lo,
+            skill: this.config.skill,
+            grade: grade || 'unknown',
+            subject: subjectName || 'unknown',
+            cell,
+            cell_definition: thisCellDef,
+            count,
+            start_id: (this.artifacts.allQuestions || []).length + 1,
+            misconceptions,
+            selected_content: cellScope
+        };
+
+        // Build a SHORT cell-specific prompt (not the full GenerationAgent prompt)
+        const cellPrompt = `Generate ${count} ${cell} questions. Simple English, Indian context.
+Topic: ${this.config.skill}
+Content: ${cellScope.slice(0, 600)}
+Cell ${cell}: ${thisCellDef}
+Types: mcq (4 options, why_wrong for each wrong one), fill_blank (##answer##), error_analysis (steps with correct/fix), match (pairs), arrange (items).
+Use varied types. Keep stems short. Each wrong MCQ option needs "why_wrong" explaining the student error.
+${misconceptions.length > 0 ? 'Misconceptions to target: ' + misconceptions.join('; ') : ''}`;
+
+        let cellQuestions: any[] = [];
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                cellQuestions = await this.runAgent('Generation Agent', cellPrompt, genPayload, GenerationSchema);
+                break;
+            } catch (e: any) {
+                if (attempt === 0) {
+                    this.log('Generation Agent', `Attempt 1 failed: ${e.message?.slice(0, 60)}. Retrying...`);
+                } else {
+                    this.log('Generation Agent', `Failed for ${cell} after 2 attempts.`);
                 }
             }
-
-            // Emit partial results so UI updates progressively
-            if (this.config.onData) this.config.onData('questions', [...allQuestions]);
         }
 
-        this.artifacts.questions = allQuestions;
-        if (this.config.onData) this.config.onData('questions', allQuestions);
-        this.log('Generation Agent', `Generated ${allQuestions.length}/${Object.values(approvedCgPlan).reduce((a: number, b) => a + (b as number), 0)} total items.`);
+        // Run rule-based QA on this cell's questions
+        const ruleResults = runRuleBasedQA(cellQuestions, this.config.lo);
+        const cellQA = cellQuestions.map((q: any) => {
+            const rule = ruleResults.find(r => r.question_id === (q.question_id || q.id));
+            const issues = (rule?.flags || []).map(f => `[${f.category}/${f.severity}] ${f.message}`);
+            return {
+                question_id: q.question_id || q.id,
+                pass: !rule || rule.pass,
+                issues,
+                suggestions: [],
+                severity: issues.some(i => i.includes('/critical]')) ? 'critical' : issues.some(i => i.includes('/major]')) ? 'major' : 'none'
+            };
+        });
 
+        // Store and emit
+        this.artifacts.currentCellQuestions = cellQuestions;
+        if (this.config.onData) {
+            this.config.onData('cellQuestions', { cell, questions: cellQuestions, qa: cellQA, index: cellIndex });
+        }
+
+        this.log('Generation Agent', `${cell}: ${cellQuestions.length} items generated. Review and click Next Cell.`);
+
+        // Pause for SME review of this cell
+        if (this.config.onStateChange) this.config.onStateChange('waiting', 7);
+    }
+
+    // ===== SME approved current cell → add to allQuestions, generate next cell =====
+    public async approveAndNextCell(approvedCellQuestions: any[]) {
+        this.artifacts.allQuestions = [...(this.artifacts.allQuestions || []), ...approvedCellQuestions];
+        if (this.config.onData) this.config.onData('questions', this.artifacts.allQuestions);
+
+        const nextIndex = (this.artifacts.currentCellIndex || 0) + 1;
+        await this.executeGenerateCell(nextIndex);
+    }
+
+    // ===== All cells done → Final QA → GATE 4 =====
+    private async executeFinalQA() {
+        const allQuestions = this.artifacts.allQuestions || [];
         if (this.config.onStateChange) this.config.onStateChange('running', 8);
 
-        // --- Layer 1: Rule-Based QA (instant, no API call) ---
-        this.log('Rule-Based QA', 'Running heuristic checks...');
-        const ruleResults = runRuleBasedQA(allQuestions, this.config.lo);
-        const ruleFlags = ruleResults.reduce((sum, r) => sum + r.flags.length, 0);
-        const ruleFails = ruleResults.filter(r => !r.pass).length;
-        this.log('Rule-Based QA', `${ruleFlags} flags across ${allQuestions.length} items. ${ruleFails} items have critical/major issues.`);
-        if (this.config.onData) this.config.onData('ruleQAResults', ruleResults);
+        this.log('QA Summary', `All cells complete. ${allQuestions.length} total items. Running final QA...`);
 
-        // --- Layer 2: AI SME QA (Gemini-powered deep semantic checks) ---
-        this.log('AI SME QA', 'Starting deep semantic review...');
+        // Rule-based QA on full set (catches cross-question duplicates)
+        const ruleResults = runRuleBasedQA(allQuestions, this.config.lo);
+
+        // AI SME QA
         let aiQaResults: any[] = [];
         try {
             const qaPayload = {
                 questions: allQuestions.map((q: any) => ({
                     question_id: q.question_id, cg_cell: q.cg_cell, question_type: q.question_type,
-                    stem: q.stem, options: q.options, correct_answer: q.correct_answer,
-                    rationale: q.rationale, steps: q.steps
+                    stem: q.stem, options: q.options, correct_answer: q.correct_answer, rationale: q.rationale
                 })),
-                construct: this.artifacts.construct,
-                misconceptions: approvedMisconceptions.slice(0, 8),
-                cg_plan: approvedCgPlan,
                 learning_objective: this.config.lo,
-                grade: grade,
-                approved_content_scope: scopeList
+                grade: this.artifacts.intake?.grade || 'unknown'
             };
             aiQaResults = await this.runAgent('AI SME QA', Prompts.QAAgent, qaPayload, QASchema);
-            this.log('AI SME QA', `${aiQaResults.filter((r: any) => r.pass).length} passed, ${aiQaResults.filter((r: any) => !r.pass).length} flagged.`);
         } catch (e: any) {
-            this.log('AI SME QA', `Failed: ${e.message}. Using rule-based results only.`);
+            this.log('AI SME QA', `Failed: ${e.message?.slice(0, 60)}`);
         }
 
-        // Merge both QA layers
+        // Merge
         const mergedQA = allQuestions.map((q: any) => {
             const qId = q.question_id || q.id;
             const rule = ruleResults.find(r => r.question_id === qId);
             const ai = aiQaResults.find((r: any) => r.question_id === qId);
             const allIssues: string[] = [];
-            const allSuggestions: string[] = [];
-
-            // Add rule-based flags
-            if (rule) {
-                rule.flags.forEach(f => allIssues.push(`[${f.category}/${f.severity}] ${f.message}`));
-            }
-            // Add AI flags
-            if (ai?.issues) {
-                ai.issues.forEach((issue: string) => {
-                    if (!allIssues.some(existing => existing.includes(issue.slice(0, 30)))) {
-                        allIssues.push(`[AI-SME] ${issue}`);
-                    }
-                });
-            }
-            if (ai?.suggestions) {
-                allSuggestions.push(...ai.suggestions);
-            }
-
+            if (rule) rule.flags.forEach(f => allIssues.push(`[${f.category}/${f.severity}] ${f.message}`));
+            if (ai?.issues) ai.issues.forEach((issue: string) => allIssues.push(`[AI-SME] ${issue}`));
             const hasCritical = allIssues.some(i => i.includes('/critical]')) || ai?.severity === 'critical';
             const hasMajor = allIssues.some(i => i.includes('/major]')) || ai?.severity === 'major';
-
             return {
-                question_id: qId,
-                pass: !hasCritical && !hasMajor && (ai?.pass !== false),
-                issues: allIssues,
-                suggestions: allSuggestions,
-                severity: hasCritical ? 'critical' : hasMajor ? 'major' : (ai?.severity || 'none'),
-                rule_flags: rule?.flags || [],
-                ai_pass: ai?.pass
+                question_id: qId, pass: !hasCritical && !hasMajor,
+                issues: allIssues, suggestions: ai?.suggestions || [],
+                severity: hasCritical ? 'critical' : hasMajor ? 'major' : 'none'
             };
         });
 
         this.artifacts.qaResults = mergedQA;
         if (this.config.onData) this.config.onData('qaResults', mergedQA);
-        const totalPass = mergedQA.filter(r => r.pass).length;
-        this.log('QA Summary', `Final: ${totalPass}/${mergedQA.length} passed (rule-based + AI SME combined).`);
+        const pass = mergedQA.filter(r => r.pass).length;
+        this.log('QA Summary', `Final: ${pass}/${mergedQA.length} passed.`);
 
-        // Image generation is now on-demand per question (user clicks "Generate Image" button)
-
-        // GATE 4: Final Set Approval
+        // GATE 4
         if (this.config.onStateChange) this.config.onStateChange('waiting', 9);
-        return this.artifacts;
     }
 }

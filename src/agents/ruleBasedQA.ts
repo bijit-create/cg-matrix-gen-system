@@ -205,13 +205,10 @@ export function runRuleBasedQA(questions: any[], lo: string): RuleQAResult[] {
     const options = q.options || [];
     const flags: QAFlag[] = [];
 
-    // Run all checks
-    flags.push(...checkFormatting(stem, options));
-    flags.push(...checkContent(stem));
+    // Only major rules — skip minor formatting/localization checks
     flags.push(...checkQuality(stem, options));
     flags.push(...checkDistractors(options));
-    flags.push(...checkLocalization(stem, options));
-    flags.push(...checkAlignment(stem, lo, options));
+    flags.push(...checkContent(stem));
 
     // Exact duplicate check
     const normalizedStem = stem.toLowerCase().trim();

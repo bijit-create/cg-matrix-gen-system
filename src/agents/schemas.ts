@@ -112,21 +112,19 @@ export const ContentScopeSchema: Schema = {
     }
 };
 
+// Minimal schema — keeps JSON output small. Type-specific fields go in options array only.
 export const GenerationSchema: Schema = {
     type: Type.ARRAY,
     items: {
         type: Type.OBJECT,
         properties: {
-            question_id: { type: Type.STRING },
-            cg_cell: { type: Type.STRING },
-            question_type: { type: Type.STRING, enum: ['mcq', 'picture_mcq', 'stimulus_based', 'fill_blank', 'one_word', 'error_analysis', 'rearrange', 'match', 'arrange'] },
+            id: { type: Type.STRING },
+            cell: { type: Type.STRING },
+            type: { type: Type.STRING },
             stem: { type: Type.STRING },
-            correct_answer: { type: Type.STRING },
+            answer: { type: Type.STRING },
             rationale: { type: Type.STRING },
-            targeted_subskill: { type: Type.STRING },
-            difficulty: { type: Type.INTEGER },
             needs_image: { type: Type.BOOLEAN },
-            // MCQ / picture_mcq fields
             options: {
                 type: Type.ARRAY,
                 items: {
@@ -134,57 +132,28 @@ export const GenerationSchema: Schema = {
                     properties: {
                         label: { type: Type.STRING },
                         text: { type: Type.STRING },
-                        is_correct: { type: Type.BOOLEAN },
-                        targeted_misconception: { type: Type.STRING },
-                        distractor_rationale: { type: Type.STRING },
-                        image_description: { type: Type.STRING }
+                        correct: { type: Type.BOOLEAN },
+                        why_wrong: { type: Type.STRING }
                     },
-                    required: ["label", "text", "is_correct"]
+                    required: ["label", "text", "correct"]
                 }
             },
-            // Error Analysis fields
             steps: {
                 type: Type.ARRAY,
                 items: {
                     type: Type.OBJECT,
                     properties: {
-                        step_number: { type: Type.INTEGER },
                         text: { type: Type.STRING },
-                        is_correct: { type: Type.BOOLEAN },
-                        correct_version: { type: Type.STRING }
+                        correct: { type: Type.BOOLEAN },
+                        fix: { type: Type.STRING }
                     },
-                    required: ["step_number", "text", "is_correct"]
+                    required: ["text", "correct"]
                 }
             },
-            // Rearrange fields
-            rearrange_steps: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        text: { type: Type.STRING },
-                        movable_fixed: { type: Type.STRING, enum: ['Fixed', 'Movable'] }
-                    },
-                    required: ["text", "movable_fixed"]
-                }
-            },
-            distractor_steps: { type: Type.ARRAY, items: { type: Type.STRING } },
-            // Match the Following fields
-            match_pairs: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        left: { type: Type.STRING },
-                        right: { type: Type.STRING }
-                    },
-                    required: ["left", "right"]
-                }
-            },
-            // Arrange the Following fields
-            arrange_items: { type: Type.ARRAY, items: { type: Type.STRING } }
+            pairs: { type: Type.ARRAY, items: { type: Type.STRING } },
+            items: { type: Type.ARRAY, items: { type: Type.STRING } }
         },
-        required: ["question_id", "cg_cell", "question_type", "stem", "correct_answer", "rationale"]
+        required: ["id", "cell", "type", "stem", "answer"]
     }
 };
 
