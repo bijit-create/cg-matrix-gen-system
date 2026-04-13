@@ -28,13 +28,38 @@ function getNextKey(): string {
   return key;
 }
 
+// --- Auth: Bearer token check ---
+// Set APP_SECRET in Vercel Environment Variables (any strong password)
+function checkAuth(req: Request): Response | null {
+  const secret = process.env.APP_SECRET;
+  if (!secret) return null; // no secret configured = auth disabled (dev mode)
+
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return new Response(JSON.stringify({ error: 'Unauthorized. Set access token in app.' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+
+  const token = authHeader.slice(7);
+  if (token !== secret) {
+    return new Response(JSON.stringify({ error: 'Invalid access token.' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+
+  return null; // auth passed
+}
+
 export default async function handler(req: Request) {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
     });
   }
@@ -42,6 +67,10 @@ export default async function handler(req: Request) {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST only' }), { status: 405 });
   }
+
+  // Check auth
+  const authError = checkAuth(req);
+  if (authError) return authError;
 
   try {
     const body = await req.json();

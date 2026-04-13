@@ -6,6 +6,17 @@ import { getAgentConfig } from '../services/agentConfig';
 
 const API_URL = '/api/gemini';
 
+// Auth token — stored in sessionStorage (cleared on tab close)
+export function getAuthToken(): string | null {
+  return sessionStorage.getItem('appAccessToken');
+}
+export function setAuthToken(token: string) {
+  sessionStorage.setItem('appAccessToken', token);
+}
+export function clearAuthToken() {
+  sessionStorage.removeItem('appAccessToken');
+}
+
 // Payload size guard
 function fitToWindow(systemPrompt: string, userPayload: string, maxChars = 180000): { systemPrompt: string; userPayload: string } {
   const total = systemPrompt.length + userPayload.length;
@@ -21,9 +32,13 @@ function fitToWindow(systemPrompt: string, userPayload: string, maxChars = 18000
 }
 
 async function callProxy(body: any): Promise<any> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   const res = await fetch(API_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   });
 

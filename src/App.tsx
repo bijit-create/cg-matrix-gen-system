@@ -2351,8 +2351,82 @@ const ConfigView = () => {
   );
 };
 
+const LoginGate = ({ onLogin }: { onLogin: () => void }) => {
+  const [token, setToken] = useState('');
+  const [error, setError] = useState('');
+  const [checking, setChecking] = useState(false);
+
+  const handleLogin = async () => {
+    if (!token.trim()) return;
+    setChecking(true);
+    setError('');
+    try {
+      // Test the token with a simple request
+      const { setAuthToken } = await import('./agents/api');
+      setAuthToken(token.trim());
+      const res = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token.trim()}` },
+        body: JSON.stringify({ action: 'generate', model: 'gemini-2.5-flash', userPayload: '"ping"', temperature: 0 }),
+      });
+      if (res.status === 401 || res.status === 403) {
+        setError('Invalid access token.');
+        const { clearAuthToken } = await import('./agents/api');
+        clearAuthToken();
+      } else {
+        onLogin();
+      }
+    } catch {
+      // If the endpoint doesn't exist (local dev), allow anyway
+      onLogin();
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <div className="h-screen w-full bg-[var(--bg)] text-[var(--ink)] flex items-center justify-center">
+      <div className="max-w-sm w-full p-8">
+        <div className="flex items-center gap-3 mb-8">
+          <BrainCircuit className="text-[var(--accent)]" size={32} />
+          <h1 className="font-bold text-xl uppercase tracking-tight">CG-Matrix Gen</h1>
+        </div>
+        <div className="tech-border bg-[var(--surface)] p-6">
+          <label className="block col-header mb-2">Access Token</label>
+          <input
+            type="password"
+            value={token}
+            onChange={e => setToken(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleLogin()}
+            placeholder="Enter your access token..."
+            className="w-full tech-border bg-[var(--bg)] p-3 font-mono text-sm focus:outline-none focus:border-[var(--accent)] mb-4"
+            autoFocus
+          />
+          {error && <p className="text-sm text-[var(--danger)] mb-3">{error}</p>}
+          <button
+            onClick={handleLogin}
+            disabled={!token.trim() || checking}
+            className="w-full bg-[var(--ink)] text-[var(--bg)] py-3 font-bold uppercase tracking-wide hover:bg-[var(--accent)] transition-colors disabled:opacity-50"
+          >
+            {checking ? 'Verifying...' : 'Enter'}
+          </button>
+        </div>
+        <p className="text-xs text-[var(--ink-muted)] mt-4 text-center">Contact your admin for the access token.</p>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('pipeline');
+  const [authenticated, setAuthenticated] = useState(() => {
+    // Auto-login if token already in session
+    return !!sessionStorage.getItem('appAccessToken');
+  });
+
+  if (!authenticated) {
+    return <LoginGate onLogin={() => setAuthenticated(true)} />;
+  }
 
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden bg-[var(--bg)] text-[var(--ink)]">
