@@ -1,13 +1,12 @@
-// Image Generation — uses centralized API layer for key rotation, retry, and concurrency
+// Image Generation — smart routing: AI images, KaTeX math, Canvas charts, SVG geometry
 
-import { generateAgentResponse, generateImageContent, generateSvgContent, editImageContent } from './api';
+import { generateAgentResponse, generateImageContent, generateSvgContent } from './api';
 import { Type } from '@google/genai';
 
-// --- Normalize any image to 800x600 PNG (4:3) ---
-// Normalize to 4:3, minimum 400px wide
+// --- Normalize to 4:3 PNG, minimum 400px ---
 export async function normalizeToCanvas(base64DataUrl: string, targetWidth = 800): Promise<{ dataUrl: string; sizeKb: number }> {
   const width = Math.max(400, targetWidth);
-  const height = Math.round(width * 3 / 4); // 4:3 aspect ratio
+  const height = Math.round(width * 3 / 4);
 
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -31,27 +30,31 @@ export async function normalizeToCanvas(base64DataUrl: string, targetWidth = 800
   });
 }
 
-// --- Analyze question to decide image type ---
+// --- Analyze question to decide rendering method ---
 export async function analyzeVisualIntent(question: string): Promise<{
-  status: 'generate_image' | 'generate_svg' | 'skip';
+  status: string;
   reason: string;
   prompt?: string;
 }> {
   try {
     return await generateAgentResponse(
       'Image Analysis',
-      `Analyze this question and decide how to create a visual support image.
+      `Classify what visual this question needs.
 
-GENERATE_IMAGE (prefer this): For real-world objects, food items, animals, plants, people, scenarios, diagrams, flowcharts. Write a prompt for a clear, colorful, realistic illustration — white background, educational style, no text in image, child-friendly.
-GENERATE_SVG (only for math): For precise geometry (angles, shapes, coordinates), number lines, mathematical equations, data tables, graphs. Write SVG description.
-SKIP: If the question is purely text-based and no visual adds value.
+GENERATE_IMAGE: Real-world objects, food, animals, plants, scenarios, diagrams. Write image prompt.
+RENDER_MATH: Math equations, fractions, algebra. Write LaTeX expression only.
+RENDER_CHART: Data visualization. Write JSON: {"type":"bar"|"pie","title":"...","data":[{"label":"...","value":N}]}
+RENDER_TABLE: Tabular data. Write JSON: {"title":"...","headers":["..."],"rows":[["..."]]}
+RENDER_NUMBERLINE: Number lines. Write JSON: {"min":N,"max":N,"marks":[{"value":N,"label":"..."}]}
+GENERATE_SVG: Precise geometry ONLY (angles, polygons, coordinates).
+SKIP: No visual needed.
 
 Question: "${question}"`,
       '{}',
       {
         type: Type.OBJECT,
         properties: {
-          status: { type: Type.STRING, enum: ['generate_image', 'generate_svg', 'skip'] },
+          status: { type: Type.STRING, enum: ['generate_image', 'render_math', 'render_chart', 'render_table', 'render_numberline', 'generate_svg', 'skip'] },
           reason: { type: Type.STRING },
           prompt: { type: Type.STRING }
         },
@@ -63,7 +66,7 @@ Question: "${question}"`,
   }
 }
 
-// --- Full pipeline: question → analyze → generate → normalize ---
+// --- Full pipeline: question → classify → render with the right tool ---
 export async function generateQuestionImage(question: string): Promise<{
   status: 'generated' | 'skipped' | 'failed';
   dataUrl?: string;
@@ -77,11 +80,43 @@ export async function generateQuestionImage(question: string): Promise<{
 
   try {
     let rawDataUrl: string;
-    if (intent.status === 'generate_svg') {
-      rawDataUrl = await generateSvgContent(intent.prompt);
-    } else {
-      rawDataUrl = await generateImageContent(intent.prompt);
+
+    switch (intent.status) {
+      case 'render_math': {
+        const { renderMathToSvg } = await import('../utils/preciseRenderer');
+        rawDataUrl = renderMathToSvg(intent.prompt);
+        break;
+      }
+      case 'render_chart': {
+        const parsed = JSON.parse(intent.prompt);
+        const { renderBarChart, renderPieChart } = await import('../utils/preciseRenderer');
+        rawDataUrl = parsed.type === 'pie'
+          ? renderPieChart(parsed.data, parsed.title)
+          : renderBarChart(parsed.data, parsed.title);
+        break;
+      }
+      case 'render_table': {
+        const parsed = JSON.parse(intent.prompt);
+        const { renderTable } = await import('../utils/preciseRenderer');
+        rawDataUrl = renderTable(parsed.headers, parsed.rows, parsed.title);
+        break;
+      }
+      case 'render_numberline': {
+        const parsed = JSON.parse(intent.prompt);
+        const { renderNumberLine } = await import('../utils/preciseRenderer');
+        rawDataUrl = renderNumberLine(parsed.min, parsed.max, parsed.marks, parsed.title);
+        break;
+      }
+      case 'generate_svg': {
+        rawDataUrl = await generateSvgContent(intent.prompt);
+        break;
+      }
+      default: {
+        rawDataUrl = await generateImageContent(intent.prompt);
+        break;
+      }
     }
+
     const { dataUrl, sizeKb } = await normalizeToCanvas(rawDataUrl);
     return { status: 'generated', dataUrl, sizeKb };
   } catch (e: any) {
@@ -89,7 +124,7 @@ export async function generateQuestionImage(question: string): Promise<{
   }
 }
 
-// --- Direct prompt → image (for option images etc.) ---
+// --- Direct prompt → AI image (for option images in picture_mcq) ---
 export async function generateFromPrompt(prompt: string): Promise<{
   status: 'generated' | 'failed';
   dataUrl?: string;
@@ -108,21 +143,5 @@ export async function generateFromPrompt(prompt: string): Promise<{
     } catch {
       return { status: 'failed', reason: e.message };
     }
-  }
-}
-
-// --- Edit existing image ---
-export async function editImage(base64Image: string, editPrompt: string): Promise<{
-  status: 'generated' | 'failed';
-  dataUrl?: string;
-  sizeKb?: number;
-  reason?: string;
-}> {
-  try {
-    const rawDataUrl = await editImageContent(base64Image, editPrompt);
-    const { dataUrl, sizeKb } = await normalizeToCanvas(rawDataUrl);
-    return { status: 'generated', dataUrl, sizeKb };
-  } catch (e: any) {
-    return { status: 'failed', reason: e.message };
   }
 }
