@@ -408,25 +408,15 @@ LANGUAGE: Simple English, Indian names, short stems, no negative phrasing.`;
 
             for (const q of pictureMcqs) {
                 const qId = q.id || q.question_id;
-                // Generate stem image
-                try {
-                    const stemPrompt = `A simple flat vector educational diagram for: "${q.stem}". Minimalist style, solid white background, clear bold labels, child-friendly, 4:3 aspect ratio. Show the question visually with a "?" mark.`;
-                    const rawImg = await generateImageContent(stemPrompt);
-                    const { dataUrl } = await normalizeToCanvas(rawImg);
-                    imageResults[qId] = dataUrl;
-                    this.log('Image Agent', `${qId}: stem image ✓`);
-                } catch (e: any) {
-                    this.log('Image Agent', `${qId}: stem image failed`);
-                }
 
-                // Generate option images
+                // Generate option images (the main visual content for picture MCQs)
                 if (q.options) {
                     for (const opt of q.options) {
                         const desc = opt.image_desc || opt.text;
                         if (!desc) continue;
                         const optKey = `${qId}_opt_${opt.label || 'X'}`;
                         try {
-                            const optPrompt = `A simple flat vector illustration of "${desc}". Minimalist, solid white background, clear bold outlines, child-friendly, no text labels, 4:3 aspect ratio.`;
+                            const optPrompt = `A clear, colorful, realistic illustration of ${desc}. Clean white background, high quality, educational style for children, no text or labels in the image. The image should clearly show what "${desc}" looks like so a student can identify it.`;
                             const rawImg = await generateImageContent(optPrompt);
                             const { dataUrl } = await normalizeToCanvas(rawImg);
                             imageResults[optKey] = dataUrl;
@@ -434,7 +424,7 @@ LANGUAGE: Simple English, Indian names, short stems, no negative phrasing.`;
                             // Skip failed option images
                         }
                     }
-                    this.log('Image Agent', `${qId}: option images done`);
+                    this.log('Image Agent', `${qId}: ${Object.keys(imageResults).filter(k => k.startsWith(qId)).length} option images done`);
                 }
             }
             if (Object.keys(imageResults).length > 0 && this.config.onData) {

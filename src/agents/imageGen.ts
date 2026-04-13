@@ -4,21 +4,25 @@ import { generateAgentResponse, generateImageContent, generateSvgContent, editIm
 import { Type } from '@google/genai';
 
 // --- Normalize any image to 800x600 PNG (4:3) ---
-export async function normalizeToCanvas(base64DataUrl: string): Promise<{ dataUrl: string; sizeKb: number }> {
+// Normalize to 4:3, minimum 400px wide
+export async function normalizeToCanvas(base64DataUrl: string, targetWidth = 800): Promise<{ dataUrl: string; sizeKb: number }> {
+  const width = Math.max(400, targetWidth);
+  const height = Math.round(width * 3 / 4); // 4:3 aspect ratio
+
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      canvas.width = 800;
-      canvas.height = 600;
+      canvas.width = width;
+      canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (!ctx) return reject('No 2d context');
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, 800, 600);
-      const scale = Math.min(800 / img.width, 600 / img.height);
+      ctx.fillRect(0, 0, width, height);
+      const scale = Math.min(width / img.width, height / img.height);
       const w = img.width * scale;
       const h = img.height * scale;
-      ctx.drawImage(img, (800 - w) / 2, (600 - h) / 2, w, h);
+      ctx.drawImage(img, (width - w) / 2, (height - h) / 2, w, h);
       const dataUrl = canvas.toDataURL('image/png');
       resolve({ dataUrl, sizeKb: Math.round((dataUrl.length * 0.75) / 1024) });
     };
@@ -36,7 +40,12 @@ export async function analyzeVisualIntent(question: string): Promise<{
   try {
     return await generateAgentResponse(
       'Image Analysis',
-      `Analyze this question and decide how to create a visual. GENERATE_IMAGE for diagrams/flowcharts/illustrations. GENERATE_SVG for geometry/graphs/equations. SKIP if no visual adds value. If generating, write a prompt: "A simple flat vector educational diagram of..." minimalist, white bg, bold labels, 4:3, child-friendly, include "?".
+      `Analyze this question and decide how to create a visual support image.
+
+GENERATE_IMAGE (prefer this): For real-world objects, food items, animals, plants, people, scenarios, diagrams, flowcharts. Write a prompt for a clear, colorful, realistic illustration — white background, educational style, no text in image, child-friendly.
+GENERATE_SVG (only for math): For precise geometry (angles, shapes, coordinates), number lines, mathematical equations, data tables, graphs. Write SVG description.
+SKIP: If the question is purely text-based and no visual adds value.
+
 Question: "${question}"`,
       '{}',
       {
