@@ -2,7 +2,7 @@ import { generateAgentResponse, generateWithGroundedSearch } from './api';
 import { Prompts } from './prompts';
 import { IntakeSchema, ConstructSchema, SubskillSchema, CGMapperSchema, MisconceptionSchema, ContentScopeSchema, GenerationSchema, QASchema } from './schemas';
 import misconceptionCatalog from '../knowledge_base/student_misconceptions_catalog.json';
-import { generateQuestionImage } from './imageGen';
+// imageGen is used on-demand from the UI, not in the pipeline
 import { runRuleBasedQA } from './ruleBasedQA';
 
 export type PipelineState = 'idle' | 'running' | 'waiting' | 'error' | 'completed';
@@ -300,27 +300,32 @@ For each: exact question text, source citation, cognitive level, what makes it g
             }
         }
 
+        // Compact the scope to just a bullet list of key points (max 1500 chars)
+        const compactScope = approvedContentScope
+            .map((k: any) => `- ${k.knowledge_point}`)
+            .join('\n')
+            .slice(0, 1500);
+
+        // Compact chapter content to just key terms (max 800 chars)
+        const compactChapter = this.summarizeContent(this.config.chapterContent || '', 800);
+
         for (const batch of batches) {
             const thisCellDef = cellDataMap[batch.cell]?.definition || `${batch.cell} level questions`;
             this.log('Generation Agent', `Generating ${batch.num} item(s) for ${batch.cell}...`);
 
             const genPayload = {
-                construct: this.artifacts.construct?.construct_statement || this.artifacts.construct,
-                subskills: (this.artifacts.approvedSubskills || []).slice(0, 6),
-                cg_cell: batch.cell,
-                cell_definition: thisCellDef,
-                items_to_generate: batch.num,
-                misconceptions: approvedMisconceptions.slice(0, 6).map((m: any) => ({
-                    id: m.id || m.misconception_id, text: m.text || m.misconception_text
-                })),
-                learning_objective: this.config.lo,
+                lo: this.config.lo,
                 skill: this.config.skill,
                 grade: grade || 'unknown',
                 subject: subjectName || 'unknown',
-                starting_question_id: batch.startId,
-                approved_content_scope: scopeList.slice(0, 3000),
-                chapter_content: this.summarizeContent(this.config.chapterContent || '', 2000),
-                ...(exemplarQuestions && { exemplar_questions_sample: this.summarizeContent(exemplarQuestions, 1500) })
+                construct: typeof this.artifacts.construct === 'string' ? this.artifacts.construct : this.artifacts.construct?.construct_statement || '',
+                cell: batch.cell,
+                cell_definition: thisCellDef,
+                count: batch.num,
+                start_id: batch.startId,
+                misconceptions: approvedMisconceptions.slice(0, 4).map((m: any) => m.text || m.misconception_text || ''),
+                scope: compactScope,
+                content: compactChapter
             };
 
             // Try up to 2 times
@@ -331,12 +336,12 @@ For each: exact question text, source citation, cognitive level, what makes it g
                     break;
                 } catch (e: any) {
                     if (attempt === 0) {
-                        this.log('Generation Agent', `Attempt 1 failed for ${batch.cell}: ${e.message?.slice(0, 60)}. Retrying with smaller payload...`);
-                        // Reduce payload for retry
-                        delete genPayload.chapter_content;
-                        delete (genPayload as any).exemplar_questions_sample;
+                        this.log('Generation Agent', `Attempt 1 failed for ${batch.cell}: ${e.message?.slice(0, 60)}. Retrying minimal...`);
+                        // Minimal payload for retry
+                        delete (genPayload as any).content;
+                        (genPayload as any).scope = compactScope.slice(0, 500);
                     } else {
-                        this.log('Generation Agent', `Failed for ${batch.cell} after 2 attempts: ${e.message?.slice(0, 60)}`);
+                        this.log('Generation Agent', `Failed for ${batch.cell} after 2 attempts.`);
                     }
                 }
             }
@@ -425,69 +430,7 @@ For each: exact question text, source citation, cognitive level, what makes it g
         const totalPass = mergedQA.filter(r => r.pass).length;
         this.log('QA Summary', `Final: ${totalPass}/${mergedQA.length} passed (rule-based + AI SME combined).`);
 
-        // --- Image Generation (stem images + option images for picture_mcq) ---
-        const needImages = allQuestions.filter((q: any) => q.needs_image);
-        if (needImages.length > 0) {
-            this.log('Image Agent', `Generating images for ${needImages.length} question(s)...`);
-            const imageResults: Record<string, any> = {};
-            const { generateImage, generateSvg } = await import('./imageGen');
-
-            for (const q of needImages) {
-                try {
-                    // Use the AI-provided prompt if available, otherwise analyze the stem
-                    const prompt = q.image_generation_prompt || q.stimulus_description || null;
-
-                    if (prompt) {
-                        // Direct generation from provided prompt
-                        this.log('Image Agent', `Generating for ${q.question_id} using provided prompt...`);
-                        const result = await generateImage(prompt);
-                        if (result.status === 'generated') {
-                            imageResults[q.question_id] = result.dataUrl;
-                            this.log('Image Agent', `${q.question_id}: image generated.`);
-                        } else {
-                            // Fallback to SVG
-                            const svgResult = await generateSvg(prompt);
-                            if (svgResult.status === 'svg') {
-                                imageResults[q.question_id] = svgResult.dataUrl;
-                                this.log('Image Agent', `${q.question_id}: SVG generated.`);
-                            } else {
-                                this.log('Image Agent', `${q.question_id}: failed — ${result.reason}`);
-                            }
-                        }
-                    } else {
-                        // Analyze stem to decide
-                        const result = await generateQuestionImage(q.stem);
-                        if (result.status === 'generated' || result.status === 'svg') {
-                            imageResults[q.question_id] = result.dataUrl;
-                            this.log('Image Agent', `${q.question_id}: ${result.status}.`);
-                        }
-                    }
-
-                    // Generate option images for picture_mcq
-                    if (q.question_type === 'picture_mcq' && q.options) {
-                        for (const opt of q.options) {
-                            if (opt.image_description) {
-                                try {
-                                    const optPrompt = `A simple flat vector educational illustration of ${opt.image_description}. Minimalist style, solid white background, clear bold outlines, child-friendly, no text.`;
-                                    const optResult = await generateImage(optPrompt);
-                                    if (optResult.status === 'generated') {
-                                        imageResults[`${q.question_id}_opt_${opt.label}`] = optResult.dataUrl;
-                                    }
-                                } catch {
-                                    // Skip failed option images
-                                }
-                            }
-                        }
-                        this.log('Image Agent', `${q.question_id}: option images processed.`);
-                    }
-                } catch (e: any) {
-                    this.log('Image Agent', `${q.question_id}: failed — ${e.message?.slice(0, 80)}`);
-                }
-            }
-            this.artifacts.questionImages = imageResults;
-            if (this.config.onData) this.config.onData('questionImages', imageResults);
-            this.log('Image Agent', `Done. ${Object.keys(imageResults).length} images generated.`);
-        }
+        // Image generation is now on-demand per question (user clicks "Generate Image" button)
 
         // GATE 4: Final Set Approval
         if (this.config.onStateChange) this.config.onStateChange('waiting', 9);

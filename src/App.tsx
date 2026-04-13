@@ -824,6 +824,29 @@ const PipelineRunnerView = () => {
     }
   };
 
+  // --- Per-question image generation (on-demand) ---
+  const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
+
+  const handleGenerateImage = async (qId: string) => {
+    const q = questions.find(q => q.id === qId);
+    if (!q) return;
+    setGeneratingImageId(qId);
+    try {
+      const { generateQuestionImage } = await import('./agents/imageGen');
+      const result = await generateQuestionImage(q.stem);
+      if (result.status === 'generated' || result.status === 'svg') {
+        setQuestionImages(prev => ({ ...prev, [qId]: result.dataUrl! }));
+        setLogs(prev => [...prev, { agent: 'Image Agent', action: `Generated image for ${qId}.`, time: new Date().toLocaleTimeString() }]);
+      } else {
+        setLogs(prev => [...prev, { agent: 'Image Agent', action: `Skipped ${qId}: ${result.reason}`, time: new Date().toLocaleTimeString() }]);
+      }
+    } catch (e: any) {
+      setLogs(prev => [...prev, { agent: 'Image Agent', action: `Failed for ${qId}: ${e.message}`, time: new Date().toLocaleTimeString() }]);
+    } finally {
+      setGeneratingImageId(null);
+    }
+  };
+
   // --- Per-question actions ---
   const handleRejectQuestion = (qId: string) => {
     setQuestions(prev => prev.filter(q => q.id !== qId));
@@ -1886,6 +1909,20 @@ const PipelineRunnerView = () => {
                                   >
                                     <Trash2 size={10} /> Reject
                                   </button>
+                                  {!questionImages[q.id] ? (
+                                    <button
+                                      onClick={() => handleGenerateImage(q.id)}
+                                      disabled={generatingImageId === q.id}
+                                      className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide border border-[#1565C0] text-[#1565C0] hover:bg-[#E3F2FD] transition-colors flex items-center gap-1 disabled:opacity-50"
+                                    >
+                                      {generatingImageId === q.id ? <Loader2 size={10} className="animate-spin" /> : <BrainCircuit size={10} />}
+                                      {generatingImageId === q.id ? 'Generating...' : 'Generate Image'}
+                                    </button>
+                                  ) : (
+                                    <span className="px-2.5 py-1 text-[10px] font-mono text-[var(--success)] flex items-center gap-1">
+                                      <CheckCircle2 size={10} /> Image ready
+                                    </span>
+                                  )}
                                   <span className="text-[10px] text-[var(--ink-muted)]">Regenerate as:</span>
                                   {['mcq', 'picture_mcq', 'stimulus_based', 'fill_blank', 'one_word', 'error_analysis', 'rearrange', 'match', 'arrange'].map(t => (
                                     <button

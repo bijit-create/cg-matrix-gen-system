@@ -126,8 +126,6 @@ export const GenerationSchema: Schema = {
             targeted_subskill: { type: Type.STRING },
             difficulty: { type: Type.INTEGER },
             needs_image: { type: Type.BOOLEAN },
-            image_generation_prompt: { type: Type.STRING },
-            stimulus_description: { type: Type.STRING },
             // MCQ / picture_mcq fields
             options: {
                 type: Type.ARRAY,
