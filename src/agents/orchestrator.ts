@@ -70,7 +70,14 @@ export class AgentOrchestrator {
             if (this.config.onData) this.config.onData('construct', constructOutput.construct_statement);
             if (this.config.onStateChange) this.config.onStateChange('running', 2);
 
-            const subskillOutput = await this.runAgent('Subskill Agent', Prompts.SubskillAgent, { construct: constructOutput }, SubskillSchema);
+            const subskillOutput = await this.runAgent('Subskill Agent', Prompts.SubskillAgent, {
+                construct: constructOutput,
+                skill_description: this.config.skill,
+                learning_objective: this.config.lo,
+                grade: this.config.metadata?.gradeCode || 'unknown',
+                subject: this.config.metadata?.subjectCode || 'unknown',
+                instruction: `FOCUS ON THE SKILL: "${this.config.skill}". Break THIS skill into 3-6 testable subskills. The LO "${this.config.lo}" is context only.`
+            }, SubskillSchema);
             this.artifacts.subskills = subskillOutput;
             if (this.config.onData) this.config.onData('subskills', subskillOutput.map((val: any) => val.subskill_description));
 

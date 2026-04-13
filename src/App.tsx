@@ -596,6 +596,7 @@ const PipelineRunnerView = () => {
             attributeCode: dataRow[2],
             skillCode: dataRow[3],
             skillSequence: dataRow[4],
+            skillDescription: dataRow[5],
             skillType: dataRow[6],
             skillStatus: dataRow[7],
             skillEvidenceId: dataRow[8],
@@ -604,7 +605,8 @@ const PipelineRunnerView = () => {
             loCode: dataRow[11],
             loType: dataRow[12],
             loStatus: dataRow[13],
-            loName: dataRow[14]
+            loName: dataRow[14],
+            loDescription: dataRow[15]
           });
         }
       }
