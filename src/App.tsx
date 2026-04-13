@@ -40,7 +40,7 @@ import { AgentOrchestrator } from './agents/orchestrator';
 import { parseUploadedFile } from './utils/fileParser';
 
 // --- Types ---
-type Tab = 'dashboard' | 'architecture' | 'state-machine' | 'raci' | 'pipeline';
+type Tab = 'dashboard' | 'architecture' | 'state-machine' | 'raci' | 'pipeline' | 'config';
 
 // --- Components ---
 
@@ -80,7 +80,10 @@ const TopNav = ({ activeTab, setActiveTab }: { activeTab: Tab, setActiveTab: (t:
       </nav>
 
       <div>
-        <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium hover:bg-[var(--line)] rounded-md">
+        <button
+          onClick={() => setActiveTab('config')}
+          className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md ${activeTab === 'config' ? 'bg-[var(--ink)] text-[var(--bg)]' : 'hover:bg-[var(--line)]'}`}
+        >
           <Settings size={16} />
           Config
         </button>
@@ -717,6 +720,7 @@ const PipelineRunnerView = () => {
     try {
       const { generateWithGroundedSearch } = await import('./agents/api');
       const searchResult = await generateWithGroundedSearch(
+        'Research Agent',
         `You are a research assistant finding educational resources. Search for resources matching the query. Return your findings as a JSON array of objects with fields: title, url, type (one of: "pdf", "youtube", "web"), snippet (2-3 sentence description of what the resource contains and how it's useful). Only include REAL resources you found. Classify as "youtube" if from youtube.com, "pdf" if URL ends in .pdf or is a document, otherwise "web".`,
         JSON.stringify({ query: searchQuery, context: `Learning Objective: ${lo}, Skill: ${skill}` })
       );
@@ -732,6 +736,7 @@ const PipelineRunnerView = () => {
         // If JSON parsing fails, create results from the raw text
         const { generateAgentResponse } = await import('./agents/api');
         const structured = await generateAgentResponse(
+          'Research Agent',
           `Parse the following search results into a JSON array. Each item must have: title (string), url (string), type ("pdf"|"youtube"|"web"), snippet (string). Only include items that have a real URL.`,
           searchResult.text,
           {
@@ -883,7 +888,7 @@ Original question: "${q.stem}"
 Cell: ${q.cell}. Grade: ${parsedMetadata?.gradeCode || 'unknown'}.
 LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
 
-      const newQ = await generateAgentResponse(prompt, JSON.stringify({ id: qId, type: newType, cell: q.cell }), GenerationSchema);
+      const newQ = await generateAgentResponse('Generation Agent', prompt, JSON.stringify({ id: qId, type: newType, cell: q.cell }), GenerationSchema);
 
       const updated = { ...newQ, cell: q.cell, type: newType };
 
@@ -958,6 +963,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
       const cd = cellData[q.cell];
       const scopeList = contentScope.filter((_, i) => selectedScope[i]).map((k: any) => k.knowledge_point).join('\n');
       const result = await generateAgentResponse(
+        'Generation Agent',
         Prompts.GenerationAgent,
         JSON.stringify({
           construct: construct,
@@ -2234,13 +2240,167 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
   );
 };
 
+const ConfigView = () => {
+  const [newKey, setNewKey] = useState('');
+  const [keys, setKeys] = useState<{ masked: string; limited: boolean; requests: number }[]>([]);
+  const [cacheStats, setCacheStats] = useState({ size: 0, hits: 0, misses: 0, maxEntries: 100 });
+  const [queueStats, setQueueStats] = useState({ active: 0, pending: 0 });
+
+  const refreshStats = async () => {
+    const { keyManager } = await import('./services/apiKeyManager');
+    const { responseCache } = await import('./services/responseCache');
+    const { requestQueue } = await import('./services/requestQueue');
+    setKeys(keyManager.getKeys());
+    setCacheStats(responseCache.getStats());
+    setQueueStats(requestQueue.getStats());
+  };
+
+  useEffect(() => { refreshStats(); const t = setInterval(refreshStats, 3000); return () => clearInterval(t); }, []);
+
+  const handleAddKey = async () => {
+    if (!newKey.trim()) return;
+    const { keyManager } = await import('./services/apiKeyManager');
+    keyManager.addKey(newKey.trim());
+    setNewKey('');
+    refreshStats();
+  };
+
+  const handleRemoveKey = async (masked: string) => {
+    const { keyManager } = await import('./services/apiKeyManager');
+    const allKeys = keyManager.getKeys();
+    const idx = allKeys.findIndex(k => k.masked === masked);
+    if (idx >= 0) {
+      // reconstruct key from localStorage
+      try {
+        const stored = JSON.parse(localStorage.getItem('geminiApiKeys') || '[]');
+        if (stored[idx]) {
+          keyManager.removeKey(stored[idx]);
+          refreshStats();
+        }
+      } catch {}
+    }
+  };
+
+  const handleClearCache = async () => {
+    const { responseCache } = await import('./services/responseCache');
+    responseCache.clear();
+    refreshStats();
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-8 max-w-4xl mx-auto">
+      <header className="mb-8">
+        <h2 className="text-4xl font-light tracking-tight mb-2">Configuration</h2>
+        <p className="col-header">API keys, agent settings, cache management</p>
+      </header>
+
+      {/* API Keys */}
+      <div className="tech-border bg-[var(--surface)] p-6 mb-6">
+        <h3 className="font-bold uppercase tracking-wide mb-4 flex items-center gap-2">
+          <Database size={16} /> API Keys ({keys.length})
+        </h3>
+        <div className="flex gap-2 mb-4">
+          <input
+            type="text"
+            value={newKey}
+            onChange={e => setNewKey(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAddKey()}
+            placeholder="Paste Gemini API key (AIza...)"
+            className="flex-1 tech-border bg-[var(--bg)] p-2.5 font-mono text-sm focus:outline-none focus:border-[var(--accent)]"
+          />
+          <button onClick={handleAddKey} disabled={!newKey.trim()} className="px-4 py-2 bg-[var(--ink)] text-[var(--bg)] text-sm font-bold uppercase disabled:opacity-30">
+            Add Key
+          </button>
+        </div>
+        <div className="flex flex-col gap-2">
+          {keys.map((k, i) => (
+            <div key={i} className={`flex items-center justify-between p-3 tech-border ${k.limited ? 'bg-[#FFF3E0] border-[#F57F17]' : 'bg-[var(--bg)]'}`}>
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-sm">{k.masked}</span>
+                {k.limited && <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#F57F17] text-white">Rate Limited</span>}
+                <span className="text-xs text-[var(--ink-muted)]">{k.requests} requests</span>
+              </div>
+              <button onClick={() => handleRemoveKey(k.masked)} className="text-xs text-[var(--danger)] hover:underline">Remove</button>
+            </div>
+          ))}
+          {keys.length === 0 && <p className="text-sm text-[var(--ink-muted)] italic">No keys configured. Add at least one Gemini API key.</p>}
+        </div>
+      </div>
+
+      {/* Queue & Cache Stats */}
+      <div className="grid grid-cols-2 gap-6 mb-6">
+        <div className="tech-border bg-[var(--surface)] p-6">
+          <h3 className="font-bold uppercase tracking-wide mb-4 flex items-center gap-2">
+            <Activity size={16} /> Request Queue
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="col-header">Active</div>
+              <div className="text-3xl font-light">{queueStats.active}</div>
+            </div>
+            <div>
+              <div className="col-header">Pending</div>
+              <div className="text-3xl font-light">{queueStats.pending}</div>
+            </div>
+          </div>
+          <p className="text-xs text-[var(--ink-muted)] mt-3">Max 2 concurrent per key. {keys.length} key(s) = max {keys.length * 2} parallel.</p>
+        </div>
+        <div className="tech-border bg-[var(--surface)] p-6">
+          <h3 className="font-bold uppercase tracking-wide mb-4 flex items-center gap-2">
+            <Database size={16} /> Response Cache
+          </h3>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <div className="col-header">Entries</div>
+              <div className="text-3xl font-light">{cacheStats.size}/{cacheStats.maxEntries}</div>
+            </div>
+            <div>
+              <div className="col-header">Hits</div>
+              <div className="text-3xl font-light text-[var(--success)]">{cacheStats.hits}</div>
+            </div>
+            <div>
+              <div className="col-header">Misses</div>
+              <div className="text-3xl font-light">{cacheStats.misses}</div>
+            </div>
+          </div>
+          <button onClick={handleClearCache} className="mt-3 text-xs text-[var(--danger)] hover:underline">Clear Cache</button>
+        </div>
+      </div>
+
+      {/* Agent Temperatures */}
+      <div className="tech-border bg-[var(--surface)] p-6">
+        <h3 className="font-bold uppercase tracking-wide mb-4 flex items-center gap-2">
+          <BrainCircuit size={16} /> Agent Settings
+        </h3>
+        <div className="grid grid-cols-1 gap-2">
+          {[
+            { name: 'Intake Agent', temp: 0.1 }, { name: 'Construct Agent', temp: 0.1 },
+            { name: 'Subskill Agent', temp: 0.2 }, { name: 'Content Scoping Agent', temp: 0.1 },
+            { name: 'Custom Hess Matrix Agent', temp: 0.15 }, { name: 'Misconception Agent', temp: 0.1 },
+            { name: 'Generation Agent', temp: 0.4 }, { name: 'AI SME QA', temp: 0.1 },
+          ].map(agent => (
+            <div key={agent.name} className="flex items-center justify-between p-2 tech-border bg-[var(--bg)]">
+              <span className="font-mono text-sm">{agent.name}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[var(--ink-muted)]">temp:</span>
+                <span className="text-sm font-bold">{agent.temp}</span>
+                <span className="text-xs text-[var(--ink-muted)]">| gemini-2.5-flash</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('pipeline');
 
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden bg-[var(--bg)] text-[var(--ink)]">
       <TopNav activeTab={activeTab} setActiveTab={setActiveTab} />
-      
+
       <main className="flex-1 w-full overflow-y-auto">
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && <DashboardView key="dashboard" />}
@@ -2248,6 +2408,7 @@ export default function App() {
           {activeTab === 'architecture' && <ArchitectureView key="architecture" />}
           {activeTab === 'state-machine' && <StateMachineView key="state-machine" />}
           {activeTab === 'raci' && <RaciView key="raci" />}
+          {activeTab === 'config' && <ConfigView key="config" />}
         </AnimatePresence>
       </main>
     </div>

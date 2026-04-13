@@ -33,8 +33,8 @@ export class AgentOrchestrator {
     private async runAgent(agentName: string, prompt: string, payload: any, schema: any) {
         this.log(agentName, 'Starting processing...');
         try {
-            const contextStr = JSON.stringify(payload, null, 2);
-            const res = await generateAgentResponse(prompt, contextStr, schema);
+            const contextStr = JSON.stringify(payload);
+            const res = await generateAgentResponse(agentName, prompt, contextStr, schema);
             this.log(agentName, 'Completed successfully.');
             return res;
         } catch (e: any) {
@@ -142,113 +142,104 @@ export class AgentOrchestrator {
             `[${k.category}] ${k.knowledge_point} (${k.scope_type}, ${k.grade_level})`
         ).join('\n');
 
-        // --- Custom Hess Matrix Agent ---
-        const matrixPayload = {
-            construct: this.artifacts.construct,
-            subskills: approvedSubskills,
-            target_questions: this.config.count,
-            grade: grade,
-            subject: this.artifacts.intake?.subject || '',
-            learning_objective: this.config.lo,
-            skill: this.config.skill,
-            approved_knowledge_points: knowledgeSummary,
-        };
+        // --- RUN HESS MATRIX + MISCONCEPTIONS IN PARALLEL ---
+        this.log('Orchestrator', 'Running Hess Matrix and Misconception agents in parallel...');
 
-        try {
-            const cgOutput = await this.runAgent('Custom Hess Matrix Agent', Prompts.CGMapperAgent, matrixPayload, CGMapperSchema);
-            const matrix = cgOutput.matrix || {};
-            // Extract counts for backward compat
-            const cgPlan: Record<string, number> = {};
-            const cellData: Record<string, any> = {};
-            for (const [cell, data] of Object.entries(matrix) as [string, any][]) {
-                cgPlan[cell] = data.count || 0;
-                cellData[cell] = data;
-            }
-            this.artifacts.cgPlan = cgPlan;
-            this.artifacts.cellData = cellData;
-            if (this.config.onData) {
-                this.config.onData('cgPlan', cgPlan);
-                this.config.onData('cellData', cellData);
-            }
-            // Log the matrix
-            const active = Object.entries(cellData).filter(([_, d]: [string, any]) => d.status === 'active');
-            const inactive = Object.entries(cellData).filter(([_, d]: [string, any]) => d.status !== 'active');
-            this.log('Custom Hess Matrix Agent', `${active.length} active cells, ${inactive.length} inactive. Total: ${cgOutput.total_questions || 0} questions.`);
-        } catch (e: any) {
-            this.log('Custom Hess Matrix Agent', `Failed: ${e.message}. Using default matrix.`);
-            this.artifacts.cgPlan = { R1: 2, U1: 3, U2: 3, A2: 4, A3: 0, AN2: 1, AN3: 0 };
-            if (this.config.onData) this.config.onData('cgPlan', this.artifacts.cgPlan);
-        }
-
-        // --- Misconception Agent ---
-        this.log('Misconception Agent', 'Starting processing...');
-        const loLower = this.config.lo.toLowerCase();
-        const skillLower = this.config.skill.toLowerCase();
-
-        const catalogSubset = (misconceptionCatalog as any[]).filter((m: any) => {
-            const mSubject = (m.SUBJECT || '').toLowerCase();
-            const subjectMatch = subject.includes('math') ? mSubject === 'math'
-                : subject.includes('sci') ? mSubject === 'science' : true;
-            if (!subjectMatch) return false;
-            const mText = `${m.TOPIC_CLUSTER} ${m.TOPIC} ${m.MISCONCEPTION}`.toLowerCase();
-            const keywords = `${loLower} ${skillLower}`.split(/\s+/).filter((w: string) => w.length > 3);
-            return keywords.some((kw: string) => mText.includes(kw));
-        });
-
-        const catalogMatches = catalogSubset.map((m: any) => ({
-            id: m.ID, topic: m.TOPIC, misconception: m.MISCONCEPTION,
-            type: m.TYPE, prevalence: m.PREVALENCE, source: m.SOURCE, source_url: m.SOURCE_URL
-        }));
-
-        this.log('Misconception Agent', `Found ${catalogMatches.length} catalog matches.`);
-        let misconceptionOutput: any[] = [];
-
-        if (catalogMatches.length >= 4) {
-            const payload = {
+        const hessMatrixPromise = (async () => {
+            const matrixPayload = {
                 construct: this.artifacts.construct,
                 subskills: approvedSubskills,
-                learning_objective: this.config.lo,
-                skill: this.config.skill,
-                catalog_matches: catalogMatches.slice(0, 30),
-                instruction: 'Select 4-8 most relevant misconceptions from catalog_matches. Do NOT invent new ones.'
+                target_questions: this.config.count,
+                grade, subject: this.artifacts.intake?.subject || '',
+                learning_objective: this.config.lo, skill: this.config.skill,
+                approved_knowledge_points: knowledgeSummary,
             };
-            misconceptionOutput = await this.runAgent('Misconception Agent', Prompts.MisconceptionAgent, payload, MisconceptionSchema);
-        } else {
-            this.log('Misconception Agent', `Catalog insufficient. Searching online...`);
-            const sourceUrls = [...new Set((misconceptionCatalog as any[])
-                .filter((m: any) => subject.includes('math') ? (m.SUBJECT || '').toLowerCase() === 'math'
-                    : subject.includes('sci') ? (m.SUBJECT || '').toLowerCase() === 'science' : true)
-                .map((m: any) => m.SOURCE_URL).filter(Boolean)
-            )].slice(0, 6);
-
             try {
-                const searchResult = await generateWithGroundedSearch(
-                    `Search for research-backed student misconceptions about: "${this.config.lo}" / "${this.config.skill}" (${subject}, grade ${grade}). Check: ${sourceUrls.join(', ')}, MOSART, AAAS Project 2061. Report misconception text + source. If none found, say "NO_MISCONCEPTIONS_FOUND".`,
-                    JSON.stringify({ lo: this.config.lo, skill: this.config.skill })
-                );
-                if (searchResult.text.includes('NO_MISCONCEPTIONS_FOUND')) {
-                    misconceptionOutput = [];
-                } else {
-                    misconceptionOutput = await this.runAgent('Misconception Agent', Prompts.MisconceptionAgent, {
-                        instruction: 'Parse research findings into structured misconceptions. Only include those with cited sources.',
-                        research_findings: searchResult.text, catalog_matches: catalogMatches, learning_objective: this.config.lo
-                    }, MisconceptionSchema);
+                const cgOutput = await this.runAgent('Custom Hess Matrix Agent', Prompts.CGMapperAgent, matrixPayload, CGMapperSchema);
+                const matrix = cgOutput.matrix || {};
+                const cgPlan: Record<string, number> = {};
+                const cellData: Record<string, any> = {};
+                for (const [cell, data] of Object.entries(matrix) as [string, any][]) {
+                    cgPlan[cell] = data.count || 0;
+                    cellData[cell] = data;
                 }
+                this.artifacts.cgPlan = cgPlan;
+                this.artifacts.cellData = cellData;
+                if (this.config.onData) {
+                    this.config.onData('cgPlan', cgPlan);
+                    this.config.onData('cellData', cellData);
+                }
+                const active = Object.entries(cellData).filter(([_, d]: [string, any]) => d.status === 'active');
+                this.log('Custom Hess Matrix Agent', `${active.length} active cells.`);
             } catch (e: any) {
-                this.log('Misconception Agent', `Search failed: ${e.message}`);
-                misconceptionOutput = catalogMatches.slice(0, 8).map((m: any, i: number) => ({
-                    misconception_id: m.id || `M-${i+1}`, misconception_text: m.misconception,
-                    type: (m.type || 'conceptual').toLowerCase(), prevalence: m.prevalence || 'unknown',
-                    incorrect_reasoning: `Source: ${m.source}`
-                }));
+                this.log('Custom Hess Matrix Agent', `Failed: ${e.message}. Using default.`);
+                this.artifacts.cgPlan = { R1: 2, U1: 3, U2: 3, A2: 4, A3: 0, AN2: 1, AN3: 0 };
+                if (this.config.onData) this.config.onData('cgPlan', this.artifacts.cgPlan);
             }
-        }
+        })();
 
-        this.artifacts.misconceptions = misconceptionOutput;
-        if (this.config.onData) {
-            this.config.onData('misconceptions', misconceptionOutput);
-            if (misconceptionOutput.length === 0) this.config.onData('misconceptions_not_found', true);
-        }
+        const misconceptionPromise = (async () => {
+            this.log('Misconception Agent', 'Starting processing...');
+            const loLower = this.config.lo.toLowerCase();
+            const skillLower = this.config.skill.toLowerCase();
+            const catalogSubset = (misconceptionCatalog as any[]).filter((m: any) => {
+                const mSubject = (m.SUBJECT || '').toLowerCase();
+                const subjectMatch = subject.includes('math') ? mSubject === 'math' : subject.includes('sci') ? mSubject === 'science' : true;
+                if (!subjectMatch) return false;
+                const mText = `${m.TOPIC_CLUSTER} ${m.TOPIC} ${m.MISCONCEPTION}`.toLowerCase();
+                const keywords = `${loLower} ${skillLower}`.split(/\s+/).filter((w: string) => w.length > 3);
+                return keywords.some((kw: string) => mText.includes(kw));
+            });
+            const catalogMatches = catalogSubset.map((m: any) => ({
+                id: m.ID, topic: m.TOPIC, misconception: m.MISCONCEPTION,
+                type: m.TYPE, prevalence: m.PREVALENCE, source: m.SOURCE
+            }));
+            this.log('Misconception Agent', `${catalogMatches.length} catalog matches.`);
+
+            let output: any[] = [];
+            if (catalogMatches.length >= 4) {
+                output = await this.runAgent('Misconception Agent', Prompts.MisconceptionAgent, {
+                    construct: this.artifacts.construct, subskills: approvedSubskills,
+                    learning_objective: this.config.lo, skill: this.config.skill,
+                    catalog_matches: catalogMatches.slice(0, 30),
+                    instruction: 'Select 4-8 most relevant. Do NOT invent new ones.'
+                }, MisconceptionSchema);
+            } else {
+                this.log('Misconception Agent', 'Catalog insufficient. Searching online...');
+                const sourceUrls = [...new Set((misconceptionCatalog as any[])
+                    .filter((m: any) => subject.includes('math') ? (m.SUBJECT || '').toLowerCase() === 'math' : subject.includes('sci') ? (m.SUBJECT || '').toLowerCase() === 'science' : true)
+                    .map((m: any) => m.SOURCE_URL).filter(Boolean)
+                )].slice(0, 6);
+                try {
+                    const searchResult = await generateWithGroundedSearch('Misconception Agent',
+                        `Search for student misconceptions about: "${this.config.lo}" (${subject}, grade ${grade}). Check: ${sourceUrls.join(', ')}, MOSART, AAAS. If none, say "NO_MISCONCEPTIONS_FOUND".`,
+                        JSON.stringify({ lo: this.config.lo, skill: this.config.skill })
+                    );
+                    if (!searchResult.text.includes('NO_MISCONCEPTIONS_FOUND')) {
+                        output = await this.runAgent('Misconception Agent', Prompts.MisconceptionAgent, {
+                            instruction: 'Parse findings into structured misconceptions. Only cited sources.',
+                            research_findings: searchResult.text, catalog_matches: catalogMatches, learning_objective: this.config.lo
+                        }, MisconceptionSchema);
+                    }
+                } catch (e: any) {
+                    this.log('Misconception Agent', `Search failed: ${e.message}`);
+                    output = catalogMatches.slice(0, 8).map((m: any, i: number) => ({
+                        misconception_id: m.id || `M-${i+1}`, misconception_text: m.misconception,
+                        type: (m.type || 'conceptual').toLowerCase(), prevalence: m.prevalence || 'unknown',
+                        incorrect_reasoning: `Source: ${m.source}`
+                    }));
+                }
+            }
+            this.artifacts.misconceptions = output;
+            if (this.config.onData) {
+                this.config.onData('misconceptions', output);
+                if (output.length === 0) this.config.onData('misconceptions_not_found', true);
+            }
+        })();
+
+        // Wait for BOTH to finish
+        await Promise.allSettled([hessMatrixPromise, misconceptionPromise]);
+        this.log('Orchestrator', 'Hess Matrix + Misconceptions complete (parallel).');
 
         // GATE 3: Hess Matrix & Misconception Approval
         if (this.config.onStateChange) this.config.onStateChange('waiting', 5);
@@ -283,6 +274,7 @@ export class AgentOrchestrator {
             const thisCellDef = cellDataMap[cell]?.definition || cell;
             try {
                 const selection = await generateAgentResponse(
+                    'Content Selector',
                     `Pick 3-8 knowledge points MOST appropriate for cell ${cell} (${thisCellDef}). Grade: ${grade}, Subject: ${subjectName}. Return JSON array of strings.
 R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=patterns to analyze. Pick DIFFERENT points per cell.`,
                     JSON.stringify(allScopePoints),
@@ -352,44 +344,47 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
         };
         const typesForCell = typeMap[cell] || ['mcq', 'mcq', 'mcq'];
 
-        // Generate ONE question at a time
-        const cellQuestions: any[] = [];
+        // Generate questions IN PARALLEL (requestQueue handles concurrency)
         const startId = (this.artifacts.allQuestions || []).length + 1;
 
-        for (let qi = 0; qi < count; qi++) {
+        const typeInstructions: Record<string, string> = {
+            mcq: `MCQ with 4 options (A,B,C,D). 1 correct (correct=true). Wrong options need "why_wrong". Fill "options" array.`,
+            picture_mcq: `PICTURE-BASED MCQ. Short stem. 4 visual options. Each option needs "image_desc" (e.g. "a bowl of rice"). Set needs_image=true. Fill "options" array.`,
+            fill_blank: `Fill-in-the-blank. Put ##answer## in stem. Set answer field.`,
+            error_analysis: `Error analysis. "steps" array (3-4 steps). 1-2 wrong (correct=false) with "fix". Stem: "Find the incorrect step."`,
+            match: `Match-the-following. "pairs" array with 4-5 strings like "Rice → Plant-based".`,
+            arrange: `Arrange-in-order. "items" array with 4-5 items in correct order.`,
+        };
+
+        const questionPromises = Array.from({ length: count }, (_, qi) => {
             const qType = typesForCell[qi % typesForCell.length];
             const contentPoint = cellScope[qi % cellScope.length] || cellScope[0] || this.config.skill;
-
-            const typeInstructions: Record<string, string> = {
-                mcq: `Generate an MCQ with 4 options (A,B,C,D). Exactly 1 correct (correct=true). Each wrong option needs "why_wrong". Fill "options" array.`,
-                picture_mcq: `Generate a PICTURE-BASED MCQ. Short stem asking student to identify/pick from images. 4 options where each is a visual item. For EACH option, include "image_desc" describing the picture to show (e.g. "a bowl of rice", "a glass of milk", "a whole fish"). Set needs_image=true. Fill "options" array.`,
-                fill_blank: `Generate a fill-in-the-blank. Put ##answer## in stem where blank goes. Set answer field.`,
-                error_analysis: `Generate error analysis. Show student's work in "steps" array (3-4 steps). 1-2 wrong steps (correct=false) with "fix". Stem: "Find the incorrect step."`,
-                match: `Generate match-the-following. "pairs" array with 4-5 strings like "Rice → Plant-based". Stem: "Match the following."`,
-                arrange: `Generate arrange-in-order. "items" array with 4-5 items in correct order. Stem: "Arrange in the correct order."`,
-            };
+            const qId = `${cell}-${startId + qi}`;
 
             const prompt = `${Prompts.GenerationAgent}
 ${cellRules[cell] || ''}
-Cell definition: ${thisCellDef}
-
-Generate 1 "${qType}" question.
-${typeInstructions[qType] || typeInstructions.mcq}
-
-Content point to test: ${contentPoint}
+Cell: ${thisCellDef}
+Generate 1 "${qType}" question. ${typeInstructions[qType] || typeInstructions.mcq}
+Content: ${contentPoint}
 Grade: ${grade}, Subject: ${subjectName}, Skill: ${this.config.skill}
-${misconceptions.length > 0 ? 'Target these misconceptions in wrong answers: ' + misconceptions.slice(0, 2).join('; ') : ''}
+${misconceptions.length > 0 ? 'Misconceptions: ' + misconceptions.slice(0, 2).join('; ') : ''}
+LANGUAGE: Simple English, Indian names, short stems, no negative phrasing.`;
 
-LANGUAGE: Simple English, Indian context (names: Riya/Aarav/Kabir), short stems (1-2 sentences), options under 10 words. No negative stems. No "all/none of the above".`;
+            return generateAgentResponse('Generation Agent', prompt, JSON.stringify({ id: qId, type: qType, cell }), GenerationSchema)
+                .then(q => {
+                    this.log('Generation Agent', `${qId}: ${qType} ✓`);
+                    return { ...q, cell, type: qType };
+                })
+                .catch(e => {
+                    this.log('Generation Agent', `${qId}: ${qType} failed — ${(e as any).message?.slice(0, 50)}`);
+                    return null;
+                });
+        });
 
-            try {
-                const q = await generateAgentResponse(prompt, JSON.stringify({ id: `${cell}-${startId + qi}`, type: qType, cell }), GenerationSchema);
-                cellQuestions.push({ ...q, cell, type: qType });
-                this.log('Generation Agent', `${cell}-${startId + qi}: ${qType} ✓`);
-            } catch (e: any) {
-                this.log('Generation Agent', `${cell}-${startId + qi}: ${qType} failed — ${e.message?.slice(0, 50)}`);
-            }
-        }
+        const results = await Promise.allSettled(questionPromises);
+        const cellQuestions = results
+            .filter(r => r.status === 'fulfilled' && r.value)
+            .map(r => (r as PromiseFulfilledResult<any>).value);
 
         // Run rule-based QA
         const ruleResults = runRuleBasedQA(cellQuestions, this.config.lo);
