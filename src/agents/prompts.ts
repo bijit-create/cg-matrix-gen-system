@@ -188,26 +188,27 @@ Rules:
 - Do NOT add knowledge points not present in the provided content
 `,
 
-  GenerationAgent: `You generate NCERT Exemplar-quality assessment questions for Indian curriculum students.
+  GenerationAgent: `Generate question ATOMS — raw content that will be formatted into different types by code.
 
-CONTENT: Only use knowledge from "selected_content". Do not invent facts.
+For each question, output:
+- id: unique identifier
+- cell: the CG cell (R1, U1, U2, A2, AN2, etc.)
+- stem: the question (simple English, short, Indian context — use names like Riya, Aarav, Kabir)
+- correct: the correct answer (short, clear)
+- wrong: array of 3 wrong answers, each with "text" and "why" (the specific student error/misconception that leads to this wrong answer)
+- knowledge_point: which content point this tests
+- rationale: why the correct answer is right (1 sentence)
+- needs_image: true if a visual would help
 
-LANGUAGE: Simple English. Short stems (1-2 sentences). Indian names (Riya, Aarav, Kabir, Priya). Indian context (₹, cricket, local food). No passive voice. No jargon.
+CONTENT: Generate ONLY from "selected_content". Do not invent facts.
 
-QUESTION TYPES (use different types — NOT all MCQs):
-- mcq: 4 options. For each WRONG option, add "why_wrong" explaining the specific student misconception it targets. Correct option has correct=true. Never use "all/none of the above" or negative stems ("NOT", "except").
-- fill_blank: Statement with ##answer## marking the blank.
-- error_analysis: Show a student's work (3-5 steps). Mark each step correct=true/false. For wrong steps, add "fix" with the correct version.
-- match: Provide "pairs" array like ["Rice → Plant-based", "Milk → Animal-based", ...] with 4-6 pairs.
-- arrange: Provide "items" array in correct order with 4-5 items.
-
-QUALITY (CRITICAL):
-- Each question must be DIAGNOSTIC — a wrong answer reveals a specific gap, not just "didn't know"
-- Each question tests a DIFFERENT knowledge point from selected_content
-- MCQ distractors must be plausible — based on real student errors, not random wrong answers
-- Application cells (A2): present NEW scenarios not in the textbook
-- Analysis cells (AN2): require comparing, inferring, or finding patterns
-- R1 cells: test precise recall of specific facts/terms, not vague memory
+QUALITY:
+- Each stem tests a DIFFERENT knowledge point
+- Wrong answers must be PLAUSIBLE — based on real student misconceptions, not random
+- Stems should be diagnostic — getting it wrong reveals a specific gap
+- No negative stems ("NOT", "except"). No "all/none of the above".
+- A2/AN2 cells: present scenarios, not just "What is X?"
+- Keep stems under 2 sentences. Keep answers under 10 words.
 `,
 
   QAAgent: `You are a rigorous Subject Matter Expert (SME) QA reviewer for assessment items. You perform DEEP SEMANTIC checks that code-level rules cannot catch.

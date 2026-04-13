@@ -112,49 +112,43 @@ export const ContentScopeSchema: Schema = {
     }
 };
 
-// Minimal schema — keeps JSON output small. Type-specific fields go in options array only.
+// Single question schema — Gemini generates ONE complete question per call
 export const GenerationSchema: Schema = {
-    type: Type.ARRAY,
-    items: {
-        type: Type.OBJECT,
-        properties: {
-            id: { type: Type.STRING },
-            cell: { type: Type.STRING },
-            type: { type: Type.STRING },
-            stem: { type: Type.STRING },
-            answer: { type: Type.STRING },
-            rationale: { type: Type.STRING },
-            needs_image: { type: Type.BOOLEAN },
-            options: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        label: { type: Type.STRING },
-                        text: { type: Type.STRING },
-                        correct: { type: Type.BOOLEAN },
-                        why_wrong: { type: Type.STRING }
-                    },
-                    required: ["label", "text", "correct"]
-                }
+    type: Type.OBJECT,
+    properties: {
+        id: { type: Type.STRING },
+        type: { type: Type.STRING },
+        stem: { type: Type.STRING },
+        answer: { type: Type.STRING },
+        rationale: { type: Type.STRING },
+        needs_image: { type: Type.BOOLEAN },
+        // MCQ: 4 options
+        options: { type: Type.ARRAY, items: {
+            type: Type.OBJECT,
+            properties: {
+                label: { type: Type.STRING },
+                text: { type: Type.STRING },
+                correct: { type: Type.BOOLEAN },
+                why_wrong: { type: Type.STRING }
             },
-            steps: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        text: { type: Type.STRING },
-                        correct: { type: Type.BOOLEAN },
-                        fix: { type: Type.STRING }
-                    },
-                    required: ["text", "correct"]
-                }
+            required: ["label", "text", "correct"]
+        }},
+        // Error analysis: steps
+        steps: { type: Type.ARRAY, items: {
+            type: Type.OBJECT,
+            properties: {
+                text: { type: Type.STRING },
+                correct: { type: Type.BOOLEAN },
+                fix: { type: Type.STRING }
             },
-            pairs: { type: Type.ARRAY, items: { type: Type.STRING } },
-            items: { type: Type.ARRAY, items: { type: Type.STRING } }
-        },
-        required: ["id", "cell", "type", "stem", "answer"]
-    }
+            required: ["text", "correct"]
+        }},
+        // Match: pairs as "left → right" strings
+        pairs: { type: Type.ARRAY, items: { type: Type.STRING } },
+        // Arrange: items in correct order
+        items: { type: Type.ARRAY, items: { type: Type.STRING } }
+    },
+    required: ["id", "type", "stem", "answer", "rationale"]
 };
 
 export const QASchema: Schema = {

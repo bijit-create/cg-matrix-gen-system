@@ -2,7 +2,7 @@ import { generateAgentResponse, generateWithGroundedSearch } from './api';
 import { Prompts } from './prompts';
 import { IntakeSchema, ConstructSchema, SubskillSchema, CGMapperSchema, MisconceptionSchema, ContentScopeSchema, GenerationSchema, QASchema } from './schemas';
 import misconceptionCatalog from '../knowledge_base/student_misconceptions_catalog.json';
-// imageGen is used on-demand from the UI, not in the pipeline
+// questionFormatter.ts available for client-side type switching
 import { runRuleBasedQA } from './ruleBasedQA';
 
 export type PipelineState = 'idle' | 'running' | 'waiting' | 'error' | 'completed';
@@ -324,73 +324,83 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
         const subjectName = this.artifacts.intake?.subject || '';
         const cellDataMap = this.artifacts.cellData || {};
         const thisCellDef = cellDataMap[cell]?.definition || cell;
-        const cellScope = (this.artifacts.cellContentMap?.[cell] || []).join('\n- ');
+        const cellScope = (this.artifacts.cellContentMap?.[cell] || []);
         const misconceptions = (this.artifacts.approvedMisconceptions || []).slice(0, 4).map((m: any) => m.text || m.misconception_text || '');
 
         this.log('Generation Agent', `Cell ${cellIndex + 1}/${cellQueue.length}: Generating ${count} item(s) for ${cell}...`);
 
-        const genPayload = {
-            lo: this.config.lo,
-            skill: this.config.skill,
-            grade: grade || 'unknown',
-            subject: subjectName || 'unknown',
-            cell,
-            cell_definition: thisCellDef,
-            count,
-            start_id: (this.artifacts.allQuestions || []).length + 1,
-            misconceptions,
-            selected_content: cellScope
+        // Cell-specific cognitive rules
+        const cellRules: Record<string, string> = {
+            R1: `R1 — Remember DOK1: Student IDENTIFIES/RECALLS/NAMES facts from memory. No explaining or comparing. Pattern: "What is...?", "Name the...", "Which is a...?"`,
+            U1: `U1 — Understand DOK1: Student EXPLAINS/INTERPRETS defining characteristics. No comparing multiple cases. Pattern: "Why is...?", "What happens when...?"`,
+            U2: `U2 — Understand DOK2: Student COMPARES/CLASSIFIES using explicit criteria. No applying rules to new cases. Pattern: "Compare X and Y", "Classify into..."`,
+            A2: `A2 — Apply DOK2: Student APPLIES learned rules to NEW concrete examples. Present NOVEL scenarios. Pattern: "Kabir has... How should he classify?"`,
+            A3: `A3 — Apply DOK3: Student APPLIES rules across MULTIPLE STEPS. Non-routine problems.`,
+            AN2: `AN2 — Analyze DOK2: Student ANALYZES/INFERS patterns in structured data. Pattern: "Look at this data and find...", "What pattern?"`,
+            AN3: `AN3 — Analyze DOK3: Student DETECTS ERRORS/EVALUATES REASONING. Pattern: "Find the mistake in..."`
         };
 
-        // Build cell-specific context to append to the system prompt
-        const cellContext = `
-TASK: Generate exactly ${count} question(s) for cell ${cell}.
+        // Assign types to each question position
+        const typeMap: Record<string, string[]> = {
+            R1: ['mcq', 'fill_blank', 'mcq', 'match', 'mcq'],
+            U1: ['mcq', 'fill_blank', 'mcq', 'fill_blank', 'mcq'],
+            U2: ['mcq', 'match', 'arrange', 'mcq', 'match'],
+            A2: ['mcq', 'error_analysis', 'mcq', 'error_analysis', 'mcq'],
+            A3: ['error_analysis', 'mcq', 'error_analysis'],
+            AN2: ['mcq', 'error_analysis', 'mcq', 'error_analysis'],
+            AN3: ['error_analysis', 'error_analysis', 'mcq'],
+        };
+        const typesForCell = typeMap[cell] || ['mcq', 'mcq', 'mcq'];
+
+        // Generate ONE question at a time
+        const cellQuestions: any[] = [];
+        const startId = (this.artifacts.allQuestions || []).length + 1;
+
+        for (let qi = 0; qi < count; qi++) {
+            const qType = typesForCell[qi % typesForCell.length];
+            const contentPoint = cellScope[qi % cellScope.length] || cellScope[0] || this.config.skill;
+
+            const typeInstructions: Record<string, string> = {
+                mcq: `Generate an MCQ with 4 options (A,B,C,D). Exactly 1 correct (correct=true). Each wrong option needs "why_wrong" explaining the student error/misconception. Fill the "options" array.`,
+                fill_blank: `Generate a fill-in-the-blank question. Put ##answer## where the blank goes in the stem. Set answer to the correct word/phrase.`,
+                error_analysis: `Generate an error analysis question. Show a student's work in 3-4 steps (in "steps" array). 1-2 steps should have correct=false with "fix" showing the correct version. Stem should say "Find the incorrect step."`,
+                match: `Generate a match-the-following question. Provide 4-5 pairs in the "pairs" array as strings like "Rice → Plant-based". Stem should say "Match the following."`,
+                arrange: `Generate an arrange-in-order question. Provide 4-5 items in the "items" array in correct order. Stem should say "Arrange in the correct order."`,
+            };
+
+            const prompt = `${Prompts.GenerationAgent}
+${cellRules[cell] || ''}
 Cell definition: ${thisCellDef}
-Skill: ${this.config.skill}
-Grade: ${grade}, Subject: ${subjectName}
 
-CONTENT TO TEST (generate questions ONLY from these points):
-${cellScope.slice(0, 800)}
+Generate 1 "${qType}" question.
+${typeInstructions[qType] || typeInstructions.mcq}
 
-${misconceptions.length > 0 ? 'MISCONCEPTIONS to target in distractors:\n' + misconceptions.join('\n') : ''}
+Content point to test: ${contentPoint}
+Grade: ${grade}, Subject: ${subjectName}, Skill: ${this.config.skill}
+${misconceptions.length > 0 ? 'Target these misconceptions in wrong answers: ' + misconceptions.slice(0, 2).join('; ') : ''}
 
-TYPE GUIDANCE for ${cell}:
-${cell === 'R1' ? 'Use: mcq, fill_blank. Test recall of specific facts/terms.' : ''}
-${cell === 'U1' ? 'Use: mcq, fill_blank. Test explanation of concepts.' : ''}
-${cell === 'U2' ? 'Use: mcq, match, arrange. Test comparison/classification.' : ''}
-${cell === 'A2' ? 'Use: mcq, error_analysis. Present NEW scenarios to apply rules.' : ''}
-${cell === 'A3' ? 'Use: error_analysis. Multi-step problems.' : ''}
-${cell === 'AN2' ? 'Use: mcq, error_analysis. Require inferring/analyzing patterns.' : ''}
-${cell === 'AN3' ? 'Use: error_analysis. Detect errors in reasoning.' : ''}
-Use AT LEAST 2 different question types if generating 2+ items.`;
+LANGUAGE: Simple English, Indian context (names: Riya/Aarav/Kabir), short stems (1-2 sentences), options under 10 words. No negative stems. No "all/none of the above".`;
 
-        const cellPrompt = Prompts.GenerationAgent + cellContext;
-
-        let cellQuestions: any[] = [];
-        for (let attempt = 0; attempt < 2; attempt++) {
             try {
-                cellQuestions = await this.runAgent('Generation Agent', cellPrompt, genPayload, GenerationSchema);
-                break;
+                const q = await generateAgentResponse(prompt, JSON.stringify({ id: `${cell}-${startId + qi}`, type: qType, cell }), GenerationSchema);
+                cellQuestions.push({ ...q, cell, type: qType });
+                this.log('Generation Agent', `${cell}-${startId + qi}: ${qType} ✓`);
             } catch (e: any) {
-                if (attempt === 0) {
-                    this.log('Generation Agent', `Attempt 1 failed: ${e.message?.slice(0, 60)}. Retrying...`);
-                } else {
-                    this.log('Generation Agent', `Failed for ${cell} after 2 attempts.`);
-                }
+                this.log('Generation Agent', `${cell}-${startId + qi}: ${qType} failed — ${e.message?.slice(0, 50)}`);
             }
         }
 
-        // Run rule-based QA on this cell's questions
+        // Run rule-based QA
         const ruleResults = runRuleBasedQA(cellQuestions, this.config.lo);
         const cellQA = cellQuestions.map((q: any) => {
-            const rule = ruleResults.find(r => r.question_id === (q.question_id || q.id));
-            const issues = (rule?.flags || []).map(f => `[${f.category}/${f.severity}] ${f.message}`);
+            const rule = ruleResults.find(r => r.question_id === (q.id));
+            const issues = (rule?.flags || []).map((f: any) => `[${f.category}/${f.severity}] ${f.message}`);
             return {
-                question_id: q.question_id || q.id,
+                question_id: q.id,
                 pass: !rule || rule.pass,
                 issues,
                 suggestions: [],
-                severity: issues.some(i => i.includes('/critical]')) ? 'critical' : issues.some(i => i.includes('/major]')) ? 'major' : 'none'
+                severity: issues.some((i: string) => i.includes('/critical]')) ? 'critical' : issues.some((i: string) => i.includes('/major]')) ? 'major' : 'none'
             };
         });
 

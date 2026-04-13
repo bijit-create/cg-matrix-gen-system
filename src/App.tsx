@@ -851,6 +851,26 @@ const PipelineRunnerView = () => {
     }
   };
 
+  // --- Instant type switching (no API call) ---
+  const handleSwitchType = async (qId: string, newType: string) => {
+    const { formatQuestion } = await import('./agents/questionFormatter');
+    // Find atom from current cell data or from questions
+    const fromCell = currentCellData?.questions?.find((q: any) => q.id === qId);
+    const fromQuestions = questions.find(q => q.id === qId);
+    const q = fromCell || fromQuestions;
+    if (!q?._atom) return;
+    const reformatted = formatQuestion(q._atom, newType);
+    if (currentCellData && fromCell) {
+      setCurrentCellData(prev => prev ? {
+        ...prev,
+        questions: prev.questions.map((cq: any) => cq.id === qId ? reformatted : cq)
+      } : prev);
+    }
+    if (fromQuestions) {
+      setQuestions(prev => prev.map(eq => eq.id === qId ? reformatted : eq));
+    }
+  };
+
   // --- Per-question image generation (on-demand) ---
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
 
@@ -1746,6 +1766,20 @@ const PipelineRunnerView = () => {
                                 >
                                   <Trash2 size={10} /> Reject
                                 </button>
+                                <span className="text-[10px] text-[var(--ink-muted)]">Switch to:</span>
+                                {['mcq', 'fill_blank', 'error_analysis', 'match', 'arrange'].map(t => (
+                                  <button
+                                    key={t}
+                                    onClick={() => handleSwitchType(q.question_id || q.id, t)}
+                                    className={`px-1.5 py-0.5 text-[10px] font-mono border transition-colors ${
+                                      (q.type || 'mcq') === t
+                                        ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
+                                        : 'border-[var(--line-dark)] hover:bg-[var(--line)]'
+                                    }`}
+                                  >
+                                    {t.replace('_', ' ')}
+                                  </button>
+                                ))}
                               </div>
                             </div>
                           );
