@@ -3,7 +3,9 @@
 
 import { GoogleGenAI } from '@google/genai';
 
-export const config = { runtime: 'edge' };
+// Use Node.js serverless runtime (60s timeout on free, 300s on Pro)
+// Edge runtime has only 30s which is too short for LLM calls
+export const maxDuration = 60;
 
 // Multiple keys for rotation — set in Vercel Environment Variables
 function getApiKeys(): string[] {

@@ -58,7 +58,7 @@ export class AgentOrchestrator {
                 learning_objective: this.config.lo,
                 skill: this.config.skill,
                 target_question_count: this.config.count,
-                chapter_content: this.summarizeContent(this.config.chapterContent || "Not provided.", 4000),
+                chapter_content: this.summarizeContent(this.config.chapterContent || "Not provided.", 2000),
                 ...this.config.metadata
             };
             const intakeOutput = await this.runAgent('Intake Agent', Prompts.IntakeAgent, intakePayload, IntakeSchema);
@@ -103,8 +103,8 @@ export class AgentOrchestrator {
             subject: this.artifacts.intake?.subject || 'unknown',
             construct: this.artifacts.construct,
             subskills: approvedSubskills,
-            chapter_content: this.summarizeContent(this.config.chapterContent || 'No content provided.'),
-            ...(sourcedContent.length > 0 && { sourced_references: sourcedContent.slice(0, 5) })
+            chapter_content: this.summarizeContent(this.config.chapterContent || 'No content provided.', 3000),
+            ...(sourcedContent.length > 0 && { sourced_references: sourcedContent.slice(0, 3) })
         };
 
         try {
