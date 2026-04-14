@@ -58,7 +58,7 @@ export class AgentOrchestrator {
                 learning_objective: this.config.lo,
                 skill: this.config.skill,
                 target_question_count: this.config.count,
-                chapter_content: this.summarizeContent(this.config.chapterContent || "Not provided.", 2000),
+                chapter_content: this.summarizeContent(this.config.chapterContent || "Not provided.", 3000),
                 ...this.config.metadata
             };
             const intakeOutput = await this.runAgent('Intake Agent', Prompts.IntakeAgent, intakePayload, IntakeSchema);
@@ -89,33 +89,66 @@ export class AgentOrchestrator {
         }
     }
 
-    // ===== GATE 1 APPROVED → Content Scoping → GATE 2 =====
+    // ===== GATE 1 APPROVED → Content Scoping (per subskill) → GATE 2 =====
     public async executeContentScoping(approvedSubskills: any[], sourcedContent: string[] = []) {
         if (this.config.onStateChange) this.config.onStateChange('running', 3);
         this.artifacts.approvedSubskills = approvedSubskills;
         this.artifacts.sourcedContent = sourcedContent;
 
-        this.log('Content Scoping Agent', 'Analyzing content to extract knowledge points...');
-        const scopePayload = {
-            learning_objective: this.config.lo,
-            skill: this.config.skill,
-            grade: this.artifacts.intake?.grade || 'unknown',
-            subject: this.artifacts.intake?.subject || 'unknown',
-            construct: this.artifacts.construct,
-            subskills: approvedSubskills,
-            chapter_content: this.summarizeContent(this.config.chapterContent || 'No content provided.', 3000),
-            ...(sourcedContent.length > 0 && { sourced_references: sourcedContent.slice(0, 3) })
-        };
+        const grade = this.artifacts.intake?.grade || 'unknown';
+        const subject = this.artifacts.intake?.subject || 'unknown';
+        const fullContent = this.config.chapterContent || '';
+
+        // Split content scoping: one call per subskill with relevant content chunk
+        this.log('Content Scoping Agent', `Scoping content for ${approvedSubskills.length} subskill(s)...`);
+        const allScopePoints: any[] = [];
+
+        for (let si = 0; si < approvedSubskills.length; si++) {
+            const subskill = approvedSubskills[si];
+            this.log('Content Scoping Agent', `Subskill ${si + 1}/${approvedSubskills.length}: ${typeof subskill === 'string' ? subskill.slice(0, 50) : 'processing'}...`);
+
+            // Extract content relevant to this subskill (keyword search in chapter)
+            const subskillText = typeof subskill === 'string' ? subskill : subskill.subskill_description || '';
+            const keywords = subskillText.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+            let relevantContent = fullContent;
+
+            // If we have chapter content, try to extract relevant paragraphs
+            if (fullContent.length > 2000) {
+                const paragraphs = fullContent.split(/\n\n|\r\n\r\n/);
+                const relevant = paragraphs.filter(p => {
+                    const pLower = p.toLowerCase();
+                    return keywords.some(kw => pLower.includes(kw));
+                });
+                relevantContent = relevant.length > 0 ? relevant.join('\n\n') : fullContent.slice(0, 2000);
+            }
+
+            const scopePayload = {
+                learning_objective: this.config.lo,
+                skill: this.config.skill,
+                grade, subject,
+                subskill: subskillText,
+                chapter_content: this.summarizeContent(relevantContent, 2000),
+                instruction: `Extract 3-8 testable knowledge points for THIS specific subskill: "${subskillText}". Only include points from the chapter content that relate to this subskill.`
+            };
+
+            try {
+                const points = await this.runAgent('Content Scoping Agent', Prompts.ContentScopingAgent, scopePayload, ContentScopeSchema);
+                allScopePoints.push(...(points || []));
+                // Emit progressively
+                if (this.config.onData) this.config.onData('contentScope', [...allScopePoints]);
+            } catch (e: any) {
+                this.log('Content Scoping Agent', `Subskill ${si + 1} failed: ${e.message?.slice(0, 40)}`);
+            }
+        }
+
+        this.artifacts.contentScope = allScopePoints;
+        if (this.config.onData) this.config.onData('contentScope', allScopePoints);
 
         try {
-            const scopeOutput = await this.runAgent('Content Scoping Agent', Prompts.ContentScopingAgent, scopePayload, ContentScopeSchema);
-            this.artifacts.contentScope = scopeOutput;
-            if (this.config.onData) this.config.onData('contentScope', scopeOutput);
-
-            const core = scopeOutput.filter((k: any) => k.scope_type === 'core').length;
-            const supporting = scopeOutput.filter((k: any) => k.scope_type === 'supporting').length;
-            const advanced = scopeOutput.filter((k: any) => k.scope_type === 'advanced').length;
-            this.log('Content Scoping Agent', `Extracted ${scopeOutput.length} knowledge points: ${core} core, ${supporting} supporting, ${advanced} advanced (flagged).`);
+            const core = allScopePoints.filter((k: any) => k.scope_type === 'core').length;
+            const supporting = allScopePoints.filter((k: any) => k.scope_type === 'supporting').length;
+            const advanced = allScopePoints.filter((k: any) => k.scope_type === 'advanced').length;
+            this.log('Content Scoping Agent', `Total: ${allScopePoints.length} knowledge points (${core} core, ${supporting} supporting, ${advanced} advanced).`);
         } catch (e: any) {
             this.log('Content Scoping Agent', `Failed: ${e.message}`);
             this.artifacts.contentScope = [];
