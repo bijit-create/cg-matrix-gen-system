@@ -2286,6 +2286,117 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
   );
 };
 
+// ===== FEEDBACK REFINER — takes user feedback and refines questions =====
+const FeedbackRefiner = ({ questions, setQuestions, lo, skill, metadata, log, setStatus, setProgress }: {
+  questions: any[]; setQuestions: (q: any[]) => void; lo: string; skill: string; metadata: any;
+  log: (msg: string) => void; setStatus: (s: any) => void; setProgress: (p: string) => void;
+}) => {
+  const [feedback, setFeedback] = useState('');
+  const [isRefining, setIsRefining] = useState(false);
+
+  const handleRefine = async () => {
+    if (!feedback.trim()) return;
+    setIsRefining(true);
+    log(`Refining with feedback: "${feedback.slice(0, 80)}..."`);
+    setStatus('running');
+    setProgress('Refining questions based on feedback...');
+
+    try {
+      const { generateAgentResponse } = await import('./agents/api');
+      const { GenerationSchema } = await import('./agents/schemas');
+
+      // Send current questions + feedback to Gemini for refinement
+      const currentQsSummary = questions.map(q =>
+        `${q.id} [${q.type}] ${q.cell}: "${q.stem?.slice(0, 60)}..."`
+      ).join('\n');
+
+      const refinedQs: any[] = [];
+
+      for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        setProgress(`Refining ${q.id} (${i + 1}/${questions.length})...`);
+
+        try {
+          const prompt = `You are refining an existing question based on user feedback.
+
+ORIGINAL QUESTION:
+- ID: ${q.id}
+- Type: ${q.type}
+- Cell: ${q.cell}
+- Stem: ${q.stem}
+- Answer: ${q.answer || q.correct_answer || ''}
+
+USER FEEDBACK (apply this to improve the question):
+"${feedback}"
+
+Generate an improved version of this question applying the feedback.
+Keep the same type (${q.type}), cell (${q.cell}), and ID (${q.id}).
+If the feedback doesn't apply to this question, return it unchanged.
+Simple English, Indian names, short stems.`;
+
+          const typeInstr: Record<string, string> = {
+            mcq: 'MCQ with 4 options. Fill "options" array.',
+            fill_blank: 'Fill-blank. Put ##answer## in stem.',
+            error_analysis: 'Error analysis. "steps" array.',
+            match: 'Match. "pairs" array.',
+            arrange: 'Arrange. "items" array.',
+          };
+
+          const refined = await generateAgentResponse('Generation Agent',
+            prompt + '\n' + (typeInstr[q.type] || typeInstr.mcq),
+            JSON.stringify({ id: q.id, type: q.type, cell: q.cell }),
+            GenerationSchema
+          );
+          refinedQs.push({ ...refined, cell: q.cell, type: q.type, id: q.id });
+          log(`${q.id}: refined ✓`);
+        } catch {
+          refinedQs.push(q); // keep original on failure
+          log(`${q.id}: kept original`);
+        }
+      }
+
+      setQuestions(refinedQs);
+      setFeedback('');
+      log(`Refinement complete. ${refinedQs.length} questions updated.`);
+    } catch (e: any) {
+      log(`Refinement error: ${e.message?.slice(0, 50)}`);
+    } finally {
+      setIsRefining(false);
+      setStatus('done');
+      setProgress('');
+    }
+  };
+
+  return (
+    <div className="tech-border bg-[#FFF8E1] border-[#F57F17] p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <AlertCircle size={16} className="text-[#F57F17]" />
+        <label className="text-sm font-bold">Feedback & Refine</label>
+      </div>
+      <p className="text-xs text-[var(--ink-muted)] mb-2">
+        Describe what you want changed. All questions will be refined based on your feedback.
+      </p>
+      <div className="flex gap-2">
+        <textarea
+          value={feedback}
+          onChange={e => setFeedback(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleRefine())}
+          placeholder="e.g., Make questions easier, use more real-life examples, avoid technical terms, add more error analysis questions, focus on classification not recall..."
+          className="flex-1 tech-border bg-white p-2.5 text-sm focus:outline-none focus:border-[var(--accent)] min-h-[60px]"
+          disabled={isRefining}
+        />
+        <button
+          onClick={handleRefine}
+          disabled={!feedback.trim() || isRefining}
+          className="px-4 py-2 bg-[var(--ink)] text-[var(--bg)] text-xs font-bold uppercase self-end hover:bg-[var(--accent)] transition-colors disabled:opacity-50 flex items-center gap-1 shrink-0"
+        >
+          {isRefining ? <><Loader2 size={12} className="animate-spin" /> Refining...</> : <><BrainCircuit size={12} /> Refine All</>}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // ===== QUICK GENERATE — Lean, single-click question generation =====
 const QuickGenerateView = () => {
   const [lo, setLo] = useState('');
@@ -2478,18 +2589,25 @@ const QuickGenerateView = () => {
             <div className="flex flex-col gap-4">
               <div className="flex justify-between items-center">
                 <span className="text-sm font-mono text-[var(--ink-muted)]">{questions.length} questions generated</span>
-                {status === 'done' && (
-                  <button
-                    onClick={async () => {
-                      const { exportToExcelAndZip } = await import('./utils/exporter');
-                      await exportToExcelAndZip({ questions, questionImages: {}, metadata: { lo, skill, count: parseInt(count), construct: skill, grade: metadata?.gradeCode, subject: metadata?.subjectCode, skillCode: metadata?.skillCode }, qaResults: [] });
-                    }}
-                    className="px-4 py-1.5 bg-[#1B5E20] text-white text-xs font-bold uppercase flex items-center gap-1 hover:bg-[#2E7D32]"
-                  >
-                    <FileDown size={12} /> Export ZIP
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {status === 'done' && (
+                    <button
+                      onClick={async () => {
+                        const { exportToExcelAndZip } = await import('./utils/exporter');
+                        await exportToExcelAndZip({ questions, questionImages: {}, metadata: { lo, skill, count: parseInt(count), construct: skill, grade: metadata?.gradeCode, subject: metadata?.subjectCode, skillCode: metadata?.skillCode }, qaResults: [] });
+                      }}
+                      className="px-4 py-1.5 bg-[#1B5E20] text-white text-xs font-bold uppercase flex items-center gap-1 hover:bg-[#2E7D32]"
+                    >
+                      <FileDown size={12} /> Export ZIP
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Feedback & Refine */}
+              {status === 'done' && (
+                <FeedbackRefiner questions={questions} setQuestions={setQuestions} lo={lo} skill={skill} metadata={metadata} log={log} setStatus={setStatus} setProgress={setProgress} />
+              )}
 
               {questions.map((q: any) => {
                 const qType = q.type || 'mcq';
