@@ -874,7 +874,6 @@ const PipelineRunnerView = () => {
 
       const typeInstructions: Record<string, string> = {
         mcq: 'MCQ with 4 options (A,B,C,D). 1 correct (correct=true). Wrong options need "why_wrong". Fill "options" array.',
-        picture_mcq: 'Picture-based MCQ. Short stem. 4 visual options. Each needs "image_desc" (e.g. "a bowl of rice"). Set needs_image=true. Fill "options" array.',
         fill_blank: 'Fill-in-the-blank. Format: "If X then the answer is ##answer##." Set answer field.',
         error_analysis: `Error Analysis. Show a student's step-by-step work in "steps" array (4-6 steps). Each step = {text, correct: true/false}. Make 1-2 steps INCORRECT with "fix" field. Stem: "[Name] solved this problem. Some steps are incorrect. Select those steps." Steps must show complete reasoning, not just statements. Example: [{"text":"Wheat comes from plants","correct":true},{"text":"Milk comes from plants because cows eat grass","correct":false,"fix":"Milk is an animal product because it comes from cows"}]`,
         match: 'Match-the-following. Fill "pairs" array: ["Wheat → Plant-based", "Milk → Animal-based", ...].',
@@ -1804,90 +1803,193 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
 
                   {status === 'waiting' && currentCellData.questions.length > 0 && (
                     <>
-                      <div className="grid grid-cols-1 gap-4 mb-4">
+                      <div className="grid grid-cols-1 gap-6 mb-4">
                         {currentCellData.questions.map((q: any) => {
                           const qa = currentCellData.qa?.find((r: any) => r.question_id === (q.question_id || q.id));
+                          const qId = q.question_id || q.id;
+                          const qType = q.type || q.question_type || 'mcq';
                           return (
-                            <div key={q.question_id || q.id} className={`tech-border bg-[var(--bg)] p-4 ${qa && !qa.pass ? 'border-[var(--warning)]' : ''}`}>
-                              <div className="flex justify-between items-start mb-2">
+                            <div key={qId} className={`tech-border bg-[var(--bg)] ${qa && !qa.pass ? 'border-[var(--warning)]' : ''}`}>
+                              {/* Header bar */}
+                              <div className="flex justify-between items-center px-4 py-2 bg-[var(--surface)] border-b border-[var(--line-dark)]">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-bold text-sm font-mono bg-[var(--ink)] text-[var(--bg)] px-2 py-0.5">{q.question_id || q.id}</span>
-                                  <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#E3F2FD] text-[#1565C0]">
-                                    {q.question_type || 'mcq'}
-                                  </span>
+                                  <span className="font-bold text-sm font-mono bg-[var(--ink)] text-[var(--bg)] px-2 py-0.5">{qId}</span>
+                                  <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#E3F2FD] text-[#1565C0] font-bold">{qType.replace('_', ' ')}</span>
+                                  <span className="text-xs font-mono text-[var(--ink-muted)]">{q.cg_cell || q.cell}</span>
                                 </div>
-                                <span className="text-xs font-mono bg-[var(--ink)] text-[var(--bg)] px-2 py-0.5 rounded">{q.cg_cell}</span>
+                                <div className="flex items-center gap-2">
+                                  {/* Image Required toggle */}
+                                  <label className="flex items-center gap-1 text-[10px] text-[var(--ink-muted)] cursor-pointer">
+                                    <input type="checkbox" checked={q.needs_image || false} readOnly className="w-3 h-3 accent-[var(--accent)]" />
+                                    Image Required
+                                  </label>
+                                  {q.needs_image && (
+                                    generatingImageId === qId ? (
+                                      <Loader2 size={12} className="animate-spin text-[#1565C0]" />
+                                    ) : !questionImages[qId] ? (
+                                      <button onClick={() => handleGenerateImage(qId)} className="text-[10px] text-[#1565C0] hover:underline">Generate</button>
+                                    ) : (
+                                      <CheckCircle2 size={12} className="text-[var(--success)]" />
+                                    )
+                                  )}
+                                </div>
                               </div>
-                              <p className="text-sm mb-3 font-medium">{q.stem}</p>
-                              {q.options?.length > 0 && (
-                                <div className="flex flex-col gap-1 mb-2">
-                                  {q.options.map((opt: any, i: number) => (
-                                    <div key={i} className={`text-sm p-2 tech-border ${opt.is_correct ? 'border-[var(--success)] bg-[#E8F5E9]' : 'bg-[var(--surface)]'}`}>
-                                      <span className="font-bold">{opt.label || String.fromCharCode(65+i)}.</span> {opt.text}
-                                      {opt.distractor_rationale && !opt.is_correct && (
-                                        <div className="text-[10px] text-[#7B1FA2] italic mt-1">Distractor: {opt.distractor_rationale}</div>
-                                      )}
+
+                              <div className="p-4">
+                                {/* Question Stem — copy-pasteable */}
+                                <div className="mb-3">
+                                  <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Question Stem</label>
+                                  <div className="tech-border bg-white p-3 text-sm select-all cursor-text min-h-[40px]">{q.stem}</div>
+                                </div>
+
+                                {/* Stem image if generated */}
+                                {questionImages[qId] && (
+                                  <div className="mb-3 tech-border bg-white p-2 flex justify-center">
+                                    <img src={questionImages[qId]} alt="Question" className="max-w-full max-h-48 object-contain" />
+                                  </div>
+                                )}
+
+                                {/* MCQ Options */}
+                                {qType === 'mcq' && q.options?.length > 0 && (
+                                  <div className="mb-3">
+                                    <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Options</label>
+                                    <div className="flex flex-col gap-1.5">
+                                      {q.options.map((opt: any, i: number) => {
+                                        const isCorrect = opt.correct || opt.is_correct;
+                                        const label = opt.label || String.fromCharCode(65 + i);
+                                        return (
+                                          <div key={i} className={`flex items-start gap-2 tech-border p-2.5 ${isCorrect ? 'border-[var(--success)] bg-[#E8F5E9]' : 'bg-white'}`}>
+                                            <span className={`font-bold text-sm shrink-0 ${isCorrect ? 'text-[var(--success)]' : ''}`}>
+                                              {label}{isCorrect ? ' ✓' : '.'}
+                                            </span>
+                                            <span className="text-sm select-all cursor-text flex-1">{opt.text}</span>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
-                                  ))}
-                                </div>
-                              )}
-                              {q.rationale && <div className="text-xs text-[var(--ink-muted)] bg-[var(--surface)] p-2 tech-border"><strong>Rationale:</strong> {q.rationale}</div>}
-                              {qa && qa.issues?.length > 0 && (
-                                <div className="mt-2 text-xs text-[#E65100] bg-[#FFF3E0] p-2 tech-border">
-                                  {qa.issues.map((issue: string, i: number) => <div key={i}>{issue}</div>)}
-                                </div>
-                              )}
-                              {/* Per-question actions for cell review */}
-                              <div className="mt-2 pt-2 border-t border-[var(--line-dark)] flex items-center gap-2 flex-wrap">
+                                  </div>
+                                )}
+
+                                {/* Fill in the Blank */}
+                                {qType === 'fill_blank' && (
+                                  <div className="mb-3">
+                                    <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Answer</label>
+                                    <div className="tech-border bg-[#E8F5E9] border-[var(--success)] p-2.5 text-sm font-mono select-all cursor-text">{q.answer || q.correct_answer}</div>
+                                  </div>
+                                )}
+
+                                {/* Error Analysis Steps */}
+                                {qType === 'error_analysis' && q.steps?.length > 0 && (
+                                  <div className="mb-3">
+                                    <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Student's Work</label>
+                                    <div className="flex flex-col gap-1.5">
+                                      {q.steps.map((step: any, i: number) => (
+                                        <div key={i} className={`tech-border p-2.5 ${step.correct ? 'bg-white' : 'bg-[#FFEBEE] border-[var(--danger)]'}`}>
+                                          <div className="flex justify-between items-start">
+                                            <div className="flex-1">
+                                              <span className="font-bold text-xs text-[var(--ink-muted)]">Step {i + 1}: </span>
+                                              <span className={`text-sm select-all cursor-text ${!step.correct ? 'line-through text-[var(--danger)]' : ''}`}>{step.text}</span>
+                                            </div>
+                                            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ml-2 ${step.correct ? 'bg-[#E8F5E9] text-[#2E7D32]' : 'bg-[#FFEBEE] text-[#C62828]'}`}>
+                                              {step.correct ? 'Correct' : 'Incorrect'}
+                                            </span>
+                                          </div>
+                                          {!step.correct && step.fix && (
+                                            <div className="mt-1.5 text-xs text-[var(--success)] select-all cursor-text">Correct: {step.fix}</div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Match the Following */}
+                                {qType === 'match' && (q.pairs?.length > 0 || q.match_pairs?.length > 0) && (
+                                  <div className="mb-3">
+                                    <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Match Pairs</label>
+                                    <div className="tech-border bg-white overflow-hidden">
+                                      <div className="grid grid-cols-2 bg-[var(--ink)] text-[var(--bg)]">
+                                        <div className="p-2 text-xs font-bold uppercase">Left</div>
+                                        <div className="p-2 text-xs font-bold uppercase border-l border-[#333]">Right (Correct Match)</div>
+                                      </div>
+                                      {(q.pairs || q.match_pairs || []).map((pair: any, i: number) => {
+                                        const left = typeof pair === 'string' ? pair.split(' → ')[0] : pair.left;
+                                        const right = typeof pair === 'string' ? pair.split(' → ')[1] : pair.right;
+                                        return (
+                                          <div key={i} className="grid grid-cols-2 border-t border-[var(--line-dark)]">
+                                            <div className="p-2.5 text-sm select-all cursor-text">{left}</div>
+                                            <div className="p-2.5 text-sm select-all cursor-text border-l border-[var(--line-dark)] text-[var(--success)] font-medium">{right}</div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Arrange the Following */}
+                                {qType === 'arrange' && (q.items?.length > 0 || q.arrange_items?.length > 0) && (
+                                  <div className="mb-3">
+                                    <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Correct Order</label>
+                                    <div className="flex flex-col gap-1.5">
+                                      {(q.items || q.arrange_items || []).map((item: string, i: number) => (
+                                        <div key={i} className="flex items-center gap-2 tech-border bg-white p-2.5">
+                                          <span className="w-6 h-6 rounded-full bg-[var(--ink)] text-[var(--bg)] flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
+                                          <span className="text-sm select-all cursor-text flex-1">{item}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Rationale */}
+                                {q.rationale && (
+                                  <div className="mb-2">
+                                    <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Rationale</label>
+                                    <div className="tech-border bg-[var(--surface)] p-2.5 text-xs select-all cursor-text">{q.rationale}</div>
+                                  </div>
+                                )}
+
+                                {/* QA Issues */}
+                                {qa && qa.issues?.length > 0 && (
+                                  <div className="mt-2 text-xs text-[#E65100] bg-[#FFF3E0] p-2 tech-border">
+                                    {qa.issues.map((issue: string, i: number) => <div key={i}>{issue}</div>)}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Action bar */}
+                              <div className="px-4 py-2 border-t border-[var(--line-dark)] bg-[var(--surface)] flex items-center gap-2 flex-wrap">
                                 <button
                                   onClick={() => {
                                     setCurrentCellData(prev => prev ? {
                                       ...prev,
-                                      questions: prev.questions.filter((cq: any) => (cq.question_id || cq.id) !== (q.question_id || q.id))
+                                      questions: prev.questions.filter((cq: any) => (cq.question_id || cq.id) !== qId)
                                     } : prev);
                                   }}
-                                  className="px-2 py-0.5 text-[10px] font-bold uppercase border border-[var(--danger)] text-[var(--danger)] hover:bg-[#FFEBEE] flex items-center gap-1"
+                                  className="px-2.5 py-1 text-[10px] font-bold uppercase border border-[var(--danger)] text-[var(--danger)] hover:bg-[#FFEBEE] flex items-center gap-1"
                                 >
                                   <Trash2 size={10} /> Reject
                                 </button>
-                                {switchingId === (q.question_id || q.id) ? (
+                                {switchingId === qId ? (
                                   <span className="text-[10px] text-[var(--accent)] flex items-center gap-1">
-                                    <Loader2 size={10} className="animate-spin" /> Switching type...
+                                    <Loader2 size={10} className="animate-spin" /> Switching...
                                   </span>
                                 ) : (
                                   <>
                                     <span className="text-[10px] text-[var(--ink-muted)]">Switch to:</span>
-                                    {['mcq', 'picture_mcq', 'fill_blank', 'error_analysis', 'match', 'arrange'].map(t => (
+                                    {['mcq', 'fill_blank', 'error_analysis', 'match', 'arrange'].map(t => (
                                       <button
                                         key={t}
                                         disabled={switchingId !== null}
-                                        onClick={() => handleSwitchType(q.question_id || q.id, t)}
+                                        onClick={() => handleSwitchType(qId, t)}
                                         className={`px-1.5 py-0.5 text-[10px] font-mono border transition-colors disabled:opacity-30 ${
-                                          (q.type || 'mcq') === t
-                                            ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
-                                            : 'border-[var(--line-dark)] hover:bg-[var(--line)]'
+                                          qType === t ? 'border-[var(--accent)] bg-[var(--accent)] text-white' : 'border-[var(--line-dark)] hover:bg-[var(--line)]'
                                         }`}
                                       >
                                         {t.replace('_', ' ')}
                                       </button>
                                     ))}
                                   </>
-                                )}
-                                {/* Generate Images button for picture_mcq */}
-                                {(q.type === 'picture_mcq') && (
-                                  generatingImageId === (q.question_id || q.id) ? (
-                                    <span className="text-[10px] text-[#1565C0] flex items-center gap-1 ml-2">
-                                      <Loader2 size={10} className="animate-spin" /> Generating images...
-                                    </span>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleGenerateOptionImages(q.question_id || q.id)}
-                                      disabled={generatingImageId !== null}
-                                      className="px-2 py-0.5 text-[10px] font-bold uppercase border border-[#1565C0] text-[#1565C0] hover:bg-[#E3F2FD] flex items-center gap-1 ml-2 disabled:opacity-30"
-                                    >
-                                      <BrainCircuit size={10} /> Generate Option Images
-                                    </button>
-                                  )
                                 )}
                               </div>
                             </div>
@@ -1936,299 +2038,169 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4">
+                  <div className="grid grid-cols-1 gap-6">
                     {questions.map((q) => {
                       const qa = qaResults.find((r: any) => r.question_id === q.id);
-                      const typeLabel: Record<string, string> = {
-                        mcq: 'MCQ', picture_mcq: 'Picture MCQ', stimulus_based: 'Stimulus-Based',
-                        fill_blank: 'Fill in the Blank', one_word: 'Short Answer',
-                        error_analysis: 'Error Analysis', rearrange: 'Drag & Arrange',
-                        match: 'Match the Following', arrange: 'Arrange in Order'
-                      };
-                      const typeBg: Record<string, string> = {
-                        mcq: 'bg-[#E3F2FD] text-[#1565C0]', picture_mcq: 'bg-[#E8EAF6] text-[#283593]',
-                        stimulus_based: 'bg-[#FDE0DC] text-[#B71C1C]',
-                        fill_blank: 'bg-[#F3E5F5] text-[#7B1FA2]',
-                        one_word: 'bg-[#E8F5E9] text-[#2E7D32]', error_analysis: 'bg-[#FFF3E0] text-[#E65100]',
-                        rearrange: 'bg-[#FCE4EC] text-[#C62828]', match: 'bg-[#E0F7FA] text-[#00695C]',
-                        arrange: 'bg-[#FFF8E1] text-[#F57F17]'
-                      };
+                      const qType = q.type || 'mcq';
+                      const typeLabel: Record<string, string> = { mcq: 'MCQ', fill_blank: 'Fill in the Blank', error_analysis: 'Error Analysis', match: 'Match the Following', arrange: 'Arrange in Order' };
+                      const typeBg: Record<string, string> = { mcq: 'bg-[#E3F2FD] text-[#1565C0]', fill_blank: 'bg-[#F3E5F5] text-[#7B1FA2]', error_analysis: 'bg-[#FFF3E0] text-[#E65100]', match: 'bg-[#E0F7FA] text-[#00695C]', arrange: 'bg-[#FFF8E1] text-[#F57F17]' };
 
                       return (
-                        <div key={q.id} className={`tech-border bg-[var(--bg)] p-4 ${qa && !qa.pass ? 'border-[var(--warning)]' : ''}`}>
-                          {/* Header */}
-                          <div className="flex justify-between items-start mb-3">
-                            <div className="flex items-center gap-2 flex-wrap">
+                        <div key={q.id} className={`tech-border bg-[var(--bg)] ${qa && !qa.pass ? 'border-[var(--warning)]' : ''}`}>
+                          {/* Header bar */}
+                          <div className="flex justify-between items-center px-4 py-2 bg-[var(--surface)] border-b border-[var(--line-dark)]">
+                            <div className="flex items-center gap-2">
                               <span className="font-bold text-sm font-mono bg-[var(--ink)] text-[var(--bg)] px-2 py-0.5">{q.id}</span>
-                              <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded font-bold ${typeBg[q.type] || 'bg-[var(--line)]'}`}>
-                                {typeLabel[q.type] || q.type}
-                              </span>
-                              {q.targeted_subskill && (
-                                <span className="text-[10px] text-[var(--ink-muted)] italic truncate max-w-xs">{q.targeted_subskill}</span>
-                              )}
+                              <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded font-bold ${typeBg[qType] || 'bg-[var(--line)]'}`}>{typeLabel[qType] || qType}</span>
+                              <span className="text-xs font-mono text-[var(--ink-muted)]">{q.cell}</span>
+                              {qa && <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${qa.pass ? 'bg-[#E8F5E9] text-[#2E7D32]' : 'bg-[#FFF3E0] text-[#E65100]'}`}>{qa.pass ? 'QA ✓' : 'QA ✗'}</span>}
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              {qa && (
-                                <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded ${
-                                  qa.pass ? 'bg-[#E8F5E9] text-[#2E7D32]' : 'bg-[#FFF3E0] text-[#E65100]'
-                                }`}>
-                                  {qa.pass ? 'QA Passed' : `QA: ${qa.severity}`}
-                                </span>
-                              )}
-                              <span className="text-xs font-mono bg-[var(--ink)] text-[var(--bg)] px-2 py-0.5 rounded">{q.cell}</span>
+                            <div className="flex items-center gap-2">
+                              <label className="flex items-center gap-1 text-[10px] text-[var(--ink-muted)] cursor-pointer">
+                                <input type="checkbox" checked={q.needs_image || !!questionImages[q.id]} readOnly className="w-3 h-3 accent-[var(--accent)]" />
+                                Image Required
+                              </label>
+                              {questionImages[q.id] ? (
+                                <CheckCircle2 size={12} className="text-[var(--success)]" />
+                              ) : currentStep === 9 && status === 'waiting' ? (
+                                <button onClick={() => handleGenerateImage(q.id)} disabled={generatingImageId === q.id} className="text-[10px] text-[#1565C0] hover:underline disabled:opacity-50">
+                                  {generatingImageId === q.id ? 'Generating...' : 'Generate'}
+                                </button>
+                              ) : null}
                             </div>
                           </div>
 
-                          {/* Stem */}
-                          <p className="text-sm mb-3 font-medium">{q.stem}</p>
-
-                          {/* Question Image */}
-                          {questionImages[q.id] && (
-                            <div className="mb-3 tech-border bg-white p-2 flex justify-center">
-                              <img
-                                src={questionImages[q.id]}
-                                alt={`Visual for ${q.id}`}
-                                className="max-w-full max-h-64 object-contain rounded"
-                              />
+                          <div className="p-4">
+                            {/* Stem */}
+                            <div className="mb-3">
+                              <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Question Stem</label>
+                              <div className="tech-border bg-white p-3 text-sm select-all cursor-text min-h-[40px]">{q.stem}</div>
                             </div>
-                          )}
 
-                          {/* Stimulus description for stimulus_based */}
-                          {q.type === 'stimulus_based' && questionImages[q.id] && (
-                            <div className="mb-3 tech-border bg-white p-2 flex justify-center">
-                              <img src={questionImages[q.id]} alt="Stimulus" className="max-w-full max-h-72 object-contain rounded" />
-                            </div>
-                          )}
+                            {questionImages[q.id] && (
+                              <div className="mb-3 tech-border bg-white p-2 flex justify-center">
+                                <img src={questionImages[q.id]} alt="Question" className="max-w-full max-h-48 object-contain" />
+                              </div>
+                            )}
 
-                          {/* MCQ / Picture MCQ / Stimulus-Based Options */}
-                          {(['mcq', 'picture_mcq', 'stimulus_based'].includes(q.type) || (!q.type && q.options?.length > 0)) && q.options?.length > 0 && (
-                            <div className={`${q.type === 'picture_mcq' ? 'grid grid-cols-2 gap-2' : 'flex flex-col gap-1.5'} mb-3`}>
-                              {q.options.map((opt: any, i: number) => {
-                                const optText = typeof opt === 'string' ? opt : opt.text;
-                                const optLabel = typeof opt === 'string' ? String.fromCharCode(65 + i) : (opt.label || String.fromCharCode(65 + i));
-                                const isCorrect = typeof opt === 'string' ? false : (opt.correct || opt.is_correct);
-                                const whyWrong = typeof opt === 'object' ? (opt.why_wrong || opt.distractor_rationale || opt.targeted_misconception) : null;
-                                const imageDesc = typeof opt === 'object' ? opt.image_desc : null;
-                                const optImageKey = `${q.id}_opt_${optLabel}`;
-                                const optImage = questionImages[optImageKey];
+                            {/* MCQ Options */}
+                            {qType === 'mcq' && q.options?.length > 0 && (
+                              <div className="mb-3">
+                                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Options</label>
+                                <div className="flex flex-col gap-1.5">
+                                  {q.options.map((opt: any, i: number) => {
+                                    const isCorrect = opt.correct || opt.is_correct;
+                                    const label = opt.label || String.fromCharCode(65 + i);
+                                    return (
+                                      <div key={i} className={`flex items-start gap-2 tech-border p-2.5 ${isCorrect ? 'border-[var(--success)] bg-[#E8F5E9]' : 'bg-white'}`}>
+                                        <span className={`font-bold text-sm shrink-0 ${isCorrect ? 'text-[var(--success)]' : ''}`}>{label}{isCorrect ? ' ✓' : '.'}</span>
+                                        <span className="text-sm select-all cursor-text flex-1">{typeof opt === 'string' ? opt : opt.text}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
 
-                                return (
-                                  <div key={i} className={`text-sm tech-border flex flex-col ${
-                                    isCorrect ? 'border-[var(--success)] bg-[#E8F5E9]' : 'bg-[var(--surface)]'
-                                  } ${q.type === 'picture_mcq' ? 'p-3' : 'p-2.5'}`}>
-                                    <div className="flex items-start gap-2">
-                                      <span className={`font-bold shrink-0 ${isCorrect ? 'text-[var(--success)]' : ''}`}>{optLabel}.</span>
-                                      <div className="flex-1">
-                                        {optImage && (
-                                          <img src={optImage} alt={optLabel} className="w-full max-h-28 object-contain rounded mb-1.5" />
-                                        )}
-                                        {imageDesc && !optImage && (
-                                          <div className="mb-1.5 p-2 bg-[#E3F2FD] rounded text-[10px] text-[#1565C0] italic flex items-center gap-1">
-                                            <BrainCircuit size={10} /> Image: {imageDesc}
+                            {/* Fill in the Blank */}
+                            {qType === 'fill_blank' && (
+                              <div className="mb-3">
+                                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Answer</label>
+                                <div className="tech-border bg-[#E8F5E9] border-[var(--success)] p-2.5 text-sm font-mono select-all cursor-text">{q.correct_answer || q.answer}</div>
+                              </div>
+                            )}
+
+                            {/* Error Analysis */}
+                            {qType === 'error_analysis' && q.steps?.length > 0 && (
+                              <div className="mb-3">
+                                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Student's Work</label>
+                                <div className="flex flex-col gap-1.5">
+                                  {q.steps.map((step: any, i: number) => {
+                                    const isCorr = step.correct || step.is_correct;
+                                    return (
+                                      <div key={i} className={`tech-border p-2.5 ${isCorr ? 'bg-white' : 'bg-[#FFEBEE] border-[var(--danger)]'}`}>
+                                        <div className="flex justify-between items-start">
+                                          <div className="flex-1">
+                                            <span className="font-bold text-xs text-[var(--ink-muted)]">Step {i + 1}: </span>
+                                            <span className={`text-sm select-all cursor-text ${!isCorr ? 'line-through text-[var(--danger)]' : ''}`}>{step.text}</span>
                                           </div>
+                                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ml-2 ${isCorr ? 'bg-[#E8F5E9] text-[#2E7D32]' : 'bg-[#FFEBEE] text-[#C62828]'}`}>{isCorr ? 'Correct' : 'Incorrect'}</span>
+                                        </div>
+                                        {!isCorr && (step.fix || step.correct_version) && (
+                                          <div className="mt-1.5 text-xs text-[var(--success)] select-all cursor-text">Correct: {step.fix || step.correct_version}</div>
                                         )}
-                                        <span>{optText}</span>
                                       </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Match */}
+                            {qType === 'match' && (q.pairs?.length > 0 || q.match_pairs?.length > 0) && (
+                              <div className="mb-3">
+                                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Match Pairs</label>
+                                <div className="tech-border bg-white overflow-hidden">
+                                  <div className="grid grid-cols-2 bg-[var(--ink)] text-[var(--bg)]">
+                                    <div className="p-2 text-xs font-bold uppercase">Left</div>
+                                    <div className="p-2 text-xs font-bold uppercase border-l border-[#333]">Right (Correct Match)</div>
+                                  </div>
+                                  {(q.pairs || q.match_pairs || []).map((pair: any, i: number) => {
+                                    const left = typeof pair === 'string' ? pair.split(' → ')[0] : pair.left;
+                                    const right = typeof pair === 'string' ? pair.split(' → ')[1] : pair.right;
+                                    return (
+                                      <div key={i} className="grid grid-cols-2 border-t border-[var(--line-dark)]">
+                                        <div className="p-2.5 text-sm select-all cursor-text">{left}</div>
+                                        <div className="p-2.5 text-sm select-all cursor-text border-l border-[var(--line-dark)] text-[var(--success)] font-medium">{right}</div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Arrange */}
+                            {qType === 'arrange' && (q.items?.length > 0 || q.arrange_items?.length > 0) && (
+                              <div className="mb-3">
+                                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Correct Order</label>
+                                <div className="flex flex-col gap-1.5">
+                                  {(q.items || q.arrange_items || []).map((item: string, i: number) => (
+                                    <div key={i} className="flex items-center gap-2 tech-border bg-white p-2.5">
+                                      <span className="w-6 h-6 rounded-full bg-[var(--ink)] text-[var(--bg)] flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
+                                      <span className="text-sm select-all cursor-text flex-1">{item}</span>
                                     </div>
-                                    {whyWrong && !isCorrect && (
-                                      <div className="mt-1.5 pt-1.5 border-t border-[var(--line)] text-[10px] text-[#7B1FA2] italic">
-                                        {whyWrong}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-
-                          {/* Fill in the Blank / One Word */}
-                          {(q.type === 'fill_blank' || q.type === 'one_word') && (
-                            <div className="mb-3 p-3 tech-border bg-[#E8F5E9] border-[var(--success)]">
-                              <span className="text-xs font-bold text-[var(--success)] uppercase">Answer: </span>
-                              <span className="text-sm font-mono font-bold">{q.correct_answer}</span>
-                            </div>
-                          )}
-
-                          {/* Error Analysis Steps */}
-                          {q.type === 'error_analysis' && q.steps?.length > 0 && (
-                            <div className="mb-3 flex flex-col gap-1.5">
-                              <div className="text-xs font-bold uppercase text-[var(--ink-muted)] mb-1">Student's Work:</div>
-                              {q.steps.map((step: any, i: number) => (
-                                <div key={i} className={`text-sm p-2.5 tech-border flex items-start gap-2 ${
-                                  step.is_correct ? 'bg-[var(--surface)]' : 'bg-[#FFEBEE] border-[var(--danger)]'
-                                }`}>
-                                  <span className="font-bold shrink-0 text-[var(--ink-muted)]">Step {step.step_number || i + 1}.</span>
-                                  <div className="flex-1">
-                                    <span className={step.is_correct ? '' : 'line-through text-[var(--danger)]'}>{step.text}</span>
-                                    {!step.is_correct && (
-                                      <div className="mt-1 flex items-center gap-1">
-                                        <span className="text-[10px] font-bold text-[var(--danger)] uppercase">Error</span>
-                                        {step.correct_version && (
-                                          <span className="text-xs text-[var(--success)]"> — Correct: {step.correct_version}</span>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ${
-                                    step.is_correct ? 'bg-[#E8F5E9] text-[#2E7D32]' : 'bg-[#FFEBEE] text-[#C62828]'
-                                  }`}>
-                                    {step.is_correct ? 'Correct' : 'Incorrect'}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Rearrange / Drag & Arrange */}
-                          {q.type === 'rearrange' && q.rearrange_steps?.length > 0 && (
-                            <div className="mb-3">
-                              <div className="text-xs font-bold uppercase text-[var(--ink-muted)] mb-1">Steps (correct order):</div>
-                              <div className="flex flex-col gap-1.5 mb-2">
-                                {q.rearrange_steps.map((step: any, i: number) => (
-                                  <div key={i} className={`text-sm p-2.5 tech-border flex items-center gap-2 ${
-                                    step.movable_fixed === 'Fixed' ? 'bg-[var(--surface)] border-l-4 border-l-[var(--ink)]' : 'bg-[#E3F2FD] border-l-4 border-l-[#1565C0]'
-                                  }`}>
-                                    <span className="font-bold shrink-0 text-[var(--ink-muted)]">{i + 1}.</span>
-                                    <span className="flex-1">{step.text}</span>
-                                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                                      step.movable_fixed === 'Fixed' ? 'bg-[var(--line)] text-[var(--ink)]' : 'bg-[#E3F2FD] text-[#1565C0]'
-                                    }`}>
-                                      {step.movable_fixed}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                              {q.distractor_steps?.length > 0 && (
-                                <div>
-                                  <div className="text-[10px] font-bold uppercase text-[var(--danger)] mb-1">Distractor Steps:</div>
-                                  <div className="flex flex-col gap-1">
-                                    {q.distractor_steps.map((d: string, i: number) => (
-                                      <div key={i} className="text-xs p-2 tech-border bg-[#FFEBEE] border-[var(--danger)] text-[var(--danger)] italic">
-                                        {d}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Match the Following */}
-                          {q.type === 'match' && q.match_pairs?.length > 0 && (
-                            <div className="mb-3">
-                              <div className="tech-border bg-[var(--surface)] overflow-hidden">
-                                <div className="grid grid-cols-2 border-b border-[var(--line-dark)] bg-[var(--ink)] text-[var(--bg)]">
-                                  <div className="p-2 text-xs font-bold uppercase">Column A</div>
-                                  <div className="p-2 text-xs font-bold uppercase border-l border-[#333]">Column B</div>
-                                </div>
-                                {q.match_pairs.map((pair: any, i: number) => (
-                                  <div key={i} className="grid grid-cols-2 border-b border-[var(--line-dark)] last:border-0 text-sm">
-                                    <div className="p-2.5">{pair.left}</div>
-                                    <div className="p-2.5 border-l border-[var(--line-dark)] font-medium text-[var(--success)]">{pair.right}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Arrange in Order */}
-                          {q.type === 'arrange' && q.arrange_items?.length > 0 && (
-                            <div className="mb-3">
-                              <div className="text-xs font-bold uppercase text-[var(--ink-muted)] mb-1">Correct Sequence:</div>
-                              <div className="flex flex-col gap-1.5">
-                                {q.arrange_items.map((item: string, i: number) => (
-                                  <div key={i} className="text-sm p-2.5 tech-border bg-[var(--surface)] flex items-center gap-2">
-                                    <span className="w-6 h-6 rounded-full bg-[var(--ink)] text-[var(--bg)] flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
-                                    <span>{item}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Rationale */}
-                          {q.rationale && (
-                            <div className="text-xs text-[var(--ink-muted)] bg-[var(--surface)] p-2 tech-border">
-                              <strong>Rationale:</strong> {q.rationale}
-                            </div>
-                          )}
-
-                          {/* QA Issues — Rule-based + AI SME combined */}
-                          {qa && qa.issues?.length > 0 && (
-                            <div className={`mt-2 text-xs p-2.5 tech-border ${
-                              qa.severity === 'critical' ? 'text-[#B71C1C] bg-[#FFEBEE] border-[#C62828]' :
-                              qa.severity === 'major' ? 'text-[#E65100] bg-[#FFF3E0] border-[#F57F17]' :
-                              'text-[var(--ink-muted)] bg-[var(--surface)] border-[var(--line-dark)]'
-                            }`}>
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <strong>QA Issues ({qa.issues.length})</strong>
-                                <span className={`text-[9px] font-mono uppercase px-1 py-0.5 rounded ${
-                                  qa.severity === 'critical' ? 'bg-[#C62828] text-white' :
-                                  qa.severity === 'major' ? 'bg-[#F57F17] text-white' :
-                                  'bg-[var(--line)] text-[var(--ink-muted)]'
-                                }`}>{qa.severity}</span>
-                              </div>
-                              <ul className="list-disc ml-4 flex flex-col gap-0.5">
-                                {qa.issues.map((issue: string, i: number) => (
-                                  <li key={i} className={issue.startsWith('[AI-SME]') ? 'text-[#7B1FA2]' : ''}>{issue}</li>
-                                ))}
-                              </ul>
-                              {qa.suggestions?.length > 0 && (
-                                <div className="mt-2 pt-1.5 border-t border-current/20">
-                                  <strong>Suggestions:</strong>
-                                  <ul className="list-disc ml-4 mt-0.5 text-[var(--ink-muted)]">
-                                    {qa.suggestions.map((s: string, i: number) => <li key={i}>{s}</li>)}
-                                  </ul>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Per-question actions */}
-                          {currentStep === 9 && status === 'waiting' && (
-                            <div className="mt-3 pt-3 border-t border-[var(--line-dark)] flex items-center gap-2 flex-wrap">
-                              {regeneratingId === q.id ? (
-                                <div className="flex items-center gap-2 text-xs text-[var(--accent)]">
-                                  <Loader2 size={12} className="animate-spin" /> Regenerating...
-                                </div>
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={() => handleRejectQuestion(q.id)}
-                                    className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide border border-[var(--danger)] text-[var(--danger)] hover:bg-[#FFEBEE] transition-colors flex items-center gap-1"
-                                  >
-                                    <Trash2 size={10} /> Reject
-                                  </button>
-                                  {!questionImages[q.id] ? (
-                                    <button
-                                      onClick={() => handleGenerateImage(q.id)}
-                                      disabled={generatingImageId === q.id}
-                                      className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide border border-[#1565C0] text-[#1565C0] hover:bg-[#E3F2FD] transition-colors flex items-center gap-1 disabled:opacity-50"
-                                    >
-                                      {generatingImageId === q.id ? <Loader2 size={10} className="animate-spin" /> : <BrainCircuit size={10} />}
-                                      {generatingImageId === q.id ? 'Generating...' : 'Generate Image'}
-                                    </button>
-                                  ) : (
-                                    <span className="px-2.5 py-1 text-[10px] font-mono text-[var(--success)] flex items-center gap-1">
-                                      <CheckCircle2 size={10} /> Image ready
-                                    </span>
-                                  )}
-                                  <span className="text-[10px] text-[var(--ink-muted)]">Regenerate as:</span>
-                                  {['mcq', 'picture_mcq', 'stimulus_based', 'fill_blank', 'one_word', 'error_analysis', 'rearrange', 'match', 'arrange'].map(t => (
-                                    <button
-                                      key={t}
-                                      onClick={() => handleRegenerateQuestion(q.id, t)}
-                                      className={`px-2 py-0.5 text-[10px] font-mono border transition-colors ${
-                                        q.type === t
-                                          ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
-                                          : 'border-[var(--line-dark)] hover:bg-[var(--line)] text-[var(--ink)]'
-                                      }`}
-                                    >
-                                      {t.replace('_', ' ')}
-                                    </button>
                                   ))}
-                                </>
-                              )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Rationale */}
+                            {q.rationale && (
+                              <div className="mb-2">
+                                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Rationale</label>
+                                <div className="tech-border bg-[var(--surface)] p-2.5 text-xs select-all cursor-text">{q.rationale}</div>
+                              </div>
+                            )}
+
+                            {qa && qa.issues?.length > 0 && (
+                              <div className={`mt-2 text-xs p-2 tech-border ${qa.severity === 'critical' ? 'bg-[#FFEBEE]' : qa.severity === 'major' ? 'bg-[#FFF3E0]' : 'bg-[var(--surface)]'}`}>
+                                <strong>QA ({qa.issues.length}):</strong> {qa.issues.slice(0, 3).join(' | ')}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Action bar */}
+                          {currentStep === 9 && status === 'waiting' && (
+                            <div className="px-4 py-2 border-t border-[var(--line-dark)] bg-[var(--surface)] flex items-center gap-2 flex-wrap">
+                              <button onClick={() => handleRejectQuestion(q.id)} className="px-2.5 py-1 text-[10px] font-bold uppercase border border-[var(--danger)] text-[var(--danger)] hover:bg-[#FFEBEE] flex items-center gap-1">
+                                <Trash2 size={10} /> Reject
+                              </button>
+                              <span className="text-[10px] text-[var(--ink-muted)]">Switch to:</span>
+                              {['mcq', 'fill_blank', 'error_analysis', 'match', 'arrange'].map(t => (
+                                <button key={t} onClick={() => handleRegenerateQuestion(q.id, t)} className={`px-1.5 py-0.5 text-[10px] font-mono border ${qType === t ? 'border-[var(--accent)] bg-[var(--accent)] text-white' : 'border-[var(--line-dark)] hover:bg-[var(--line)]'}`}>
+                                  {t.replace('_', ' ')}
+                                </button>
+                              ))}
                             </div>
                           )}
                         </div>

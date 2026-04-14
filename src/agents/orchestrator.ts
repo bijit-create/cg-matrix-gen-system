@@ -334,10 +334,10 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
 
         // Assign types to each question position
         const typeMap: Record<string, string[]> = {
-            R1: ['mcq', 'fill_blank', 'picture_mcq', 'match', 'mcq'],
-            U1: ['mcq', 'fill_blank', 'picture_mcq', 'fill_blank', 'mcq'],
-            U2: ['mcq', 'match', 'picture_mcq', 'arrange', 'mcq'],
-            A2: ['mcq', 'error_analysis', 'picture_mcq', 'error_analysis', 'mcq'],
+            R1: ['mcq', 'fill_blank', 'mcq', 'match', 'fill_blank'],
+            U1: ['mcq', 'fill_blank', 'mcq', 'fill_blank', 'mcq'],
+            U2: ['mcq', 'match', 'arrange', 'mcq', 'match'],
+            A2: ['mcq', 'error_analysis', 'mcq', 'error_analysis', 'mcq'],
             A3: ['error_analysis', 'mcq', 'error_analysis'],
             AN2: ['mcq', 'error_analysis', 'mcq', 'error_analysis'],
             AN3: ['error_analysis', 'error_analysis', 'mcq'],
@@ -349,7 +349,6 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
 
         const typeInstructions: Record<string, string> = {
             mcq: `MCQ with 4 options (A,B,C,D). 1 correct (correct=true). Wrong options need "why_wrong". Fill "options" array.`,
-            picture_mcq: `PICTURE-BASED MCQ. Short stem. 4 visual options. Each option needs "image_desc" (e.g. "a bowl of rice"). Set needs_image=true. Fill "options" array.`,
             fill_blank: `Fill-in-the-blank. Use this format in stem: "If X then the answer is ##answer##." Set answer to the correct word/phrase.`,
             error_analysis: `Error Analysis question. Show a student's step-by-step work solving a problem. Fill the "steps" array with 4-6 steps. Each step = {text: "the student's work line", correct: true/false}. Make 1-2 steps INCORRECT with fix field showing the correct version.
 
