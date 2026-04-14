@@ -398,39 +398,7 @@ LANGUAGE: Simple English, Indian names, short stems, no negative phrasing.`;
             .filter(r => r.status === 'fulfilled' && r.value)
             .map(r => (r as PromiseFulfilledResult<any>).value);
 
-        // Auto-generate images for picture_mcq questions
-        const pictureMcqs = cellQuestions.filter(q => q.type === 'picture_mcq');
-        if (pictureMcqs.length > 0) {
-            this.log('Image Agent', `Generating images for ${pictureMcqs.length} picture MCQ(s)...`);
-            const { generateImageContent } = await import('./api');
-            const { normalizeToCanvas } = await import('./imageGen');
-            const imageResults: Record<string, string> = {};
-
-            for (const q of pictureMcqs) {
-                const qId = q.id || q.question_id;
-
-                // Generate option images (the main visual content for picture MCQs)
-                if (q.options) {
-                    for (const opt of q.options) {
-                        const desc = opt.image_desc || opt.text;
-                        if (!desc) continue;
-                        const optKey = `${qId}_opt_${opt.label || 'X'}`;
-                        try {
-                            const optPrompt = `A clear, colorful, realistic illustration of ${desc}. Clean white background, high quality, educational style for children, no text or labels in the image. The image should clearly show what "${desc}" looks like so a student can identify it.`;
-                            const rawImg = await generateImageContent(optPrompt);
-                            const { dataUrl } = await normalizeToCanvas(rawImg);
-                            imageResults[optKey] = dataUrl;
-                        } catch {
-                            // Skip failed option images
-                        }
-                    }
-                    this.log('Image Agent', `${qId}: ${Object.keys(imageResults).filter(k => k.startsWith(qId)).length} option images done`);
-                }
-            }
-            if (Object.keys(imageResults).length > 0 && this.config.onData) {
-                this.config.onData('questionImages', imageResults);
-            }
-        }
+        // Image generation is on-demand — SME clicks "Generate Images" per question
 
         // Run rule-based QA
         const ruleResults = runRuleBasedQA(cellQuestions, this.config.lo);

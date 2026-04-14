@@ -912,6 +912,37 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
   // --- Per-question image generation (on-demand) ---
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
 
+  const handleGenerateOptionImages = async (qId: string) => {
+    const fromCell = currentCellData?.questions?.find((q: any) => (q.id || q.question_id) === qId);
+    const fromQuestions = questions.find(q => q.id === qId);
+    const q = fromCell || fromQuestions;
+    if (!q?.options) return;
+    setGeneratingImageId(qId);
+    try {
+      const { generateImageContent } = await import('./agents/api');
+      const { normalizeToCanvas } = await import('./agents/imageGen');
+      const newImages: Record<string, string> = {};
+      for (const opt of q.options) {
+        const desc = opt.image_desc || opt.text;
+        if (!desc) continue;
+        const optKey = `${qId}_opt_${opt.label || 'X'}`;
+        if (questionImages[optKey]) continue; // already generated
+        try {
+          const prompt = `A clear, colorful, realistic illustration of ${desc}. Clean white background, educational style for children, no text in image.`;
+          const rawImg = await generateImageContent(prompt);
+          const { dataUrl } = await normalizeToCanvas(rawImg, 400);
+          newImages[optKey] = dataUrl;
+        } catch { /* skip failed */ }
+      }
+      setQuestionImages(prev => ({ ...prev, ...newImages }));
+      setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: ${Object.keys(newImages).length} option images generated`, time: new Date().toLocaleTimeString() }]);
+    } catch (e: any) {
+      setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: failed — ${e.message?.slice(0, 50)}`, time: new Date().toLocaleTimeString() }]);
+    } finally {
+      setGeneratingImageId(null);
+    }
+  };
+
   const handleGenerateImage = async (qId: string, customPrompt?: string) => {
     // Find question from either current cell or approved questions
     const fromCell = currentCellData?.questions?.find((q: any) => (q.id || q.question_id) === qId);
@@ -1841,6 +1872,22 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                       </button>
                                     ))}
                                   </>
+                                )}
+                                {/* Generate Images button for picture_mcq */}
+                                {(q.type === 'picture_mcq') && (
+                                  generatingImageId === (q.question_id || q.id) ? (
+                                    <span className="text-[10px] text-[#1565C0] flex items-center gap-1 ml-2">
+                                      <Loader2 size={10} className="animate-spin" /> Generating images...
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleGenerateOptionImages(q.question_id || q.id)}
+                                      disabled={generatingImageId !== null}
+                                      className="px-2 py-0.5 text-[10px] font-bold uppercase border border-[#1565C0] text-[#1565C0] hover:bg-[#E3F2FD] flex items-center gap-1 ml-2 disabled:opacity-30"
+                                    >
+                                      <BrainCircuit size={10} /> Generate Option Images
+                                    </button>
+                                  )
                                 )}
                               </div>
                             </div>
