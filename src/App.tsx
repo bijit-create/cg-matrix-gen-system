@@ -1809,28 +1809,33 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                           const qId = q.question_id || q.id;
                           const qType = q.type || q.question_type || 'mcq';
                           return (
-                            <div key={qId} className={`tech-border bg-[var(--bg)] ${qa && !qa.pass ? 'border-[var(--warning)]' : ''}`}>
+                            <div key={qId} className={`tech-border bg-[var(--bg)] ${q.needs_image ? 'border-l-4 border-l-[#1565C0]' : ''} ${qa && !qa.pass ? 'border-[var(--warning)]' : ''}`}>
                               {/* Header bar */}
-                              <div className="flex justify-between items-center px-4 py-2 bg-[var(--surface)] border-b border-[var(--line-dark)]">
+                              <div className={`flex justify-between items-center px-4 py-2 border-b border-[var(--line-dark)] ${q.needs_image ? 'bg-[#E3F2FD]' : 'bg-[var(--surface)]'}`}>
                                 <div className="flex items-center gap-2">
                                   <span className="font-bold text-sm font-mono bg-[var(--ink)] text-[var(--bg)] px-2 py-0.5">{qId}</span>
                                   <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#E3F2FD] text-[#1565C0] font-bold">{qType.replace('_', ' ')}</span>
                                   <span className="text-xs font-mono text-[var(--ink-muted)]">{q.cg_cell || q.cell}</span>
+                                  {q.needs_image && (
+                                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[#1565C0] text-white flex items-center gap-1">
+                                      <BrainCircuit size={10} /> Image Required
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  {/* Image Required toggle */}
-                                  <label className="flex items-center gap-1 text-[10px] text-[var(--ink-muted)] cursor-pointer">
-                                    <input type="checkbox" checked={q.needs_image || false} readOnly className="w-3 h-3 accent-[var(--accent)]" />
-                                    Image Required
-                                  </label>
                                   {q.needs_image && (
                                     generatingImageId === qId ? (
-                                      <Loader2 size={12} className="animate-spin text-[#1565C0]" />
+                                      <span className="text-[10px] text-[#1565C0] flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Generating...</span>
                                     ) : !questionImages[qId] ? (
-                                      <button onClick={() => handleGenerateImage(qId)} className="text-[10px] text-[#1565C0] hover:underline">Generate</button>
+                                      <button onClick={() => handleGenerateImage(qId)} className="px-2 py-0.5 text-[10px] font-bold uppercase border border-[#1565C0] text-[#1565C0] hover:bg-white flex items-center gap-1">
+                                        <BrainCircuit size={10} /> Generate Image
+                                      </button>
                                     ) : (
-                                      <CheckCircle2 size={12} className="text-[var(--success)]" />
+                                      <span className="text-[10px] text-[var(--success)] flex items-center gap-1"><CheckCircle2 size={10} /> Image Ready</span>
                                     )
+                                  )}
+                                  {!q.needs_image && (
+                                    <span className="text-[10px] text-[var(--ink-muted)]">Text Only</span>
                                   )}
                                 </div>
                               </div>
@@ -2046,27 +2051,31 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                       const typeBg: Record<string, string> = { mcq: 'bg-[#E3F2FD] text-[#1565C0]', fill_blank: 'bg-[#F3E5F5] text-[#7B1FA2]', error_analysis: 'bg-[#FFF3E0] text-[#E65100]', match: 'bg-[#E0F7FA] text-[#00695C]', arrange: 'bg-[#FFF8E1] text-[#F57F17]' };
 
                       return (
-                        <div key={q.id} className={`tech-border bg-[var(--bg)] ${qa && !qa.pass ? 'border-[var(--warning)]' : ''}`}>
+                        <div key={q.id} className={`tech-border bg-[var(--bg)] ${q.needs_image ? 'border-l-4 border-l-[#1565C0]' : ''} ${qa && !qa.pass ? 'border-[var(--warning)]' : ''}`}>
                           {/* Header bar */}
-                          <div className="flex justify-between items-center px-4 py-2 bg-[var(--surface)] border-b border-[var(--line-dark)]">
+                          <div className={`flex justify-between items-center px-4 py-2 border-b border-[var(--line-dark)] ${q.needs_image ? 'bg-[#E3F2FD]' : 'bg-[var(--surface)]'}`}>
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-sm font-mono bg-[var(--ink)] text-[var(--bg)] px-2 py-0.5">{q.id}</span>
                               <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded font-bold ${typeBg[qType] || 'bg-[var(--line)]'}`}>{typeLabel[qType] || qType}</span>
                               <span className="text-xs font-mono text-[var(--ink-muted)]">{q.cell}</span>
                               {qa && <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${qa.pass ? 'bg-[#E8F5E9] text-[#2E7D32]' : 'bg-[#FFF3E0] text-[#E65100]'}`}>{qa.pass ? 'QA ✓' : 'QA ✗'}</span>}
+                              {q.needs_image && (
+                                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[#1565C0] text-white flex items-center gap-1">
+                                  <BrainCircuit size={10} /> Image Required
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-2">
-                              <label className="flex items-center gap-1 text-[10px] text-[var(--ink-muted)] cursor-pointer">
-                                <input type="checkbox" checked={q.needs_image || !!questionImages[q.id]} readOnly className="w-3 h-3 accent-[var(--accent)]" />
-                                Image Required
-                              </label>
-                              {questionImages[q.id] ? (
-                                <CheckCircle2 size={12} className="text-[var(--success)]" />
-                              ) : currentStep === 9 && status === 'waiting' ? (
-                                <button onClick={() => handleGenerateImage(q.id)} disabled={generatingImageId === q.id} className="text-[10px] text-[#1565C0] hover:underline disabled:opacity-50">
-                                  {generatingImageId === q.id ? 'Generating...' : 'Generate'}
-                                </button>
-                              ) : null}
+                              {q.needs_image && (
+                                questionImages[q.id] ? (
+                                  <span className="text-[10px] text-[var(--success)] flex items-center gap-1"><CheckCircle2 size={10} /> Image Ready</span>
+                                ) : currentStep === 9 && status === 'waiting' ? (
+                                  <button onClick={() => handleGenerateImage(q.id)} disabled={generatingImageId === q.id} className="px-2 py-0.5 text-[10px] font-bold uppercase border border-[#1565C0] text-[#1565C0] hover:bg-white flex items-center gap-1 disabled:opacity-50">
+                                    {generatingImageId === q.id ? <><Loader2 size={10} className="animate-spin" /> Generating...</> : <><BrainCircuit size={10} /> Generate Image</>}
+                                  </button>
+                                ) : null
+                              )}
+                              {!q.needs_image && <span className="text-[10px] text-[var(--ink-muted)]">Text Only</span>}
                             </div>
                           </div>
 

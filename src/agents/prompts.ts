@@ -198,7 +198,7 @@ For each question, output:
 - wrong: array of 3 wrong answers, each with "text" and "why" (the specific student error/misconception that leads to this wrong answer)
 - knowledge_point: which content point this tests
 - rationale: why the correct answer is right (1 sentence)
-- needs_image: true if a visual would help
+- needs_image: true ONLY if the question GENUINELY requires a visual to be understood or answered. Set true for: diagrams, charts, pictures of objects to identify, maps, graphs, visual scenarios, geometry. Set false for: text-based recall, definitions, fill-blanks, simple classification by name, error analysis of text steps.
 
 CONTENT: Generate ONLY from "selected_content". Do not invent facts.
 
