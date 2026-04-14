@@ -2410,6 +2410,8 @@ const QuickGenerateView = () => {
   const [status, setStatus] = useState<'idle' | 'running' | 'done'>('idle');
   const [progress, setProgress] = useState('');
   const [questions, setQuestions] = useState<any[]>([]);
+  const [questionImages, setQuestionImages] = useState<Record<string, string>>({});
+  const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
 
   const log = (msg: string) => setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -2619,9 +2621,45 @@ const QuickGenerateView = () => {
                         <span className="text-[10px] font-mono uppercase px-1 py-0.5 rounded bg-[#E3F2FD] text-[#1565C0] font-bold">{qType.replace('_', ' ')}</span>
                         {q.needs_image && <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#1565C0] text-white">IMG</span>}
                       </div>
-                      {!q.needs_image && <span className="text-[9px] text-[var(--ink-muted)]">Text Only</span>}
+                      <div className="flex items-center gap-2">
+                        {q.needs_image && (
+                          questionImages[q.id] ? (
+                            <span className="text-[10px] text-[var(--success)] flex items-center gap-1"><CheckCircle2 size={10} /> Image Ready</span>
+                          ) : (
+                            <button
+                              onClick={async () => {
+                                setGeneratingImageId(q.id);
+                                try {
+                                  const { generateQuestionImage } = await import('./agents/imageGen');
+                                  const result = await generateQuestionImage(q.stem);
+                                  if (result.status === 'generated' && result.dataUrl) {
+                                    setQuestionImages(prev => ({ ...prev, [q.id]: result.dataUrl! }));
+                                    log(`${q.id}: image generated (${result.sizeKb}KB)`);
+                                  } else {
+                                    log(`${q.id}: image skipped — ${result.reason}`);
+                                  }
+                                } catch (e: any) {
+                                  log(`${q.id}: image failed`);
+                                } finally {
+                                  setGeneratingImageId(null);
+                                }
+                              }}
+                              disabled={generatingImageId === q.id}
+                              className="px-2 py-0.5 text-[10px] font-bold uppercase border border-[#1565C0] text-[#1565C0] hover:bg-white flex items-center gap-1 disabled:opacity-50"
+                            >
+                              {generatingImageId === q.id ? <><Loader2 size={10} className="animate-spin" /> Generating...</> : <><BrainCircuit size={10} /> Generate Image</>}
+                            </button>
+                          )
+                        )}
+                        {!q.needs_image && <span className="text-[9px] text-[var(--ink-muted)]">Text Only</span>}
+                      </div>
                     </div>
                     <div className="p-3">
+                      {questionImages[q.id] && (
+                        <div className="mb-2 tech-border bg-white p-2 flex justify-center">
+                          <img src={questionImages[q.id]} alt="Question" className="max-w-full max-h-48 object-contain" />
+                        </div>
+                      )}
                       <div className="tech-border bg-white p-2 text-sm select-all cursor-text mb-2">{q.stem}</div>
 
                       {qType === 'mcq' && q.options?.length > 0 && (
