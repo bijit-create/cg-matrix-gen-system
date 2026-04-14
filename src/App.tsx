@@ -40,7 +40,7 @@ import { AgentOrchestrator } from './agents/orchestrator';
 import { parseUploadedFile } from './utils/fileParser';
 
 // --- Types ---
-type Tab = 'dashboard' | 'architecture' | 'state-machine' | 'raci' | 'pipeline' | 'config';
+type Tab = 'dashboard' | 'architecture' | 'state-machine' | 'raci' | 'pipeline' | 'quick' | 'config';
 
 // --- Components ---
 
@@ -48,6 +48,7 @@ const TopNav = ({ activeTab, setActiveTab }: { activeTab: Tab, setActiveTab: (t:
   const navItems: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Overview', icon: <LayoutDashboard size={16} /> },
     { id: 'pipeline', label: 'Run Pipeline', icon: <PlayCircle size={16} /> },
+    { id: 'quick', label: 'Quick Generate', icon: <Activity size={16} /> },
     { id: 'architecture', label: 'Architecture', icon: <Network size={16} /> },
     { id: 'state-machine', label: 'State Machine', icon: <GitMerge size={16} /> },
     { id: 'raci', label: 'RACI Matrix', icon: <Users size={16} /> },
@@ -2285,6 +2286,281 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
   );
 };
 
+// ===== QUICK GENERATE — Lean, single-click question generation =====
+const QuickGenerateView = () => {
+  const [lo, setLo] = useState('');
+  const [skill, setSkill] = useState('');
+  const [count, setCount] = useState('15');
+  const [content, setContent] = useState('');
+  const [isParsingFile, setIsParsingFile] = useState(false);
+  const [tsvInput, setTsvInput] = useState('');
+  const [metadata, setMetadata] = useState<any>(null);
+
+  const [status, setStatus] = useState<'idle' | 'running' | 'done'>('idle');
+  const [progress, setProgress] = useState('');
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [logs, setLogs] = useState<string[]>([]);
+
+  const log = (msg: string) => setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+
+  const handlePasteTSV = (val: string) => {
+    setTsvInput(val);
+    try {
+      const lines = val.trim().split('\n');
+      const row = lines[lines.length - 1].split('\t');
+      if (row.length >= 15) {
+        if (row[5]) setSkill(row[5]);
+        if (row[15]) setLo(row[15]);
+        setMetadata({ subjectCode: row[0], gradeCode: row[1], skillCode: row[3] });
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsParsingFile(true);
+    try {
+      const { parseUploadedFile } = await import('./utils/fileParser');
+      const text = await parseUploadedFile(file);
+      setContent(prev => prev ? prev + '\n\n' + text : text);
+      log(`Extracted ${text.length} chars from ${file.name}`);
+    } catch (err: any) {
+      log(`File error: ${err.message}`);
+    } finally {
+      setIsParsingFile(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!lo || !skill) return;
+    setStatus('running');
+    setQuestions([]);
+    setLogs([]);
+    const total = parseInt(count) || 15;
+
+    try {
+      const { generateAgentResponse } = await import('./agents/api');
+      const { Prompts } = await import('./agents/prompts');
+      const { CGMapperSchema, GenerationSchema } = await import('./agents/schemas');
+
+      // Step 1: Build Hess Matrix
+      log('Building Hess Matrix...');
+      setProgress('Building Hess Matrix...');
+      const matrix = await generateAgentResponse('Custom Hess Matrix Agent', Prompts.CGMapperAgent, JSON.stringify({
+        construct: skill, subskills: [skill], target_questions: total,
+        grade: metadata?.gradeCode || '', subject: metadata?.subjectCode || '',
+        learning_objective: lo, skill,
+        approved_knowledge_points: content.slice(0, 2000) || lo,
+      }), CGMapperSchema);
+
+      const cgPlan = matrix.matrix || {};
+      const cells = Object.entries(cgPlan)
+        .filter(([_, d]: [string, any]) => d.status === 'active' && d.count > 0)
+        .map(([cell, d]: [string, any]) => ({ cell, count: d.count, def: d.definition }));
+
+      log(`Matrix: ${cells.map(c => `${c.cell}:${c.count}`).join(', ')}`);
+
+      // Step 2: Generate questions cell by cell
+      const allQs: any[] = [];
+      const typeMap: Record<string, string[]> = {
+        R1: ['mcq', 'fill_blank'], U1: ['mcq', 'fill_blank'], U2: ['mcq', 'match'],
+        A2: ['mcq', 'error_analysis'], A3: ['error_analysis'], AN2: ['mcq', 'error_analysis'], AN3: ['error_analysis']
+      };
+
+      for (const { cell, count: cellCount, def } of cells) {
+        const types = typeMap[cell] || ['mcq'];
+        for (let qi = 0; qi < cellCount; qi++) {
+          const qType = types[qi % types.length];
+          const qId = `${cell}-${allQs.length + 1}`;
+          setProgress(`Generating ${qId} (${qType})...`);
+          log(`Generating ${qId}: ${qType}...`);
+
+          const typeInstr: Record<string, string> = {
+            mcq: 'MCQ with 4 options (A,B,C,D). 1 correct. Wrong options need "why_wrong".',
+            fill_blank: 'Fill-in-the-blank. Put ##answer## in stem.',
+            error_analysis: 'Error analysis. "steps" array (4 steps). 1-2 wrong with "fix".',
+            match: 'Match. "pairs" array: ["X → Y", ...].',
+            arrange: 'Arrange. "items" array in correct order.',
+          };
+
+          try {
+            const q = await generateAgentResponse('Generation Agent',
+              `${Prompts.GenerationAgent}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\nContent: ${content.slice(0, 500) || lo}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''}\nSimple English, Indian names, short stems.`,
+              JSON.stringify({ id: qId, type: qType, cell }),
+              GenerationSchema
+            );
+            allQs.push({ ...q, cell, type: qType, id: qId });
+            setQuestions([...allQs]);
+            log(`${qId}: ${qType} ✓`);
+          } catch (e: any) {
+            log(`${qId}: failed — ${e.message?.slice(0, 40)}`);
+          }
+        }
+      }
+
+      log(`Done! ${allQs.length} questions generated.`);
+      setProgress('');
+      setStatus('done');
+    } catch (e: any) {
+      log(`Error: ${e.message}`);
+      setStatus('done');
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-6 h-full flex flex-col max-w-[1400px] mx-auto">
+      <header className="mb-4 shrink-0">
+        <h2 className="text-3xl font-light tracking-tight mb-1">Quick Generate</h2>
+        <p className="col-header">Skip the pipeline. Input → Questions. No gates, no approvals.</p>
+      </header>
+
+      <div className="flex gap-4 flex-1 min-h-0">
+        {/* Left: Input */}
+        <div className="w-80 shrink-0 flex flex-col gap-3 overflow-y-auto">
+          <div className="tech-border bg-[var(--surface)] p-4 flex flex-col gap-3">
+            <div>
+              <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Quick Paste (TSV)</label>
+              <textarea value={tsvInput} onChange={e => handlePasteTSV(e.target.value)} className="w-full tech-border bg-[#0a0a0a] text-[#e5e5e5] p-2 font-mono text-xs" placeholder="Paste row..." rows={2} />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Learning Objective</label>
+              <textarea required value={lo} onChange={e => setLo(e.target.value)} className="w-full tech-border bg-[var(--bg)] p-2 text-sm" placeholder="e.g., Classify organisms..." rows={2} />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Skill</label>
+              <input required value={skill} onChange={e => setSkill(e.target.value)} className="w-full tech-border bg-[var(--bg)] p-2 text-sm" placeholder="e.g., Classify food items" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Questions</label>
+              <input type="number" min="1" max="30" value={count} onChange={e => setCount(e.target.value)} className="w-full tech-border bg-[var(--bg)] p-2 text-sm" />
+            </div>
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)]">Content (optional)</label>
+                <div className="relative">
+                  <input type="file" accept=".pdf,.docx,.xlsx" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" disabled={isParsingFile} />
+                  <button type="button" className="px-2 py-0.5 text-[10px] border border-[var(--line-dark)] hover:bg-[var(--line)] flex items-center gap-1">
+                    {isParsingFile ? <Loader2 size={10} className="animate-spin" /> : <FileText size={10} />} Upload
+                  </button>
+                </div>
+              </div>
+              <textarea value={content} onChange={e => setContent(e.target.value)} className="w-full tech-border bg-[var(--bg)] p-2 text-sm" placeholder="Paste chapter text..." rows={3} />
+            </div>
+            <button
+              onClick={handleGenerate}
+              disabled={!lo || !skill || status === 'running'}
+              className="bg-[var(--ink)] text-[var(--bg)] py-3 font-bold uppercase tracking-wide hover:bg-[var(--accent)] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {status === 'running' ? <><Loader2 size={16} className="animate-spin" /> Generating...</> : <><Activity size={16} /> Generate All</>}
+            </button>
+          </div>
+
+          {/* Logs */}
+          <div className="tech-border bg-[#0a0a0a] text-[#e5e5e5] font-mono text-[10px] p-3 flex-1 overflow-y-auto min-h-[100px]">
+            {progress && <div className="text-[#4ade80] mb-1">{progress}</div>}
+            {logs.map((l, i) => <div key={i} className="text-[#a3a3a3]">{l}</div>)}
+            {logs.length === 0 && <div className="text-[#555]">Logs will appear here...</div>}
+          </div>
+        </div>
+
+        {/* Right: Results */}
+        <div className="flex-1 overflow-y-auto">
+          {questions.length === 0 && status === 'idle' && (
+            <div className="h-full flex items-center justify-center text-[var(--ink-muted)] flex-col gap-4">
+              <Activity size={48} className="opacity-20" />
+              <p className="text-sm">Fill in the inputs and click Generate All</p>
+            </div>
+          )}
+
+          {questions.length > 0 && (
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-mono text-[var(--ink-muted)]">{questions.length} questions generated</span>
+                {status === 'done' && (
+                  <button
+                    onClick={async () => {
+                      const { exportToExcelAndZip } = await import('./utils/exporter');
+                      await exportToExcelAndZip({ questions, questionImages: {}, metadata: { lo, skill, count: parseInt(count), construct: skill, grade: metadata?.gradeCode, subject: metadata?.subjectCode, skillCode: metadata?.skillCode }, qaResults: [] });
+                    }}
+                    className="px-4 py-1.5 bg-[#1B5E20] text-white text-xs font-bold uppercase flex items-center gap-1 hover:bg-[#2E7D32]"
+                  >
+                    <FileDown size={12} /> Export ZIP
+                  </button>
+                )}
+              </div>
+
+              {questions.map((q: any) => {
+                const qType = q.type || 'mcq';
+                return (
+                  <div key={q.id} className={`tech-border bg-[var(--bg)] ${q.needs_image ? 'border-l-4 border-l-[#1565C0]' : ''}`}>
+                    <div className={`flex justify-between items-center px-3 py-1.5 border-b border-[var(--line-dark)] ${q.needs_image ? 'bg-[#E3F2FD]' : 'bg-[var(--surface)]'}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs font-mono bg-[var(--ink)] text-[var(--bg)] px-1.5 py-0.5">{q.id}</span>
+                        <span className="text-[10px] font-mono uppercase px-1 py-0.5 rounded bg-[#E3F2FD] text-[#1565C0] font-bold">{qType.replace('_', ' ')}</span>
+                        {q.needs_image && <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#1565C0] text-white">IMG</span>}
+                      </div>
+                      {!q.needs_image && <span className="text-[9px] text-[var(--ink-muted)]">Text Only</span>}
+                    </div>
+                    <div className="p-3">
+                      <div className="tech-border bg-white p-2 text-sm select-all cursor-text mb-2">{q.stem}</div>
+
+                      {qType === 'mcq' && q.options?.length > 0 && (
+                        <div className="flex flex-col gap-1 mb-2">
+                          {q.options.map((opt: any, i: number) => (
+                            <div key={i} className={`text-sm p-2 tech-border flex items-start gap-1.5 ${(opt.correct || opt.is_correct) ? 'border-[var(--success)] bg-[#E8F5E9]' : 'bg-white'}`}>
+                              <span className="font-bold text-xs shrink-0">{opt.label || String.fromCharCode(65+i)}{(opt.correct || opt.is_correct) ? ' ✓' : '.'}</span>
+                              <span className="select-all cursor-text">{opt.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {qType === 'fill_blank' && <div className="tech-border bg-[#E8F5E9] border-[var(--success)] p-2 text-sm font-mono select-all cursor-text mb-2">{q.answer}</div>}
+
+                      {qType === 'error_analysis' && q.steps?.length > 0 && (
+                        <div className="flex flex-col gap-1 mb-2">
+                          {q.steps.map((s: any, i: number) => (
+                            <div key={i} className={`text-sm p-2 tech-border ${s.correct ? 'bg-white' : 'bg-[#FFEBEE] border-[var(--danger)]'}`}>
+                              <span className="text-xs font-bold text-[var(--ink-muted)]">Step {i+1}: </span>
+                              <span className={`select-all cursor-text ${!s.correct ? 'line-through text-[var(--danger)]' : ''}`}>{s.text}</span>
+                              {!s.correct && s.fix && <div className="text-xs text-[var(--success)] mt-1 select-all cursor-text">Fix: {s.fix}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {qType === 'match' && q.pairs?.length > 0 && (
+                        <div className="tech-border bg-white overflow-hidden mb-2">
+                          <div className="grid grid-cols-2 bg-[var(--ink)] text-[var(--bg)]"><div className="p-1.5 text-[10px] font-bold">Left</div><div className="p-1.5 text-[10px] font-bold border-l border-[#333]">Right</div></div>
+                          {q.pairs.map((p: any, i: number) => { const [l,r] = typeof p === 'string' ? p.split(' → ') : [p.left, p.right]; return (
+                            <div key={i} className="grid grid-cols-2 border-t border-[var(--line-dark)]"><div className="p-2 text-sm select-all cursor-text">{l}</div><div className="p-2 text-sm select-all cursor-text border-l border-[var(--line-dark)] text-[var(--success)]">{r}</div></div>
+                          ); })}
+                        </div>
+                      )}
+
+                      {qType === 'arrange' && q.items?.length > 0 && (
+                        <div className="flex flex-col gap-1 mb-2">
+                          {q.items.map((item: string, i: number) => (
+                            <div key={i} className="flex items-center gap-2 tech-border bg-white p-2"><span className="w-5 h-5 rounded-full bg-[var(--ink)] text-[var(--bg)] flex items-center justify-center text-[10px] font-bold shrink-0">{i+1}</span><span className="text-sm select-all cursor-text">{item}</span></div>
+                          ))}
+                        </div>
+                      )}
+
+                      {q.rationale && <div className="text-[10px] text-[var(--ink-muted)] bg-[var(--surface)] p-1.5 tech-border select-all cursor-text">{q.rationale}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
 const ConfigView = () => {
   const [cacheStats, setCacheStats] = useState({ size: 0, hits: 0, misses: 0, maxEntries: 100 });
   const [queueStats, setQueueStats] = useState({ active: 0, pending: 0 });
@@ -2484,6 +2760,7 @@ export default function App() {
           {activeTab === 'architecture' && <ArchitectureView key="architecture" />}
           {activeTab === 'state-machine' && <StateMachineView key="state-machine" />}
           {activeTab === 'raci' && <RaciView key="raci" />}
+          {activeTab === 'quick' && <QuickGenerateView key="quick" />}
           {activeTab === 'config' && <ConfigView key="config" />}
         </AnimatePresence>
       </main>
