@@ -2498,9 +2498,15 @@ const QuickGenerateView = () => {
             arrange: 'Arrange. "items" array in correct order.',
           };
 
+          // Pass already-generated stems so Gemini avoids repetition
+          const alreadyGenerated = allQs.map(prev => prev.stem?.slice(0, 40)).filter(Boolean).slice(-5);
+          const avoidNote = alreadyGenerated.length > 0
+            ? `\nALREADY GENERATED (do NOT repeat these topics):\n${alreadyGenerated.map(s => `- "${s}..."`).join('\n')}\nGenerate something DIFFERENT.`
+            : '';
+
           try {
             const q = await generateAgentResponse('Generation Agent',
-              `${Prompts.GenerationAgent}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\nContent: ${content.slice(0, 500) || lo}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''}\nSimple English, Indian names, short stems.`,
+              `${Prompts.GenerationAgent}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\nContent: ${content.slice(0, 500) || lo}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''}\nSimple English, Indian names, short stems.${avoidNote}`,
               JSON.stringify({ id: qId, type: qType, cell }),
               GenerationSchema
             );

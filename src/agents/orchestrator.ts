@@ -400,16 +400,37 @@ The steps must show a COMPLETE solution attempt — not just statements. Include
             arrange: `Arrange-in-order. Fill "items" array with 4-5 items in the CORRECT sequence. Example: ["Step 1: Identify the food item", "Step 2: Check its source", "Step 3: Classify as plant or animal", "Step 4: Verify the classification"].`,
         };
 
+        // Distribute content points UNIQUELY — no repeating until all used
+        const distributedContent = Array.from({ length: count }, (_, qi) => {
+            if (cellScope.length === 0) return this.config.skill;
+            // Round-robin but with offset so each question gets a different point
+            return cellScope[qi % cellScope.length] || cellScope[0];
+        });
+        // Shuffle to add variety
+        for (let i = distributedContent.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [distributedContent[i], distributedContent[j]] = [distributedContent[j], distributedContent[i]];
+        }
+
         const questionPromises = Array.from({ length: count }, (_, qi) => {
             const qType = typesForCell[qi % typesForCell.length];
-            const contentPoint = cellScope[qi % cellScope.length] || cellScope[0] || this.config.skill;
+            const contentPoint = distributedContent[qi];
             const qId = `${cell}-${startId + qi}`;
+
+            // Build list of OTHER content points for this cell (for variety awareness)
+            const otherPoints = distributedContent.filter((_, i) => i !== qi).slice(0, 3).join(', ');
 
             const prompt = `${Prompts.GenerationAgent}
 ${cellRules[cell] || ''}
 Cell: ${thisCellDef}
 Generate 1 "${qType}" question. ${typeInstructions[qType] || typeInstructions.mcq}
-Content: ${contentPoint}
+
+SPECIFIC CONTENT to test (this question MUST be about this point):
+"${contentPoint}"
+
+Other questions in this cell test: ${otherPoints}
+DO NOT repeat or overlap with those topics. Test something DIFFERENT.
+
 Grade: ${grade}, Subject: ${subjectName}, Skill: ${this.config.skill}
 ${misconceptions.length > 0 ? 'Misconceptions: ' + misconceptions.slice(0, 2).join('; ') : ''}
 LANGUAGE: Simple English, Indian names, short stems, no negative phrasing.`;
