@@ -298,6 +298,29 @@ export class AgentOrchestrator {
         this.artifacts.allQuestions = [];
         this.artifacts.currentCellIndex = 0;
 
+        // --- MANDATORY: Search for exemplar questions from real question banks ---
+        this.log('Research Agent', `Searching for Grade ${grade} ${subjectName} exemplar questions...`);
+        let exemplarBank = '';
+        try {
+            const res = await generateWithGroundedSearch('Research Agent',
+                `Find 6-10 real assessment questions for: "${this.config.skill}" (${subjectName}, Grade ${grade}).
+Search: NCERT Exemplar, CBSE sample papers, state board papers, DIKSHA, Khan Academy, Olympiad banks.
+For each: exact question text + source + cognitive level.
+Focus on grade-appropriate, well-framed questions. Only REAL questions. UK English.`,
+                JSON.stringify({ skill: this.config.skill, lo: this.config.lo, grade, subject: subjectName })
+            );
+            exemplarBank = (res.text || '').slice(0, 2000);
+            if (exemplarBank.length > 50) {
+                this.log('Research Agent', 'Found exemplar questions. Will use as quality benchmark.');
+            } else {
+                this.log('Research Agent', 'No exemplars found. Generating from content only.');
+                exemplarBank = '';
+            }
+        } catch (e: any) {
+            this.log('Research Agent', `Search failed: ${e.message?.slice(0, 40)}`);
+        }
+        this.artifacts.exemplarBank = exemplarBank;
+
         // --- Content Selection for ALL cells upfront (lightweight) ---
         this.log('Content Selector', 'Selecting content for each cell...');
         const allScopePoints = approvedContentScope.map((k: any) => k.knowledge_point);
@@ -433,7 +456,8 @@ DO NOT repeat or overlap with those topics. Test something DIFFERENT.
 
 Grade: ${grade}, Subject: ${subjectName}, Skill: ${this.config.skill}
 ${misconceptions.length > 0 ? 'Misconceptions: ' + misconceptions.slice(0, 2).join('; ') : ''}
-LANGUAGE: Simple English, Indian names, short stems, no negative phrasing.`;
+${this.artifacts.exemplarBank ? 'EXEMPLAR QUESTIONS (match this quality):\n' + this.artifacts.exemplarBank.slice(0, 600) : ''}
+LANGUAGE: UK English (colour, favourite, organise, centre, behaviour). Indian names. Short stems. No negative phrasing. Grade ${grade} appropriate.`;
 
             return generateAgentResponse('Generation Agent', prompt, JSON.stringify({ id: qId, type: qType, cell }), GenerationSchema)
                 .then(q => {

@@ -188,27 +188,32 @@ Rules:
 - Do NOT add knowledge points not present in the provided content
 `,
 
-  GenerationAgent: `Generate question ATOMS — raw content that will be formatted into different types by code.
+  GenerationAgent: `Generate assessment questions. You will receive exemplar questions from real question banks — use them as quality benchmarks.
 
-For each question, output:
-- id: unique identifier
-- cell: the CG cell (R1, U1, U2, A2, AN2, etc.)
-- stem: the question (simple English, short, Indian context — use names like Riya, Aarav, Kabir)
-- correct: the correct answer (short, clear)
-- wrong: array of 3 wrong answers, each with "text" and "why" (the specific student error/misconception that leads to this wrong answer)
-- knowledge_point: which content point this tests
-- rationale: why the correct answer is right (1 sentence)
-- needs_image: true ONLY if the question GENUINELY requires a visual to be understood or answered. Set true for: diagrams, charts, pictures of objects to identify, maps, graphs, visual scenarios, geometry. Set false for: text-based recall, definitions, fill-blanks, simple classification by name, error analysis of text steps.
+Output fields:
+- id, cell, stem, correct, wrong (3 items with text + why), knowledge_point, rationale, needs_image
+
+LANGUAGE — UK ENGLISH (MANDATORY):
+- Use British English spelling ALWAYS: colour (not color), favourite (not favorite), organise (not organize), analyse (not analyze), behaviour (not behavior), centre (not center), defence (not defense), metre (not meter), recognise (not recognize), realise (not realize), practise (not practice for verb), honour (not honor), labour (not labor), neighbour (not neighbor), mould (not mold), catalogue (not catalog), programme (not program)
+- Indian context: use ₹, Indian names (Riya, Aarav, Kabir, Priya, Meera), Indian cities, local food, cricket
+- Simple English, short stems (1-2 sentences), answers under 10 words
+
+GRADE APPROPRIATENESS:
+- Match vocabulary and complexity to the stated grade level
+- Primary (1-5): very simple, concrete, everyday examples
+- Middle (6-8): moderate complexity, textbook terminology allowed
+- High (9-12): can use technical terms if defined in content
 
 CONTENT: Generate ONLY from "selected_content". Do not invent facts.
+If "exemplar_questions" is provided, match their quality and style.
 
 QUALITY:
 - Each stem tests a DIFFERENT knowledge point
-- Wrong answers must be PLAUSIBLE — based on real student misconceptions, not random
-- Stems should be diagnostic — getting it wrong reveals a specific gap
+- Wrong answers must be PLAUSIBLE — based on real student misconceptions
+- Stems should be diagnostic — wrong answer reveals a specific gap
 - No negative stems ("NOT", "except"). No "all/none of the above".
-- A2/AN2 cells: present scenarios, not just "What is X?"
-- Keep stems under 2 sentences. Keep answers under 10 words.
+- A2/AN2: present novel scenarios. R1: test precise terminology.
+- needs_image: true ONLY for diagrams, charts, pictures, maps, geometry. False for text/recall.
 `,
 
   QAAgent: `You are a rigorous Subject Matter Expert (SME) QA reviewer for assessment items. You perform DEEP SEMANTIC checks that code-level rules cannot catch.

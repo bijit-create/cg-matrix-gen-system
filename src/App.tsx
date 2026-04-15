@@ -2475,7 +2475,21 @@ const QuickGenerateView = () => {
 
       log(`Matrix: ${cells.map(c => `${c.cell}:${c.count}`).join(', ')}`);
 
-      // Step 2: Generate questions cell by cell
+      // Step 2: Search for exemplar questions
+      log('Searching for exemplar questions...');
+      setProgress('Searching question banks...');
+      let exemplarBank = '';
+      try {
+        const { generateWithGroundedSearch } = await import('./agents/api');
+        const res = await generateWithGroundedSearch('Research Agent',
+          `Find 6-10 real assessment questions for: "${skill}" (${metadata?.subjectCode || ''}, Grade ${metadata?.gradeCode || ''}). Search: NCERT Exemplar, CBSE sample papers, DIKSHA, Khan Academy, Olympiad banks. Exact question text + source. UK English. Grade-appropriate only.`,
+          JSON.stringify({ skill, lo, grade: metadata?.gradeCode })
+        );
+        exemplarBank = (res.text || '').slice(0, 1500);
+        log(exemplarBank.length > 50 ? 'Found exemplar questions.' : 'No exemplars found.');
+      } catch { log('Exemplar search failed. Continuing.'); }
+
+      // Step 3: Generate questions cell by cell
       const allQs: any[] = [];
       const typeMap: Record<string, string[]> = {
         R1: ['mcq', 'fill_blank'], U1: ['mcq', 'fill_blank'], U2: ['mcq', 'match'],
@@ -2505,8 +2519,9 @@ const QuickGenerateView = () => {
             : '';
 
           try {
+            const exemplarNote = exemplarBank ? `\nEXEMPLAR QUESTIONS (match this quality):\n${exemplarBank.slice(0, 400)}` : '';
             const q = await generateAgentResponse('Generation Agent',
-              `${Prompts.GenerationAgent}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\nContent: ${content.slice(0, 500) || lo}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''}\nSimple English, Indian names, short stems.${avoidNote}`,
+              `${Prompts.GenerationAgent}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\nContent: ${content.slice(0, 500) || lo}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''}\nUK English (colour, favourite, organise, centre). Indian names. Grade-appropriate.${avoidNote}${exemplarNote}`,
               JSON.stringify({ id: qId, type: qType, cell }),
               GenerationSchema
             );
