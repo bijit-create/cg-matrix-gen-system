@@ -108,6 +108,12 @@ function checkQuality(stem: string, options: any[]): QAFlag[] {
     }
   });
 
+  // Stem word count (research: non-English stems > 40 words = language load > cognitive demand)
+  const wordCount = stem.trim().split(/\s+/).length;
+  if (wordCount > 40) {
+    flags.push({ rule: 'high_language_load', category: 'quality', severity: 'minor', message: `Stem is ${wordCount} words. For non-language subjects, keep under 40 to avoid language load exceeding cognitive demand.`, field: 'stem' });
+  }
+
   return flags;
 }
 
@@ -147,6 +153,13 @@ function checkDistractors(options: any[]): QAFlag[] {
       flags.push({ rule: 'duplicate_option', category: 'distractor', severity: 'critical', message: 'Duplicate option detected.', field: `option_${String.fromCharCode(65 + i)}` });
     }
     if (t) seen.add(t);
+  });
+
+  // Combination options (research: adds test-wiseness, not cognition)
+  texts.forEach((t, i) => {
+    if (/\b(both\s+[a-d]\s+and\s+[a-d]|options?\s+[ivx]+\s+and\s+[ivx]+|[a-d]\s*,\s*[a-d]\s+and\s+[a-d]|all\s+of\s+these|i\s+and\s+ii|ii\s+and\s+iii)\b/i.test(t)) {
+      flags.push({ rule: 'combination_option', category: 'distractor', severity: 'major', message: 'Combination option detected ("Both A and B", "I and III"). Research shows these add test-wiseness, not cognition.', field: `option_${String.fromCharCode(65 + i)}` });
+    }
   });
 
   // Absolute qualifiers in options [Haladyna Rule 11]

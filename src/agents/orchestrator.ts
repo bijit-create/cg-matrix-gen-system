@@ -1,5 +1,5 @@
 import { generateAgentResponse, generateWithGroundedSearch } from './api';
-import { Prompts, CellRules, TypeInstructions, TypeRotation, MathTypeRotation } from './prompts';
+import { Prompts, CellRules, TypeInstructions, TypeRotation, MathTypeRotation, getSubjectHint } from './prompts';
 import { IntakeSchema, ConstructSchema, SubskillSchema, CGMapperSchema, MisconceptionSchema, ContentScopeSchema, GenerationSchema, QASchema } from './schemas';
 import misconceptionCatalog from '../knowledge_base/student_misconceptions_catalog.json';
 // questionFormatter.ts available for client-side type switching
@@ -463,6 +463,7 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
             const useName = names[(startId + qi) % names.length];
 
             // STAGE 1: Create question (creative, temp 0.4)
+            const subjectHint = getSubjectHint(subjectName);
             const stage1Prompt = `${Prompts.GenerationStage1}
 ${CellRules[cell] || ''}
 Cell: ${thisCellDef}
@@ -471,6 +472,7 @@ Content: "${contentPoint}"
 use_name: ${useName}
 Other questions test: ${otherPoints}. DO NOT overlap. DO NOT test the same fact.
 Grade: ${grade}, Subject: ${subjectName}, Skill: ${this.config.skill}
+${subjectHint}
 ${misconceptions.length > 0 ? 'Misconceptions: ' + misconceptions.slice(0, 2).join('; ') : ''}`;
 
             return generateAgentResponse('Generation Agent', stage1Prompt, JSON.stringify({ id: qId, type: qType, cell }), GenerationSchema)

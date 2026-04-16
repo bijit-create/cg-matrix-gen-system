@@ -25,7 +25,8 @@ Mark: core/supporting/advanced. Grade: primary/middle/high. 3-8 points per subsk
   CGMapperAgent: `Define a content-specific CG Matrix. Each cell = [Cognitive action] + [content] + [constraint].
 Cells: R1(recall), U1(explain), U2(compare/classify), A2(apply to new), A3(multi-step), AN2(analyse patterns), AN3(analyse reasoning).
 For each: one-line definition, count, status (active/not_required). Do NOT force-fill all cells.
-A3/AN3: only if content supports multi-step/reasoning.`,
+A3/AN3: only if content supports multi-step/reasoning.
+ALLOCATION: Research (NCERT/CBSE/PISA/TIMSS) shows U2 and A2 produce the strongest items. Allocate majority to U2+A2. Keep R1 to 15-20%. AN2 10-15%. A3/AN3 only if justified.`,
 
   MisconceptionAgent: `Select research-backed misconceptions. NEVER invent. Only use catalog_matches or research_findings.
 Select 4-8 most relevant. Preserve original IDs and sources. Each must be specific and actionable.`,
@@ -159,4 +160,27 @@ export function buildImagePrompt(stem: string, subject: string, grade: string): 
     hint = '\nSOCIAL STUDIES: Show maps, timelines, historical scenes, geographical features. NCERT style.';
   }
   return base + hint;
+}
+
+// --- Subject-specific language hints (from NCERT/CBSE/PISA/TIMSS benchmark research) ---
+export const SubjectLanguageHint: Record<string, string> = {
+  math: 'Math: short stems, explicit quantities, no reading traps. Distractors = math misconceptions not language tricks.',
+  science: 'Science: evidence-based stems, process order, concept discrimination. No combination options (Both A and B).',
+  social: 'Social: frame thinking, not paragraph tests. Single stable idea per option. Dates/names only when necessary.',
+  english: 'English: language IS the construct. Reading load OK if it serves the reading action. Passage questions reward attention to wording.',
+  business: 'Business: define situation just enough, then stop. Compact terminology. No story-heavy pseudo-cases.',
+  economics: 'Economics: formula application with real data context. Graph interpretation not just vocabulary recall.',
+  accountancy: 'Accountancy: rule-governed, transaction-based. Test classification and effect reasoning, not just formal rule recall.',
+};
+
+export function getSubjectHint(subject: string): string {
+  const s = subject.toLowerCase();
+  if (s.includes('math')) return SubjectLanguageHint.math;
+  if (s.includes('sci') || s.includes('bio') || s.includes('chem') || s.includes('phys')) return SubjectLanguageHint.science;
+  if (s.includes('social') || s.includes('hist') || s.includes('geo') || s.includes('civic') || s.includes('politi')) return SubjectLanguageHint.social;
+  if (s.includes('eng') || s.includes('hindi') || s.includes('lang')) return SubjectLanguageHint.english;
+  if (s.includes('business')) return SubjectLanguageHint.business;
+  if (s.includes('econ')) return SubjectLanguageHint.economics;
+  if (s.includes('account')) return SubjectLanguageHint.accountancy;
+  return '';
 }
