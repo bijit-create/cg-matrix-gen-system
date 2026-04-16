@@ -107,18 +107,31 @@ export class AgentOrchestrator {
             const subskill = approvedSubskills[si];
             this.log('Content Scoping Agent', `Subskill ${si + 1}/${approvedSubskills.length}: ${typeof subskill === 'string' ? subskill.slice(0, 50) : 'processing'}...`);
 
-            // Extract content relevant to this subskill (keyword search in chapter)
+            // Extract content relevant to this subskill
             const subskillText = typeof subskill === 'string' ? subskill : subskill.subskill_description || '';
-            const keywords = subskillText.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+
+            // Better keyword extraction: remove stopwords, require 5+ chars for meaningful matching
+            const stopwords = new Set(['about', 'after', 'based', 'being', 'between', 'could', 'different', 'during', 'every', 'following', 'given', 'having', 'identify', 'including', 'their', 'there', 'these', 'those', 'through', 'under', 'using', 'which', 'while', 'within', 'would', 'should', 'student', 'learn', 'describe', 'explain', 'classify', 'compare', 'apply', 'analyse', 'understand']);
+            const keywords = subskillText.toLowerCase()
+                .replace(/[^a-z\s]/g, '')
+                .split(/\s+/)
+                .filter((w: string) => w.length >= 5 && !stopwords.has(w));
             let relevantContent = fullContent;
 
-            // If we have chapter content, try to extract relevant paragraphs
-            if (fullContent.length > 2000) {
-                const paragraphs = fullContent.split(/\n\n|\r\n\r\n/);
-                const relevant = paragraphs.filter(p => {
+            // Extract paragraphs with at least 2 keyword matches (not just 1)
+            if (fullContent.length > 2000 && keywords.length > 0) {
+                const paragraphs = fullContent.split(/\n\n|\r\n\r\n|\n/).filter(p => p.trim().length > 30);
+                const scored = paragraphs.map(p => {
                     const pLower = p.toLowerCase();
-                    return keywords.some(kw => pLower.includes(kw));
+                    const matchCount = keywords.filter(kw => pLower.includes(kw)).length;
+                    return { p, matchCount };
                 });
+                // Take paragraphs with 2+ keyword matches, or top-scoring ones
+                const relevant = scored
+                    .filter(s => s.matchCount >= Math.min(2, keywords.length))
+                    .sort((a, b) => b.matchCount - a.matchCount)
+                    .slice(0, 10)
+                    .map(s => s.p);
                 relevantContent = relevant.length > 0 ? relevant.join('\n\n') : fullContent.slice(0, 2000);
             }
 
@@ -215,19 +228,38 @@ export class AgentOrchestrator {
             this.log('Misconception Agent', 'Starting processing...');
             const loLower = this.config.lo.toLowerCase();
             const skillLower = this.config.skill.toLowerCase();
-            const catalogSubset = (misconceptionCatalog as any[]).filter((m: any) => {
-                const mSubject = (m.SUBJECT || '').toLowerCase();
-                const subjectMatch = subject.includes('math') ? mSubject === 'math' : subject.includes('sci') ? mSubject === 'science' : true;
-                if (!subjectMatch) return false;
-                const mText = `${m.TOPIC_CLUSTER} ${m.TOPIC} ${m.MISCONCEPTION}`.toLowerCase();
-                const keywords = `${loLower} ${skillLower}`.split(/\s+/).filter((w: string) => w.length > 3);
-                return keywords.some((kw: string) => mText.includes(kw));
-            });
-            const catalogMatches = catalogSubset.map((m: any) => ({
-                id: m.ID, topic: m.TOPIC, misconception: m.MISCONCEPTION,
-                type: m.TYPE, prevalence: m.PREVALENCE, source: m.SOURCE
+            // Better misconception matching: use TOPIC_CLUSTER and TOPIC for primary match,
+            // then score by how many content keywords appear in the misconception text.
+            // Require 2+ keyword matches to avoid false positives.
+            const miscStopwords = new Set(['student', 'students', 'think', 'believe', 'understand', 'learn', 'know', 'that', 'this', 'with', 'from', 'they', 'their', 'about', 'when', 'what', 'which', 'have', 'does', 'will', 'been', 'being', 'some', 'only', 'also', 'into', 'than', 'each', 'other', 'make', 'like', 'just', 'over', 'such']);
+            const topicKeywords = `${loLower} ${skillLower}`
+                .replace(/[^a-z\s]/g, '')
+                .split(/\s+/)
+                .filter((w: string) => w.length >= 4 && !miscStopwords.has(w));
+
+            const catalogScored = (misconceptionCatalog as any[])
+                .filter((m: any) => {
+                    const mSubject = (m.SUBJECT || '').toLowerCase();
+                    return subject.includes('math') ? mSubject === 'math' : subject.includes('sci') ? mSubject === 'science' : true;
+                })
+                .map((m: any) => {
+                    const mText = `${m.TOPIC_CLUSTER || ''} ${m.TOPIC || ''} ${m.MISCONCEPTION || ''}`.toLowerCase();
+                    const matchCount = topicKeywords.filter((kw: string) => mText.includes(kw)).length;
+                    // Bonus for TOPIC match (more relevant than random keyword in misconception text)
+                    const topicText = `${m.TOPIC_CLUSTER || ''} ${m.TOPIC || ''}`.toLowerCase();
+                    const topicBonus = topicKeywords.filter((kw: string) => topicText.includes(kw)).length * 2;
+                    return { m, score: matchCount + topicBonus };
+                })
+                .filter(s => s.score >= 2) // Require at least 2 keyword matches
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 20); // Top 20 most relevant
+
+            const catalogMatches = catalogScored.map(s => ({
+                id: s.m.ID, topic: s.m.TOPIC, misconception: s.m.MISCONCEPTION,
+                type: s.m.TYPE, prevalence: s.m.PREVALENCE, source: s.m.SOURCE,
+                relevance_score: s.score
             }));
-            this.log('Misconception Agent', `${catalogMatches.length} catalog matches.`);
+            this.log('Misconception Agent', `${catalogMatches.length} catalog matches (top by relevance).`);
 
             let output: any[] = [];
             if (catalogMatches.length >= 4) {
@@ -423,16 +455,27 @@ The steps must show a COMPLETE solution attempt — not just statements. Include
             arrange: `Arrange-in-order. Fill "items" array with 4-5 items in the CORRECT sequence. Example: ["Step 1: Identify the food item", "Step 2: Check its source", "Step 3: Classify as plant or animal", "Step 4: Verify the classification"].`,
         };
 
-        // Distribute content points UNIQUELY — no repeating until all used
-        const distributedContent = Array.from({ length: count }, (_, qi) => {
-            if (cellScope.length === 0) return this.config.skill;
-            // Round-robin but with offset so each question gets a different point
-            return cellScope[qi % cellScope.length] || cellScope[0];
-        });
-        // Shuffle to add variety
-        for (let i = distributedContent.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [distributedContent[i], distributedContent[j]] = [distributedContent[j], distributedContent[i]];
+        // Distribute content: assign unique points, then fill remaining with combinations
+        const distributedContent: string[] = [];
+        if (cellScope.length === 0) {
+            for (let i = 0; i < count; i++) distributedContent.push(this.config.skill);
+        } else if (cellScope.length >= count) {
+            // More content than questions — pick unique ones
+            const shuffled = [...cellScope].sort(() => Math.random() - 0.5);
+            for (let i = 0; i < count; i++) distributedContent.push(shuffled[i]);
+        } else {
+            // Fewer content points than questions — use all first, then combine pairs for remaining
+            const shuffled = [...cellScope].sort(() => Math.random() - 0.5);
+            for (let i = 0; i < count; i++) {
+                if (i < shuffled.length) {
+                    distributedContent.push(shuffled[i]);
+                } else {
+                    // Combine two different points for variety
+                    const a = shuffled[i % shuffled.length];
+                    const b = shuffled[(i + 1) % shuffled.length];
+                    distributedContent.push(a !== b ? `${a} AND ${b}` : a);
+                }
+            }
         }
 
         const questionPromises = Array.from({ length: count }, (_, qi) => {
@@ -440,8 +483,8 @@ The steps must show a COMPLETE solution attempt — not just statements. Include
             const contentPoint = distributedContent[qi];
             const qId = `${cell}-${startId + qi}`;
 
-            // Build list of OTHER content points for this cell (for variety awareness)
-            const otherPoints = distributedContent.filter((_, i) => i !== qi).slice(0, 3).join(', ');
+            // Show OTHER content points so Gemini avoids overlap
+            const otherPoints = distributedContent.filter((_, i) => i !== qi).slice(0, 3).join('; ');
 
             const prompt = `${Prompts.GenerationAgent}
 ${cellRules[cell] || ''}
