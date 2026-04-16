@@ -43,6 +43,12 @@ CONTENT:
 - NEVER: negative phrasing, "Which is true/false?", passive voice, textbook verbatim.
 - Grade language: Primary(1-5)=max 15 words. Middle(6-8)=textbook terms OK. High(9-12)=technical OK.
 
+DIFFICULTY (CRITICAL):
+- Default to SIMPLE, DIRECT questions. A simple concept should be asked simply.
+- Do NOT wrap simple facts in complex statements. "What is X?" is better than "Considering the process by which X relates to Y, determine the primary characteristic of..."
+- Complex questions ONLY for A3/AN2/AN3 cells where the cognitive demand genuinely requires it.
+- R1/U1 questions should feel EASY. U2/A2 should feel MODERATE. Only AN2+ should feel HARD.
+
 STEM VARIETY (CRITICAL — read carefully):
 - Use the Indian name specified in "use_name" field. Do NOT always use Riya.
 - NEVER start stems the same way. Vary between: direct question, scenario, statement-then-question, data-then-question, observation-then-question.
@@ -105,27 +111,28 @@ export const TypeInstructions: Record<string, string> = {
   arrange: 'Arrange-in-order. "items" array in correct sequence. Min 4 items.',
 };
 
-// Type rotation — subject-aware. Error analysis REMOVED from all subjects.
-// FIB and one_word only for Math.
+// Default rotation — MCQ DOMINANT (60-70%). No FIB/OneWord.
+// Used for: Science, Social Science, Hindi, and all non-Math/English subjects.
+// User feedback: too many non-MCQ types confuse students. MCQ is safest format.
 export const TypeRotation: Record<string, string[]> = {
-  R1: ['mcq', 'true_false', 'mcq', 'match', 'true_false'],
-  U1: ['mcq', 'true_false', 'mcq', 'true_false', 'mcq'],
-  U2: ['mcq', 'match', 'arrange', 'mcq', 'true_false'],
-  A2: ['mcq', 'arrange', 'mcq', 'match', 'mcq'],
-  A3: ['mcq', 'arrange', 'true_false', 'mcq'],
-  AN2: ['mcq', 'match', 'true_false', 'arrange', 'mcq'],
-  AN3: ['mcq', 'true_false', 'arrange', 'mcq'],
+  R1: ['mcq', 'mcq', 'true_false', 'mcq', 'match'],
+  U1: ['mcq', 'mcq', 'true_false', 'mcq', 'mcq'],
+  U2: ['mcq', 'match', 'mcq', 'mcq', 'arrange'],
+  A2: ['mcq', 'mcq', 'mcq', 'match', 'mcq'],
+  A3: ['mcq', 'mcq', 'arrange', 'mcq'],
+  AN2: ['mcq', 'mcq', 'match', 'mcq', 'mcq'],
+  AN3: ['mcq', 'mcq', 'mcq', 'arrange'],
 };
 
-// Math-specific rotation includes FIB and one_word
+// Math + English: includes FIB and one_word (typing OK in these subjects)
 export const MathTypeRotation: Record<string, string[]> = {
-  R1: ['mcq', 'fill_blank', 'one_word', 'true_false', 'mcq'],
-  U1: ['mcq', 'fill_blank', 'true_false', 'one_word', 'mcq'],
-  U2: ['mcq', 'match', 'fill_blank', 'arrange', 'one_word'],
-  A2: ['mcq', 'fill_blank', 'one_word', 'match', 'mcq'],
-  A3: ['mcq', 'fill_blank', 'one_word', 'arrange'],
-  AN2: ['mcq', 'fill_blank', 'match', 'one_word', 'true_false'],
-  AN3: ['mcq', 'fill_blank', 'true_false', 'arrange'],
+  R1: ['mcq', 'fill_blank', 'mcq', 'one_word', 'mcq'],
+  U1: ['mcq', 'fill_blank', 'mcq', 'one_word', 'mcq'],
+  U2: ['mcq', 'match', 'fill_blank', 'mcq', 'arrange'],
+  A2: ['mcq', 'fill_blank', 'mcq', 'one_word', 'mcq'],
+  A3: ['mcq', 'fill_blank', 'one_word', 'mcq'],
+  AN2: ['mcq', 'fill_blank', 'mcq', 'match', 'mcq'],
+  AN3: ['mcq', 'fill_blank', 'mcq', 'mcq'],
 };
 
 // --- Image Prompt Template (NCERT-style, from VidyaGen research) ---

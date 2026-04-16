@@ -430,8 +430,11 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
         this.log('Generation Agent', `Cell ${cellIndex + 1}/${cellQueue.length}: Generating ${count} item(s) for ${cell}...`);
 
         // Use subject-aware type rotation
-        const isMath = (this.artifacts.intake?.subject || '').toLowerCase().includes('math');
-        const rotation = isMath ? MathTypeRotation : TypeRotation;
+        // FIB/OneWord only for Math and English (typing is OK in these).
+        // All other subjects: MCQ dominant (60-70%).
+        const subjectLower = (this.artifacts.intake?.subject || '').toLowerCase();
+        const allowsFIB = subjectLower.includes('math') || subjectLower.includes('eng');
+        const rotation = allowsFIB ? MathTypeRotation : TypeRotation;
         const typesForCell = rotation[cell] || ['mcq', 'mcq', 'mcq'];
         const startId = (this.artifacts.allQuestions || []).length + 1;
 
