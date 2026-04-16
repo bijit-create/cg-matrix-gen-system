@@ -56,33 +56,49 @@ STEM VARIETY (CRITICAL — read carefully):
 - GOOD: Direct: "Which nutrient provides energy?" / Scenario: "Kabir ate only rice for a week. What nutrient is he missing?" / Observation: "A doctor notices a patient has weak bones. Which mineral deficiency..."
 - Each question must feel COMPLETELY DIFFERENT from the others in this set.
 
-COGNITIVE LEVEL (CRITICAL):
-- The cell definition tells you EXACTLY what cognitive demand is needed.
-- R1 = recall a fact. U1 = explain why. U2 = compare/classify. A2 = apply to NEW scenario. AN2 = analyse data/patterns to draw conclusion.
-- AN2 is NOT "what happens if you don't eat well?" — that is R1 recall. AN2 is: "Given this meal plan, which nutrient group is missing and what would be the consequence?"
-- If the cell says AN2, the student must ANALYSE information, not just recall a fact.
+COGNITIVE PROGRESSION (each cell MUST feel different):
+- R1: Recall a definition or fact. Simple, direct. "What is X?"
+- U1: Explain WHY or HOW. "Why is X classified as Y?" Not just "What is X?"
+- U2: COMPARE or resolve CONFLICT. "A plant has soft stem BUT spreads on ground — what is it?" Student must weigh competing features. NOT just another R1 with "classify" in the stem.
+- A2: Apply to a NEW, real-world, possibly tricky case. "A money plant grows upward using support. Why is it NOT a creeper?" Student must REASON, not just label.
+- AN2: Analyse data or evidence to draw a conclusion. Multi-step: observe → infer → conclude.
 
-IMAGE (research-backed — CBSE Learning Standards + NCERT):
-- MATH: needs_image=true for: long division layout, fractions on shapes/number lines, geometry, graphs, place value charts, data tables, algebraic models. These are INHERENTLY VISUAL — text descriptions of visual procedures are confusing.
-- SCIENCE: needs_image=true for: organisms, body parts, diagrams, experiments, food webs, maps.
-- ENGLISH/SOCIAL: needs_image=true only for maps, charts, picture comprehension.
-- When true: the stem MUST be written assuming the student sees the image.
+QUESTION DESIGN PATTERNS (vary these — do NOT repeat the same pattern):
+- IDENTIFICATION: "What type of plant is X?" (use sparingly — max 2 per set)
+- REASONING: "Why is X NOT a Y?" or "What makes X different from Y?"
+- CONFLICT: "X has feature A (suggests type P) but also feature B (suggests type Q). What is it?" — student resolves competing evidence
+- MISCONCEPTION: Directly test a known confusion. "Meera says a watermelon plant is a climber because it has tendrils. Is she correct?"
+- EDGE CASE: "A tomato plant has a thin stem but grows upright. Is it a herb or a shrub?"
+
+TRUE/FALSE RULES:
+- NEVER use obvious definitions ("Trees have thick stems" = too easy)
+- USE: partial truths, common misconceptions, or statements that SOUND correct but aren't
+- GOOD: "All plants with soft stems are herbs." (FALSE — creepers also have soft stems)
+- GOOD: "A plant that grows along the ground must be a creeper." (FALSE — could be a spreading herb)
+- The student must THINK, not just remember.
+
+LANGUAGE VARIETY:
+- NEVER repeat the same descriptive phrase across questions. Vary: "soft green stem" → "thin flexible stem" → "non-woody stem" → "tender stem that bends easily"
 
 REPETITION PREVENTION (CRITICAL):
-- Read the "Other questions test:" field carefully. If another question already tests long division, you MUST test a DIFFERENT mathematical operation or concept.
-- TWO questions about "divide N items among M friends using long division" = UNACCEPTABLE even with different numbers.
-- Vary: the operation (add/subtract/multiply/divide), the context (money/food/distance/time), the cognitive demand (recall/apply/analyse).`,
+- Read "Other questions test:" — NEVER test the same concept or skill.
+- Two questions asking "identify plant type from stem description" = UNACCEPTABLE.
+- Vary: the SKILL (identify vs compare vs reason vs apply), the CONTEXT (garden/forest/farm/kitchen), the COGNITIVE DEMAND.
 
-  GenerationStage2: `Review and improve this generated question. You are a senior assessment reviewer.
+IMAGE: needs_image = true when stem or options REQUIRE a picture. Math: diagrams, geometry, graphs. Science: organisms, experiments, diagrams. Let content decide.`,
+
+  GenerationStage2: `Review and improve this generated question. Senior assessment reviewer.
 
 CHECK AND FIX:
-1. UK ENGLISH: colour, favourite, organise, analyse, behaviour, centre, defence, metre, recognise, practise. Fix any US spellings.
-2. DISTRACTORS (Rodriguez Attractor Framework): Each wrong option must attract students with a SPECIFIC misconception. Add/improve "why_wrong" = exact reasoning error ("student confuses X with Y because..."). No absurd/joke options.
-3. OPTIONS: All similar length/grammar. Correct NOT longer. No "all/none of the above". No absolute qualifiers.
-4. GRADE FIT: Is vocabulary appropriate? Would a Grade N student understand every word?
-5. DIAGNOSTIC VALUE: Does a wrong answer reveal a specific gap, or just "didn't know"?
+1. UK ENGLISH: colour, favourite, organise, analyse, centre, defence. Fix US spellings.
+2. DISTRACTORS: Each wrong option must target a SPECIFIC misconception. "why_wrong" = exact reasoning error. No absurd options.
+3. OPTIONS: Similar length/grammar. Correct NOT longer. No "all/none of the above".
+4. GRADE FIT: Would a Grade N student understand every word?
+5. COGNITIVE DEPTH: Does this question test THINKING or just RECALL? If the cell is U2 or higher but the question is just "What is X?" — rewrite to require comparison, reasoning, or conflict resolution.
+6. TRUE/FALSE: If type is true_false and the statement is an obvious definition — rewrite to be a partial truth, misconception, or conflict statement that requires thinking.
+7. REPETITION: If this tests the SAME skill as the "Other questions" list — flag and suggest a different angle.
 
-Return the improved question in the same format. If already good, return unchanged.`,
+Return improved question. If already good, return unchanged.`,
 
   // --- QA (now handled by multiPerspective.ts, this is fallback) ---
 
