@@ -124,15 +124,19 @@ export async function generateQuestionImage(question: string): Promise<{
   }
 }
 
-// --- Direct prompt → AI image (for option images in picture_mcq) ---
+// --- Direct prompt → AI image (enriched with NCERT style) ---
 export async function generateFromPrompt(prompt: string): Promise<{
   status: 'generated' | 'failed';
   dataUrl?: string;
   sizeKb?: number;
   reason?: string;
 }> {
+  // Enrich with NCERT style rules if not already present
+  const ncertRules = `\n\nSTYLE: Clean flat design, cartoon/vector style, bright child-friendly colours, plain white background, proper alignment, 4:3 ratio.\nSTRICT: ABSOLUTELY NO text, labels, numbers, letters, words, captions. NO answers. NO decorations, shadows, or background objects. Minimal, focused on learning.`;
+  const enrichedPrompt = prompt.includes('STRICT') ? prompt : prompt + ncertRules;
+
   try {
-    const rawDataUrl = await generateImageContent(prompt);
+    const rawDataUrl = await generateImageContent(enrichedPrompt);
     const { dataUrl, sizeKb } = await normalizeToCanvas(rawDataUrl);
     return { status: 'generated', dataUrl, sizeKb };
   } catch (e: any) {

@@ -126,3 +126,37 @@ export const MathTypeRotation: Record<string, string[]> = {
   AN2: ['mcq', 'fill_blank', 'match', 'one_word', 'true_false'],
   AN3: ['mcq', 'fill_blank', 'true_false', 'arrange'],
 };
+
+// --- Image Prompt Template (NCERT-style, from VidyaGen research) ---
+export const IMAGE_PROMPT_TEMPLATE = `Create a simple NCERT-style educational image.
+
+VISUAL: {description}
+
+STYLE:
+- Clean flat design, cartoon/vector style
+- Bright, child-friendly colours
+- Plain white background
+- Proper alignment and spacing
+- 4:3 aspect ratio, minimum 800px wide
+
+STRICT RULES:
+- ABSOLUTELY NO text, labels, numbers, letters, words, or captions inside the image
+- NO answers or solutions shown
+- NO decorative elements, shadows, or background objects
+- NO characters unless specifically requested
+- Objects must be clearly visible and properly placed
+- Keep the design minimal and focused on learning`;
+
+export function buildImagePrompt(stem: string, subject: string, grade: string): string {
+  const base = IMAGE_PROMPT_TEMPLATE.replace('{description}', stem.slice(0, 200));
+  const subLower = subject.toLowerCase();
+  let hint = '';
+  if (subLower.includes('math')) {
+    hint = '\nMATH: Show the concept visually — diagrams, flowcharts, shapes, number lines, grouped objects. For operations, show visual layout. For geometry, precise shapes with dimensions.';
+  } else if (subLower.includes('sci')) {
+    hint = '\nSCIENCE: Show organisms, body parts, experiments, food webs, processes. Match NCERT textbook diagram style.';
+  } else if (subLower.includes('social') || subLower.includes('geo') || subLower.includes('hist')) {
+    hint = '\nSOCIAL STUDIES: Show maps, timelines, historical scenes, geographical features. NCERT style.';
+  }
+  return base + hint;
+}
