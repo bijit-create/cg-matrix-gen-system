@@ -55,7 +55,16 @@ COGNITIVE LEVEL (CRITICAL):
 - AN2 is NOT "what happens if you don't eat well?" — that is R1 recall. AN2 is: "Given this meal plan, which nutrient group is missing and what would be the consequence?"
 - If the cell says AN2, the student must ANALYSE information, not just recall a fact.
 
-IMAGE: needs_image = true when stem/options REQUIRE a picture (objects, diagrams, organisms). False for text-based questions. Let content decide.`,
+IMAGE (research-backed — CBSE Learning Standards + NCERT):
+- MATH: needs_image=true for: long division layout, fractions on shapes/number lines, geometry, graphs, place value charts, data tables, algebraic models. These are INHERENTLY VISUAL — text descriptions of visual procedures are confusing.
+- SCIENCE: needs_image=true for: organisms, body parts, diagrams, experiments, food webs, maps.
+- ENGLISH/SOCIAL: needs_image=true only for maps, charts, picture comprehension.
+- When true: the stem MUST be written assuming the student sees the image.
+
+REPETITION PREVENTION (CRITICAL):
+- Read the "Other questions test:" field carefully. If another question already tests long division, you MUST test a DIFFERENT mathematical operation or concept.
+- TWO questions about "divide N items among M friends using long division" = UNACCEPTABLE even with different numbers.
+- Vary: the operation (add/subtract/multiply/divide), the context (money/food/distance/time), the cognitive demand (recall/apply/analyse).`,
 
   GenerationStage2: `Review and improve this generated question. You are a senior assessment reviewer.
 
