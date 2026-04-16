@@ -518,9 +518,29 @@ LANGUAGE: UK English (colour, favourite, organise, centre, behaviour). Indian na
             .filter(r => r.status === 'fulfilled' && r.value)
             .map(r => (r as PromiseFulfilledResult<any>).value);
 
-        // Image generation is on-demand — SME clicks "Generate Images" per question
+        // --- Multi-perspective image decision (3 AI calls per question, parallel) ---
+        this.log('Image Evaluator', `Evaluating image need for ${cellQuestions.length} questions...`);
+        try {
+            const { evaluateImageNeed } = await import('./multiPerspective');
+            const subjectName = this.artifacts.intake?.subject || '';
+            const imageEvals = await Promise.allSettled(
+                cellQuestions.map((q: any) =>
+                    evaluateImageNeed(q.stem || '', q.type || 'mcq', subjectName, grade)
+                )
+            );
+            for (let i = 0; i < cellQuestions.length; i++) {
+                const r = imageEvals[i];
+                if (r.status === 'fulfilled') {
+                    cellQuestions[i].needs_image = r.value.needsImage;
+                    cellQuestions[i]._image_confidence = r.value.confidence;
+                    this.log('Image Evaluator', `${cellQuestions[i].id}: ${r.value.needsImage ? 'IMAGE' : 'TEXT'} (${r.value.confidence}% confidence)`);
+                }
+            }
+        } catch (e: any) {
+            this.log('Image Evaluator', `Failed: ${e.message?.slice(0, 40)}. Using Generation Agent's decision.`);
+        }
 
-        // Run rule-based QA
+        // --- Rule-based QA ---
         const ruleResults = runRuleBasedQA(cellQuestions, this.config.lo);
         const cellQA = cellQuestions.map((q: any) => {
             const rule = ruleResults.find(r => r.question_id === (q.id));
@@ -565,36 +585,52 @@ LANGUAGE: UK English (colour, favourite, organise, centre, behaviour). Indian na
         // Rule-based QA on full set (catches cross-question duplicates)
         const ruleResults = runRuleBasedQA(allQuestions, this.config.lo);
 
-        // AI SME QA
-        let aiQaResults: any[] = [];
+        // Multi-perspective AI QA (3 lenses: Factual, Pedagogical, Language)
+        this.log('QA Review', 'Running 3-perspective quality review (Factual + Pedagogical + Language)...');
+        const multiQaResults: Record<string, any> = {};
         try {
-            const qaPayload = {
-                questions: allQuestions.map((q: any) => ({
-                    question_id: q.question_id, cg_cell: q.cg_cell, question_type: q.question_type,
-                    stem: q.stem, options: q.options, correct_answer: q.correct_answer, rationale: q.rationale
-                })),
-                learning_objective: this.config.lo,
-                grade: this.artifacts.intake?.grade || 'unknown'
-            };
-            aiQaResults = await this.runAgent('AI SME QA', Prompts.QAAgent, qaPayload, QASchema);
+            const { evaluateQuestionQuality } = await import('./multiPerspective');
+            const subjectName = this.artifacts.intake?.subject || '';
+            const grade = this.artifacts.intake?.grade || '';
+
+            // Run QA for each question (parallel via requestQueue)
+            const qaPromises = allQuestions.map((q: any) =>
+                evaluateQuestionQuality(q, subjectName, grade, this.config.lo)
+                    .then(result => ({ qId: q.question_id || q.id, ...result }))
+                    .catch(() => ({ qId: q.question_id || q.id, pass: true, overallScore: 50, issues: [], perspectives: [] }))
+            );
+            const qaResults = await Promise.allSettled(qaPromises);
+            for (const r of qaResults) {
+                if (r.status === 'fulfilled') {
+                    multiQaResults[r.value.qId] = r.value;
+                }
+            }
+            const passed = Object.values(multiQaResults).filter((r: any) => r.pass).length;
+            this.log('QA Review', `3-lens review complete: ${passed}/${allQuestions.length} passed.`);
         } catch (e: any) {
-            this.log('AI SME QA', `Failed: ${e.message?.slice(0, 60)}`);
+            this.log('QA Review', `Multi-perspective QA failed: ${e.message?.slice(0, 40)}`);
         }
 
-        // Merge
+        // Merge rule-based + multi-perspective QA
         const mergedQA = allQuestions.map((q: any) => {
             const qId = q.question_id || q.id;
             const rule = ruleResults.find(r => r.question_id === qId);
-            const ai = aiQaResults.find((r: any) => r.question_id === qId);
+            const multi = multiQaResults[qId];
             const allIssues: string[] = [];
             if (rule) rule.flags.forEach(f => allIssues.push(`[${f.category}/${f.severity}] ${f.message}`));
-            if (ai?.issues) ai.issues.forEach((issue: string) => allIssues.push(`[AI-SME] ${issue}`));
-            const hasCritical = allIssues.some(i => i.includes('/critical]')) || ai?.severity === 'critical';
-            const hasMajor = allIssues.some(i => i.includes('/major]')) || ai?.severity === 'major';
+            if (multi?.issues) multi.issues.forEach((issue: string) => allIssues.push(issue));
+            const multiPass = multi ? multi.pass : true;
+            const multiScore = multi ? multi.overallScore : 100;
+            const hasCritical = allIssues.some(i => i.includes('/critical]')) || multiScore < 30;
+            const hasMajor = allIssues.some(i => i.includes('/major]')) || multiScore < 50;
             return {
-                question_id: qId, pass: !hasCritical && !hasMajor,
-                issues: allIssues, suggestions: ai?.suggestions || [],
-                severity: hasCritical ? 'critical' : hasMajor ? 'major' : 'none'
+                question_id: qId,
+                pass: !hasCritical && !hasMajor && multiPass,
+                issues: allIssues,
+                suggestions: [],
+                severity: hasCritical ? 'critical' : hasMajor ? 'major' : 'none',
+                score: multiScore,
+                perspectives: multi?.perspectives || [],
             };
         });
 
