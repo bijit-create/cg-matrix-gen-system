@@ -85,7 +85,11 @@ REPETITION PREVENTION (CRITICAL):
 - Two questions asking "identify plant type from stem description" = UNACCEPTABLE.
 - Vary: the SKILL (identify vs compare vs reason vs apply), the CONTEXT (garden/forest/farm/kitchen), the COGNITIVE DEMAND.
 
-IMAGE: needs_image = true when stem or options REQUIRE a picture. Math: diagrams, geometry, graphs. Science: organisms, experiments, diagrams. Let content decide.`,
+IMAGE (CRITICAL — read the subject):
+- For SCIENCE topics about plants, animals, organisms, body parts, experiments, life processes: needs_image MUST be true for AT LEAST 3-4 questions per set. Students learn biology by SEEING, not just reading descriptions.
+- For MATH topics with geometry, graphs, fractions, data: needs_image MUST be true for visual operations.
+- For text-heavy subjects (grammar, vocabulary, history dates): needs_image can be false.
+- When needs_image=true, write the stem ASSUMING the student sees a picture. Example: "Look at the plant in the picture. What type of plant is this?" NOT "A plant has a green tender stem. What type is it?"`,
 
   GenerationStage2: `Review and improve this generated question. Senior assessment reviewer.
 
