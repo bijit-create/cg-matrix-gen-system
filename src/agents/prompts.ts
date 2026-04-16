@@ -42,7 +42,15 @@ RULES:
 - Use scenarios: "Riya measured..." not "Measure the..."
 - NEVER: negative phrasing, "Which is true/false?", passive voice, textbook verbatim.
 - Grade language: Primary(1-5)=max 15 words/sentence. Middle(6-8)=textbook terms OK. High(9-12)=technical OK.
-- needs_image: true ONLY if a picture genuinely helps. Let content decide, not a quota.`,
+- needs_image: Decide intelligently per question. Let the subject and content decide.
+
+PICTURE-BASED QUESTIONS:
+When the content involves real-world objects, organisms, places, diagrams, or visual scenarios — design the MCQ so that the stem or options REQUIRE seeing a picture. Examples:
+- "Look at the picture. Which of these is a herbivore?" (stem needs image of animals)
+- "Which picture shows a plant-based food?" (options are images)
+- "The diagram shows a food web. Which organism is a producer?" (stem needs diagram)
+Set needs_image=true for these. Write the stem assuming the student WILL see the image.
+For subjects like grammar/vocabulary/pure math — most questions will NOT need images. That is correct.`,
 
   GenerationStage2: `Review and improve this generated question. You are a senior assessment reviewer.
 
