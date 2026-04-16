@@ -1,5 +1,5 @@
 import { generateAgentResponse, generateWithGroundedSearch } from './api';
-import { Prompts, CellRules, TypeInstructions, TypeRotation } from './prompts';
+import { Prompts, CellRules, TypeInstructions, TypeRotation, MathTypeRotation } from './prompts';
 import { IntakeSchema, ConstructSchema, SubskillSchema, CGMapperSchema, MisconceptionSchema, ContentScopeSchema, GenerationSchema, QASchema } from './schemas';
 import misconceptionCatalog from '../knowledge_base/student_misconceptions_catalog.json';
 // questionFormatter.ts available for client-side type switching
@@ -409,8 +409,10 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
 
         this.log('Generation Agent', `Cell ${cellIndex + 1}/${cellQueue.length}: Generating ${count} item(s) for ${cell}...`);
 
-        // Use externalized dicts from prompts.ts
-        const typesForCell = TypeRotation[cell] || ['mcq', 'mcq', 'mcq'];
+        // Use subject-aware type rotation
+        const isMath = (this.artifacts.intake?.subject || '').toLowerCase().includes('math');
+        const rotation = isMath ? MathTypeRotation : TypeRotation;
+        const typesForCell = rotation[cell] || ['mcq', 'mcq', 'mcq'];
         const startId = (this.artifacts.allQuestions || []).length + 1;
 
         // Distribute content uniquely

@@ -75,20 +75,32 @@ export const CellRules: Record<string, string> = {
 
 export const TypeInstructions: Record<string, string> = {
   mcq: 'MCQ with 4 options (A,B,C,D). 1 correct. Wrong options need "why_wrong".',
-  fill_blank: 'Fill-in-the-blank. Put ##answer## in stem. Set answer field.',
-  error_analysis: `Error Analysis. "steps" array (4-6 steps). 1-2 wrong (correct=false) with "fix".
-Stem: "[Name] solved this problem. Some steps are incorrect. Select those steps."
-Steps must show COMPLETE reasoning, not just statements.`,
+  true_false: 'True/False question. Stem is a clear statement. 2 options: True and False. Set correct option. Add "why_wrong" explaining why the wrong answer is wrong. The statement must test a SPECIFIC fact — not vague or opinion-based.',
+  fill_blank: 'Fill-in-the-blank. Put ##answer## in stem. Set answer field. (Math only)',
+  one_word: 'One-word/short answer. Question with a single word or number answer. (Math only)',
   match: 'Match-the-following. "pairs" array: ["X → Y", ...]. Min 3 pairs.',
   arrange: 'Arrange-in-order. "items" array in correct sequence. Min 4 items.',
 };
 
+// Type rotation — subject-aware. Error analysis REMOVED from all subjects.
+// FIB and one_word only for Math.
 export const TypeRotation: Record<string, string[]> = {
-  R1: ['mcq', 'fill_blank', 'mcq', 'match', 'fill_blank'],
-  U1: ['mcq', 'fill_blank', 'mcq', 'fill_blank', 'mcq'],
-  U2: ['mcq', 'match', 'arrange', 'mcq', 'match'],
-  A2: ['mcq', 'error_analysis', 'mcq', 'error_analysis', 'mcq'],
-  A3: ['error_analysis', 'mcq', 'error_analysis'],
-  AN2: ['mcq', 'error_analysis', 'mcq', 'error_analysis'],
-  AN3: ['error_analysis', 'error_analysis', 'mcq'],
+  R1: ['mcq', 'true_false', 'mcq', 'match', 'true_false'],
+  U1: ['mcq', 'true_false', 'mcq', 'true_false', 'mcq'],
+  U2: ['mcq', 'match', 'arrange', 'mcq', 'true_false'],
+  A2: ['mcq', 'arrange', 'mcq', 'match', 'mcq'],
+  A3: ['mcq', 'arrange', 'mcq'],
+  AN2: ['mcq', 'match', 'mcq', 'arrange'],
+  AN3: ['mcq', 'mcq', 'arrange'],
+};
+
+// Math-specific rotation includes FIB and one_word
+export const MathTypeRotation: Record<string, string[]> = {
+  R1: ['mcq', 'fill_blank', 'one_word', 'true_false', 'mcq'],
+  U1: ['mcq', 'fill_blank', 'true_false', 'one_word', 'mcq'],
+  U2: ['mcq', 'match', 'fill_blank', 'arrange', 'one_word'],
+  A2: ['mcq', 'fill_blank', 'one_word', 'match', 'mcq'],
+  A3: ['mcq', 'fill_blank', 'one_word'],
+  AN2: ['mcq', 'fill_blank', 'match', 'one_word'],
+  AN3: ['mcq', 'fill_blank', 'mcq'],
 };

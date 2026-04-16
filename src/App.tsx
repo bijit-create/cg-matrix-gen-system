@@ -1983,7 +1983,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                 ) : (
                                   <>
                                     <span className="text-[10px] text-[var(--ink-muted)]">Switch to:</span>
-                                    {['mcq', 'fill_blank', 'error_analysis', 'match', 'arrange'].map(t => (
+                                    {['mcq', 'true_false', 'fill_blank', 'match', 'arrange'].map(t => (
                                       <button
                                         key={t}
                                         disabled={switchingId !== null}
@@ -2048,8 +2048,8 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                     {questions.map((q) => {
                       const qa = qaResults.find((r: any) => r.question_id === q.id);
                       const qType = q.type || 'mcq';
-                      const typeLabel: Record<string, string> = { mcq: 'MCQ', fill_blank: 'Fill in the Blank', error_analysis: 'Error Analysis', match: 'Match the Following', arrange: 'Arrange in Order' };
-                      const typeBg: Record<string, string> = { mcq: 'bg-[#E3F2FD] text-[#1565C0]', fill_blank: 'bg-[#F3E5F5] text-[#7B1FA2]', error_analysis: 'bg-[#FFF3E0] text-[#E65100]', match: 'bg-[#E0F7FA] text-[#00695C]', arrange: 'bg-[#FFF8E1] text-[#F57F17]' };
+                      const typeLabel: Record<string, string> = { mcq: 'MCQ', true_false: 'True / False', fill_blank: 'Fill in the Blank', one_word: 'One Word', match: 'Match the Following', arrange: 'Arrange in Order' };
+                      const typeBg: Record<string, string> = { mcq: 'bg-[#E3F2FD] text-[#1565C0]', true_false: 'bg-[#E8EAF6] text-[#283593]', fill_blank: 'bg-[#F3E5F5] text-[#7B1FA2]', one_word: 'bg-[#E8F5E9] text-[#2E7D32]', match: 'bg-[#E0F7FA] text-[#00695C]', arrange: 'bg-[#FFF8E1] text-[#F57F17]' };
 
                       return (
                         <div key={q.id} className={`tech-border bg-[var(--bg)] ${q.needs_image ? 'border-l-4 border-l-[#1565C0]' : ''} ${qa && !qa.pass ? 'border-[var(--warning)]' : ''}`}>
@@ -2206,7 +2206,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                 <Trash2 size={10} /> Reject
                               </button>
                               <span className="text-[10px] text-[var(--ink-muted)]">Switch to:</span>
-                              {['mcq', 'fill_blank', 'error_analysis', 'match', 'arrange'].map(t => (
+                              {['mcq', 'true_false', 'fill_blank', 'match', 'arrange'].map(t => (
                                 <button key={t} onClick={() => handleRegenerateQuestion(q.id, t)} className={`px-1.5 py-0.5 text-[10px] font-mono border ${qType === t ? 'border-[var(--accent)] bg-[var(--accent)] text-white' : 'border-[var(--line-dark)] hover:bg-[var(--line)]'}`}>
                                   {t.replace('_', ' ')}
                                 </button>
