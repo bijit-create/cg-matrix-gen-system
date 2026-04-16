@@ -111,17 +111,17 @@ export const TypeInstructions: Record<string, string> = {
   arrange: 'Arrange-in-order. "items" array in correct sequence. Min 4 items.',
 };
 
-// Default rotation — MCQ DOMINANT (60-70%). No FIB/OneWord.
+// Default rotation — MCQ ~60%, rest split across True/False, Match, Arrange.
 // Used for: Science, Social Science, Hindi, and all non-Math/English subjects.
-// User feedback: too many non-MCQ types confuse students. MCQ is safest format.
+// No FIB/OneWord (typing issues in regional languages).
 export const TypeRotation: Record<string, string[]> = {
-  R1: ['mcq', 'mcq', 'true_false', 'mcq', 'match'],
-  U1: ['mcq', 'mcq', 'true_false', 'mcq', 'mcq'],
-  U2: ['mcq', 'match', 'mcq', 'mcq', 'arrange'],
-  A2: ['mcq', 'mcq', 'mcq', 'match', 'mcq'],
-  A3: ['mcq', 'mcq', 'arrange', 'mcq'],
-  AN2: ['mcq', 'mcq', 'match', 'mcq', 'mcq'],
-  AN3: ['mcq', 'mcq', 'mcq', 'arrange'],
+  R1: ['mcq', 'true_false', 'mcq', 'match', 'true_false'],
+  U1: ['mcq', 'true_false', 'mcq', 'match', 'mcq'],
+  U2: ['mcq', 'match', 'arrange', 'mcq', 'true_false'],
+  A2: ['mcq', 'match', 'mcq', 'arrange', 'mcq'],
+  A3: ['mcq', 'arrange', 'true_false', 'mcq'],
+  AN2: ['mcq', 'match', 'mcq', 'true_false', 'arrange'],
+  AN3: ['mcq', 'true_false', 'arrange', 'mcq'],
 };
 
 // Math + English: includes FIB and one_word (typing OK in these subjects)
