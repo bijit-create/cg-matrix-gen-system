@@ -231,11 +231,24 @@ export class AgentOrchestrator {
             // Better misconception matching: use TOPIC_CLUSTER and TOPIC for primary match,
             // then score by how many content keywords appear in the misconception text.
             // Require 2+ keyword matches to avoid false positives.
-            const miscStopwords = new Set(['student', 'students', 'think', 'believe', 'understand', 'learn', 'know', 'that', 'this', 'with', 'from', 'they', 'their', 'about', 'when', 'what', 'which', 'have', 'does', 'will', 'been', 'being', 'some', 'only', 'also', 'into', 'than', 'each', 'other', 'make', 'like', 'just', 'over', 'such']);
+            // Extended stopwords: common words that cause false matches
+            const miscStopwords = new Set([
+                'student', 'students', 'think', 'believe', 'understand', 'learn', 'know',
+                'that', 'this', 'with', 'from', 'they', 'their', 'about', 'when', 'what', 'which',
+                'have', 'does', 'will', 'been', 'being', 'some', 'only', 'also', 'into', 'than',
+                'each', 'other', 'make', 'like', 'just', 'over', 'such', 'food', 'body', 'human',
+                'living', 'things', 'example', 'different', 'called', 'types', 'based', 'process',
+                'important', 'required', 'necessary', 'help', 'helps', 'causes', 'cause', 'made',
+                'used', 'using', 'found', 'gives', 'gets', 'takes', 'needs', 'need', 'form',
+                'change', 'changes', 'shows', 'contains', 'present', 'sources', 'source',
+                'identify', 'explain', 'describe', 'classify', 'compare', 'analyse', 'apply',
+            ]);
+
+            // Extract only SPECIFIC topic words (not generic verbs/nouns)
             const topicKeywords = `${loLower} ${skillLower}`
                 .replace(/[^a-z\s]/g, '')
                 .split(/\s+/)
-                .filter((w: string) => w.length >= 4 && !miscStopwords.has(w));
+                .filter((w: string) => w.length >= 5 && !miscStopwords.has(w));
 
             const catalogScored = (misconceptionCatalog as any[])
                 .filter((m: any) => {
@@ -243,16 +256,23 @@ export class AgentOrchestrator {
                     return subject.includes('math') ? mSubject === 'math' : subject.includes('sci') ? mSubject === 'science' : true;
                 })
                 .map((m: any) => {
-                    const mText = `${m.TOPIC_CLUSTER || ''} ${m.TOPIC || ''} ${m.MISCONCEPTION || ''}`.toLowerCase();
-                    const matchCount = topicKeywords.filter((kw: string) => mText.includes(kw)).length;
-                    // Bonus for TOPIC match (more relevant than random keyword in misconception text)
-                    const topicText = `${m.TOPIC_CLUSTER || ''} ${m.TOPIC || ''}`.toLowerCase();
-                    const topicBonus = topicKeywords.filter((kw: string) => topicText.includes(kw)).length * 2;
-                    return { m, score: matchCount + topicBonus };
+                    // Match primarily on TOPIC field (most specific)
+                    const topicText = `${m.TOPIC || ''}`.toLowerCase();
+                    const clusterText = `${m.TOPIC_CLUSTER || ''}`.toLowerCase();
+                    const miscText = `${m.MISCONCEPTION || ''}`.toLowerCase();
+
+                    // TOPIC match gets 3x weight (most relevant)
+                    const topicHits = topicKeywords.filter((kw: string) => topicText.includes(kw)).length * 3;
+                    // TOPIC_CLUSTER match gets 2x weight
+                    const clusterHits = topicKeywords.filter((kw: string) => clusterText.includes(kw)).length * 2;
+                    // MISCONCEPTION text match gets 1x weight
+                    const miscHits = topicKeywords.filter((kw: string) => miscText.includes(kw)).length;
+
+                    return { m, score: topicHits + clusterHits + miscHits };
                 })
-                .filter(s => s.score >= 2) // Require at least 2 keyword matches
+                .filter(s => s.score >= 3) // Require score >= 3 (was 2 — too loose)
                 .sort((a, b) => b.score - a.score)
-                .slice(0, 20); // Top 20 most relevant
+                .slice(0, 15); // Top 15
 
             const catalogMatches = catalogScored.map(s => ({
                 id: s.m.ID, topic: s.m.TOPIC, misconception: s.m.MISCONCEPTION,
@@ -438,13 +458,18 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
             const qId = `${cell}-${startId + qi}`;
             const otherPoints = distributedContent.filter((_, i) => i !== qi).slice(0, 3).join('; ');
 
+            // Rotate names — never repeat within a cell
+            const names = ['Riya', 'Aarav', 'Kabir', 'Priya', 'Meera', 'Ananya', 'Rohan', 'Zara', 'Dev', 'Isha'];
+            const useName = names[(startId + qi) % names.length];
+
             // STAGE 1: Create question (creative, temp 0.4)
             const stage1Prompt = `${Prompts.GenerationStage1}
 ${CellRules[cell] || ''}
 Cell: ${thisCellDef}
 Generate 1 "${qType}". ${TypeInstructions[qType] || TypeInstructions.mcq}
 Content: "${contentPoint}"
-Other questions test: ${otherPoints}. DO NOT overlap.
+use_name: ${useName}
+Other questions test: ${otherPoints}. DO NOT overlap. DO NOT test the same fact.
 Grade: ${grade}, Subject: ${subjectName}, Skill: ${this.config.skill}
 ${misconceptions.length > 0 ? 'Misconceptions: ' + misconceptions.slice(0, 2).join('; ') : ''}`;
 

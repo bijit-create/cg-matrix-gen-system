@@ -32,25 +32,30 @@ Select 4-8 most relevant. Preserve original IDs and sources. Each must be specif
 
   // --- Generation: TWO STAGES ---
 
-  GenerationStage1: `Generate ONE assessment question. UK English. Indian context (₹, names: Riya, Aarav, Kabir, Priya).
+  GenerationStage1: `Generate ONE assessment question. UK English.
 
 OUTPUT: id, type, stem, answer, rationale, needs_image, + type-specific fields.
 
-RULES:
-- Generate ONLY from "selected_content". Use EXACT terminology from content.
-- ONE problem per stem. Stem contains ALL info needed to answer.
-- Use scenarios: "Riya measured..." not "Measure the..."
+CONTENT:
+- Generate ONLY from "selected_content". Use EXACT terminology.
+- ONE problem per stem. Stem contains ALL info needed.
 - NEVER: negative phrasing, "Which is true/false?", passive voice, textbook verbatim.
-- Grade language: Primary(1-5)=max 15 words/sentence. Middle(6-8)=textbook terms OK. High(9-12)=technical OK.
-- needs_image: Decide intelligently per question. Let the subject and content decide.
+- Grade language: Primary(1-5)=max 15 words. Middle(6-8)=textbook terms OK. High(9-12)=technical OK.
 
-PICTURE-BASED QUESTIONS:
-When the content involves real-world objects, organisms, places, diagrams, or visual scenarios — design the MCQ so that the stem or options REQUIRE seeing a picture. Examples:
-- "Look at the picture. Which of these is a herbivore?" (stem needs image of animals)
-- "Which picture shows a plant-based food?" (options are images)
-- "The diagram shows a food web. Which organism is a producer?" (stem needs diagram)
-Set needs_image=true for these. Write the stem assuming the student WILL see the image.
-For subjects like grammar/vocabulary/pure math — most questions will NOT need images. That is correct.`,
+STEM VARIETY (CRITICAL — read carefully):
+- Use the Indian name specified in "use_name" field. Do NOT always use Riya.
+- NEVER start stems the same way. Vary between: direct question, scenario, statement-then-question, data-then-question, observation-then-question.
+- BAD: "Riya is learning about X. Which..." (every question starts this way)
+- GOOD: Direct: "Which nutrient provides energy?" / Scenario: "Kabir ate only rice for a week. What nutrient is he missing?" / Observation: "A doctor notices a patient has weak bones. Which mineral deficiency..."
+- Each question must feel COMPLETELY DIFFERENT from the others in this set.
+
+COGNITIVE LEVEL (CRITICAL):
+- The cell definition tells you EXACTLY what cognitive demand is needed.
+- R1 = recall a fact. U1 = explain why. U2 = compare/classify. A2 = apply to NEW scenario. AN2 = analyse data/patterns to draw conclusion.
+- AN2 is NOT "what happens if you don't eat well?" — that is R1 recall. AN2 is: "Given this meal plan, which nutrient group is missing and what would be the consequence?"
+- If the cell says AN2, the student must ANALYSE information, not just recall a fact.
+
+IMAGE: needs_image = true when stem/options REQUIRE a picture (objects, diagrams, organisms). False for text-based questions. Let content decide.`,
 
   GenerationStage2: `Review and improve this generated question. You are a senior assessment reviewer.
 
