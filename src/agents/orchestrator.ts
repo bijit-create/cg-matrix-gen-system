@@ -1,5 +1,5 @@
 import { generateAgentResponse, generateWithGroundedSearch } from './api';
-import { Prompts } from './prompts';
+import { Prompts, CellRules, TypeInstructions, TypeRotation } from './prompts';
 import { IntakeSchema, ConstructSchema, SubskillSchema, CGMapperSchema, MisconceptionSchema, ContentScopeSchema, GenerationSchema, QASchema } from './schemas';
 import misconceptionCatalog from '../knowledge_base/student_misconceptions_catalog.json';
 // questionFormatter.ts available for client-side type switching
@@ -409,68 +409,19 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
 
         this.log('Generation Agent', `Cell ${cellIndex + 1}/${cellQueue.length}: Generating ${count} item(s) for ${cell}...`);
 
-        // Cell-specific cognitive rules
-        const cellRules: Record<string, string> = {
-            R1: `R1 — Remember DOK1: Student IDENTIFIES/RECALLS/NAMES facts from memory. No explaining or comparing. Pattern: "What is...?", "Name the...", "Which is a...?"`,
-            U1: `U1 — Understand DOK1: Student EXPLAINS/INTERPRETS defining characteristics. No comparing multiple cases. Pattern: "Why is...?", "What happens when...?"`,
-            U2: `U2 — Understand DOK2: Student COMPARES/CLASSIFIES using explicit criteria. No applying rules to new cases. Pattern: "Compare X and Y", "Classify into..."`,
-            A2: `A2 — Apply DOK2: Student APPLIES learned rules to NEW concrete examples. Present NOVEL scenarios. Pattern: "Kabir has... How should he classify?"`,
-            A3: `A3 — Apply DOK3: Student APPLIES rules across MULTIPLE STEPS. Non-routine problems.`,
-            AN2: `AN2 — Analyze DOK2: Student ANALYZES/INFERS patterns in structured data. Pattern: "Look at this data and find...", "What pattern?"`,
-            AN3: `AN3 — Analyze DOK3: Student DETECTS ERRORS/EVALUATES REASONING. Pattern: "Find the mistake in..."`
-        };
-
-        // Assign types to each question position
-        const typeMap: Record<string, string[]> = {
-            R1: ['mcq', 'fill_blank', 'mcq', 'match', 'fill_blank'],
-            U1: ['mcq', 'fill_blank', 'mcq', 'fill_blank', 'mcq'],
-            U2: ['mcq', 'match', 'arrange', 'mcq', 'match'],
-            A2: ['mcq', 'error_analysis', 'mcq', 'error_analysis', 'mcq'],
-            A3: ['error_analysis', 'mcq', 'error_analysis'],
-            AN2: ['mcq', 'error_analysis', 'mcq', 'error_analysis'],
-            AN3: ['error_analysis', 'error_analysis', 'mcq'],
-        };
-        const typesForCell = typeMap[cell] || ['mcq', 'mcq', 'mcq'];
-
-        // Generate questions IN PARALLEL (requestQueue handles concurrency)
+        // Use externalized dicts from prompts.ts
+        const typesForCell = TypeRotation[cell] || ['mcq', 'mcq', 'mcq'];
         const startId = (this.artifacts.allQuestions || []).length + 1;
 
-        const typeInstructions: Record<string, string> = {
-            mcq: `MCQ with 4 options (A,B,C,D). 1 correct (correct=true). Wrong options need "why_wrong". Fill "options" array.`,
-            fill_blank: `Fill-in-the-blank. Use this format in stem: "If X then the answer is ##answer##." Set answer to the correct word/phrase.`,
-            error_analysis: `Error Analysis question. Show a student's step-by-step work solving a problem. Fill the "steps" array with 4-6 steps. Each step = {text: "the student's work line", correct: true/false}. Make 1-2 steps INCORRECT with fix field showing the correct version.
-
-Stem format: "[Student name] solved this problem. Some steps are incorrect. Select those steps."
-
-Example steps array:
-[
-  {"text": "Number of plant-based items = wheat, rice, pulses", "correct": true},
-  {"text": "Number of animal-based items = milk, ghee, paneer", "correct": true},
-  {"text": "Honey comes from plants because bees live on flowers", "correct": false, "fix": "Honey is an animal product because it is produced by bees"},
-  {"text": "Total food items = 6", "correct": true}
-]
-
-The steps must show a COMPLETE solution attempt — not just statements. Include the reasoning, calculation, or classification in each step.`,
-            match: `Match-the-following. Fill "pairs" array with 4-5 strings in "Left → Right" format. Example: ["Wheat → Plant-based", "Milk → Animal-based", "Honey → Animal-based", "Rice → Plant-based"].`,
-            arrange: `Arrange-in-order. Fill "items" array with 4-5 items in the CORRECT sequence. Example: ["Step 1: Identify the food item", "Step 2: Check its source", "Step 3: Classify as plant or animal", "Step 4: Verify the classification"].`,
-        };
-
-        // Distribute content: assign unique points, then fill remaining with combinations
+        // Distribute content uniquely
         const distributedContent: string[] = [];
         if (cellScope.length === 0) {
             for (let i = 0; i < count; i++) distributedContent.push(this.config.skill);
-        } else if (cellScope.length >= count) {
-            // More content than questions — pick unique ones
-            const shuffled = [...cellScope].sort(() => Math.random() - 0.5);
-            for (let i = 0; i < count; i++) distributedContent.push(shuffled[i]);
         } else {
-            // Fewer content points than questions — use all first, then combine pairs for remaining
             const shuffled = [...cellScope].sort(() => Math.random() - 0.5);
             for (let i = 0; i < count; i++) {
-                if (i < shuffled.length) {
-                    distributedContent.push(shuffled[i]);
-                } else {
-                    // Combine two different points for variety
+                if (i < shuffled.length) distributedContent.push(shuffled[i]);
+                else {
                     const a = shuffled[i % shuffled.length];
                     const b = shuffled[(i + 1) % shuffled.length];
                     distributedContent.push(a !== b ? `${a} AND ${b}` : a);
@@ -478,34 +429,40 @@ The steps must show a COMPLETE solution attempt — not just statements. Include
             }
         }
 
+        // --- TWO-STAGE GENERATION (parallel Stage 1, then sequential Stage 2) ---
         const questionPromises = Array.from({ length: count }, (_, qi) => {
             const qType = typesForCell[qi % typesForCell.length];
             const contentPoint = distributedContent[qi];
             const qId = `${cell}-${startId + qi}`;
-
-            // Show OTHER content points so Gemini avoids overlap
             const otherPoints = distributedContent.filter((_, i) => i !== qi).slice(0, 3).join('; ');
 
-            const prompt = `${Prompts.GenerationAgent}
-${cellRules[cell] || ''}
+            // STAGE 1: Create question (creative, temp 0.4)
+            const stage1Prompt = `${Prompts.GenerationStage1}
+${CellRules[cell] || ''}
 Cell: ${thisCellDef}
-Generate 1 "${qType}" question. ${typeInstructions[qType] || typeInstructions.mcq}
-
-SPECIFIC CONTENT to test (this question MUST be about this point):
-"${contentPoint}"
-
-Other questions in this cell test: ${otherPoints}
-DO NOT repeat or overlap with those topics. Test something DIFFERENT.
-
+Generate 1 "${qType}". ${TypeInstructions[qType] || TypeInstructions.mcq}
+Content: "${contentPoint}"
+Other questions test: ${otherPoints}. DO NOT overlap.
 Grade: ${grade}, Subject: ${subjectName}, Skill: ${this.config.skill}
-${misconceptions.length > 0 ? 'Misconceptions: ' + misconceptions.slice(0, 2).join('; ') : ''}
-${this.artifacts.exemplarBank ? 'EXEMPLAR QUESTIONS (match this quality):\n' + this.artifacts.exemplarBank.slice(0, 600) : ''}
-LANGUAGE: UK English (colour, favourite, organise, centre, behaviour). Indian names. Short stems. No negative phrasing. Grade ${grade} appropriate.`;
+${misconceptions.length > 0 ? 'Misconceptions: ' + misconceptions.slice(0, 2).join('; ') : ''}`;
 
-            return generateAgentResponse('Generation Agent', prompt, JSON.stringify({ id: qId, type: qType, cell }), GenerationSchema)
-                .then(q => {
-                    this.log('Generation Agent', `${qId}: ${qType} ✓`);
-                    return { ...q, cell, type: qType };
+            return generateAgentResponse('Generation Agent', stage1Prompt, JSON.stringify({ id: qId, type: qType, cell }), GenerationSchema)
+                .then(async (draft) => {
+                    // STAGE 2: Review & polish (evaluative, temp 0.1)
+                    try {
+                        const stage2Prompt = `${Prompts.GenerationStage2}
+Grade: ${grade}. Cell: ${cell}.
+Question to review: ${JSON.stringify(draft).slice(0, 1500)}`;
+                        const polished = await generateAgentResponse('AI SME QA', stage2Prompt,
+                            JSON.stringify({ id: qId, type: qType, cell }),
+                            GenerationSchema);
+                        this.log('Generation Agent', `${qId}: ${qType} ✓ (2-stage)`);
+                        return { ...polished, cell, type: qType, id: qId };
+                    } catch {
+                        // Stage 2 failed — use Stage 1 draft
+                        this.log('Generation Agent', `${qId}: ${qType} ✓ (stage 1 only)`);
+                        return { ...draft, cell, type: qType, id: qId };
+                    }
                 })
                 .catch(e => {
                     this.log('Generation Agent', `${qId}: ${qType} failed — ${(e as any).message?.slice(0, 50)}`);

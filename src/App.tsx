@@ -881,7 +881,7 @@ const PipelineRunnerView = () => {
         arrange: 'Arrange-in-order. Fill "items" array in correct sequence: ["Step 1: ...", "Step 2: ...", ...].',
       };
 
-      const prompt = `${Prompts.GenerationAgent}
+      const prompt = `${Prompts.GenerationStage1}
 Regenerate this question as a "${newType}" question. Same topic and content, different format.
 ${typeInstructions[newType] || typeInstructions.mcq}
 Original question: "${q.stem}"
@@ -995,7 +995,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
       const scopeList = contentScope.filter((_, i) => selectedScope[i]).map((k: any) => k.knowledge_point).join('\n');
       const result = await generateAgentResponse(
         'Generation Agent',
-        Prompts.GenerationAgent,
+        Prompts.GenerationStage1,
         JSON.stringify({
           construct: construct,
           cg_cell: q.cell,
@@ -2521,7 +2521,7 @@ const QuickGenerateView = () => {
           try {
             const exemplarNote = exemplarBank ? `\nEXEMPLAR QUESTIONS (match this quality):\n${exemplarBank.slice(0, 400)}` : '';
             const q = await generateAgentResponse('Generation Agent',
-              `${Prompts.GenerationAgent}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\nContent: ${content.slice(0, 500) || lo}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''}\nUK English (colour, favourite, organise, centre). Indian names. Grade-appropriate.${avoidNote}${exemplarNote}`,
+              `${Prompts.GenerationStage1}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\nContent: ${content.slice(0, 500) || lo}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''}\nUK English (colour, favourite, organise, centre). Indian names. Grade-appropriate.${avoidNote}${exemplarNote}`,
               JSON.stringify({ id: qId, type: qType, cell }),
               GenerationSchema
             );
