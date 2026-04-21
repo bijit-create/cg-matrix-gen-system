@@ -49,6 +49,7 @@ import { AgentOrchestrator } from './agents/orchestrator';
 import { parseUploadedFile } from './utils/fileParser';
 import { PhaseChips } from './components/PhaseChips';
 import { TriageBar } from './components/TriageBar';
+import { QuestionBody } from './components/QuestionBody';
 
 // --- Types ---
 type Tab = 'dashboard' | 'architecture' | 'state-machine' | 'raci' | 'generate' | 'config';
@@ -1900,121 +1901,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                               </div>
 
                               <div className="p-4">
-                                {/* Question Stem — copy-pasteable */}
-                                <div className="mb-3">
-                                  <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Question Stem</label>
-                                  <div className="tech-border bg-white p-3 text-sm select-all cursor-text min-h-[40px]"><LatexText text={q.stem} /></div>
-                                </div>
-
-                                {/* Stem image if generated */}
-                                {questionImages[qId] && (
-                                  <div className="mb-3 tech-border bg-white p-2 flex justify-center">
-                                    <img src={questionImages[qId]} alt="Question" className="max-w-full max-h-48 object-contain" />
-                                  </div>
-                                )}
-
-                                {/* MCQ Options */}
-                                {qType === 'mcq' && q.options?.length > 0 && (
-                                  <div className="mb-3">
-                                    <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Options</label>
-                                    <div className="flex flex-col gap-1.5">
-                                      {q.options.map((opt: any, i: number) => {
-                                        const isCorrect = opt.correct || opt.is_correct;
-                                        const label = opt.label || String.fromCharCode(65 + i);
-                                        return (
-                                          <div key={i} className={`flex items-start gap-2 tech-border p-2.5 ${isCorrect ? 'border-[var(--success)] bg-[#E8F5E9]' : 'bg-white'}`}>
-                                            <span className={`font-bold text-sm shrink-0 ${isCorrect ? 'text-[var(--success)]' : ''}`}>
-                                              {label}{isCorrect ? ' ✓' : '.'}
-                                            </span>
-                                            <span className="text-sm select-all cursor-text flex-1"><LatexText text={opt.text} /></span>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Fill in the Blank */}
-                                {qType === 'fill_blank' && (
-                                  <div className="mb-3">
-                                    <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Answer</label>
-                                    <div className="tech-border bg-[#E8F5E9] border-[var(--success)] p-2.5 text-sm font-mono select-all cursor-text"><LatexText text={q.answer || q.correct_answer} /></div>
-                                  </div>
-                                )}
-
-                                {/* Error Analysis Steps */}
-                                {qType === 'error_analysis' && q.steps?.length > 0 && (
-                                  <div className="mb-3">
-                                    <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Student's Work</label>
-                                    <div className="flex flex-col gap-1.5">
-                                      {q.steps.map((step: any, i: number) => (
-                                        <div key={i} className={`tech-border p-2.5 ${step.correct ? 'bg-white' : 'bg-[#FFEBEE] border-[var(--danger)]'}`}>
-                                          <div className="flex justify-between items-start">
-                                            <div className="flex-1">
-                                              <span className="font-bold text-xs text-[var(--ink-muted)]">Step {i + 1}: </span>
-                                              <span className={`text-sm select-all cursor-text ${!step.correct ? 'line-through text-[var(--danger)]' : ''}`}><LatexText text={step.text} /></span>
-                                            </div>
-                                            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ml-2 ${step.correct ? 'bg-[#E8F5E9] text-[#2E7D32]' : 'bg-[#FFEBEE] text-[#C62828]'}`}>
-                                              {step.correct ? 'Correct' : 'Incorrect'}
-                                            </span>
-                                          </div>
-                                          {!step.correct && step.fix && (
-                                            <div className="mt-1.5 text-xs text-[var(--success)] select-all cursor-text">Correct: <LatexText text={step.fix} /></div>
-                                          )}
-                                          {step.error_type && !step.correct && (
-                                            <span className="inline-block mt-1 text-[9px] font-mono uppercase px-1.5 py-0.5 bg-[var(--danger)] text-white">{step.error_type}</span>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Match the Following */}
-                                {qType === 'match' && (q.pairs?.length > 0 || q.match_pairs?.length > 0) && (
-                                  <div className="mb-3">
-                                    <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Match Pairs</label>
-                                    <div className="tech-border bg-white overflow-hidden">
-                                      <div className="grid grid-cols-2 bg-[var(--ink)] text-[var(--bg)]">
-                                        <div className="p-2 text-xs font-bold uppercase">Left</div>
-                                        <div className="p-2 text-xs font-bold uppercase border-l border-[#333]">Right (Correct Match)</div>
-                                      </div>
-                                      {(q.pairs || q.match_pairs || []).map((pair: any, i: number) => {
-                                        const left = typeof pair === 'string' ? pair.split(' → ')[0] : pair.left;
-                                        const right = typeof pair === 'string' ? pair.split(' → ')[1] : pair.right;
-                                        return (
-                                          <div key={i} className="grid grid-cols-2 border-t border-[var(--line-dark)]">
-                                            <div className="p-2.5 text-sm select-all cursor-text"><LatexText text={left} /></div>
-                                            <div className="p-2.5 text-sm select-all cursor-text border-l border-[var(--line-dark)] text-[var(--success)] font-medium"><LatexText text={right} /></div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Arrange the Following */}
-                                {qType === 'arrange' && (q.items?.length > 0 || q.arrange_items?.length > 0) && (
-                                  <div className="mb-3">
-                                    <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Correct Order</label>
-                                    <div className="flex flex-col gap-1.5">
-                                      {(q.items || q.arrange_items || []).map((item: string, i: number) => (
-                                        <div key={i} className="flex items-center gap-2 tech-border bg-white p-2.5">
-                                          <span className="w-6 h-6 rounded-full bg-[var(--ink)] text-[var(--bg)] flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
-                                          <span className="text-sm select-all cursor-text flex-1"><LatexText text={item} /></span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Rationale */}
-                                {q.rationale && (
-                                  <div className="mb-2">
-                                    <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Rationale</label>
-                                    <div className="tech-border bg-[var(--surface)] p-2.5 text-xs select-all cursor-text"><LatexText text={q.rationale} /></div>
-                                  </div>
-                                )}
+                                <QuestionBody q={q} qType={qType} image={questionImages[qId]} density="detailed" Latex={LatexText} />
 
                                 {/* QA Issues */}
                                 {qa && qa.issues?.length > 0 && (
@@ -2149,119 +2036,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                           </div>
 
                           <div className="p-4">
-                            {/* Stem */}
-                            <div className="mb-3">
-                              <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Question Stem</label>
-                              <div className="tech-border bg-white p-3 text-sm select-all cursor-text min-h-[40px]"><LatexText text={q.stem} /></div>
-                            </div>
-
-                            {questionImages[q.id] && (
-                              <div className="mb-3 tech-border bg-white p-2 flex justify-center">
-                                <img src={questionImages[q.id]} alt="Question" className="max-w-full max-h-48 object-contain" />
-                              </div>
-                            )}
-
-                            {/* MCQ Options */}
-                            {qType === 'mcq' && q.options?.length > 0 && (
-                              <div className="mb-3">
-                                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Options</label>
-                                <div className="flex flex-col gap-1.5">
-                                  {q.options.map((opt: any, i: number) => {
-                                    const isCorrect = opt.correct || opt.is_correct;
-                                    const label = opt.label || String.fromCharCode(65 + i);
-                                    return (
-                                      <div key={i} className={`flex items-start gap-2 tech-border p-2.5 ${isCorrect ? 'border-[var(--success)] bg-[#E8F5E9]' : 'bg-white'}`}>
-                                        <span className={`font-bold text-sm shrink-0 ${isCorrect ? 'text-[var(--success)]' : ''}`}>{label}{isCorrect ? ' ✓' : '.'}</span>
-                                        <span className="text-sm select-all cursor-text flex-1"><LatexText text={typeof opt === 'string' ? opt : opt.text} /></span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Fill in the Blank */}
-                            {qType === 'fill_blank' && (
-                              <div className="mb-3">
-                                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Answer</label>
-                                <div className="tech-border bg-[#E8F5E9] border-[var(--success)] p-2.5 text-sm font-mono select-all cursor-text"><LatexText text={q.correct_answer || q.answer} /></div>
-                              </div>
-                            )}
-
-                            {/* Error Analysis */}
-                            {qType === 'error_analysis' && q.steps?.length > 0 && (
-                              <div className="mb-3">
-                                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Student's Work</label>
-                                <div className="flex flex-col gap-1.5">
-                                  {q.steps.map((step: any, i: number) => {
-                                    const isCorr = step.correct || step.is_correct;
-                                    return (
-                                      <div key={i} className={`tech-border p-2.5 ${isCorr ? 'bg-white' : 'bg-[#FFEBEE] border-[var(--danger)]'}`}>
-                                        <div className="flex justify-between items-start">
-                                          <div className="flex-1">
-                                            <span className="font-bold text-xs text-[var(--ink-muted)]">Step {i + 1}: </span>
-                                            <span className={`text-sm select-all cursor-text ${!isCorr ? 'line-through text-[var(--danger)]' : ''}`}><LatexText text={step.text} /></span>
-                                          </div>
-                                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ml-2 ${isCorr ? 'bg-[#E8F5E9] text-[#2E7D32]' : 'bg-[#FFEBEE] text-[#C62828]'}`}>{isCorr ? 'Correct' : 'Incorrect'}</span>
-                                        </div>
-                                        {!isCorr && (step.fix || step.correct_version) && (
-                                          <div className="mt-1.5 text-xs text-[var(--success)] select-all cursor-text">Correct: <LatexText text={step.fix || step.correct_version} /></div>
-                                        )}
-                                        {step.error_type && !isCorr && (
-                                          <span className="inline-block mt-1 text-[9px] font-mono uppercase px-1.5 py-0.5 bg-[var(--danger)] text-white">{step.error_type}</span>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Match */}
-                            {qType === 'match' && (q.pairs?.length > 0 || q.match_pairs?.length > 0) && (
-                              <div className="mb-3">
-                                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Match Pairs</label>
-                                <div className="tech-border bg-white overflow-hidden">
-                                  <div className="grid grid-cols-2 bg-[var(--ink)] text-[var(--bg)]">
-                                    <div className="p-2 text-xs font-bold uppercase">Left</div>
-                                    <div className="p-2 text-xs font-bold uppercase border-l border-[#333]">Right (Correct Match)</div>
-                                  </div>
-                                  {(q.pairs || q.match_pairs || []).map((pair: any, i: number) => {
-                                    const left = typeof pair === 'string' ? pair.split(' → ')[0] : pair.left;
-                                    const right = typeof pair === 'string' ? pair.split(' → ')[1] : pair.right;
-                                    return (
-                                      <div key={i} className="grid grid-cols-2 border-t border-[var(--line-dark)]">
-                                        <div className="p-2.5 text-sm select-all cursor-text"><LatexText text={left} /></div>
-                                        <div className="p-2.5 text-sm select-all cursor-text border-l border-[var(--line-dark)] text-[var(--success)] font-medium"><LatexText text={right} /></div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Arrange */}
-                            {qType === 'arrange' && (q.items?.length > 0 || q.arrange_items?.length > 0) && (
-                              <div className="mb-3">
-                                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Correct Order</label>
-                                <div className="flex flex-col gap-1.5">
-                                  {(q.items || q.arrange_items || []).map((item: string, i: number) => (
-                                    <div key={i} className="flex items-center gap-2 tech-border bg-white p-2.5">
-                                      <span className="w-6 h-6 rounded-full bg-[var(--ink)] text-[var(--bg)] flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
-                                      <span className="text-sm select-all cursor-text flex-1"><LatexText text={item} /></span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Rationale */}
-                            {q.rationale && (
-                              <div className="mb-2">
-                                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Rationale</label>
-                                <div className="tech-border bg-[var(--surface)] p-2.5 text-xs select-all cursor-text"><LatexText text={q.rationale} /></div>
-                              </div>
-                            )}
+                            <QuestionBody q={q} qType={qType} image={questionImages[q.id]} density="detailed" Latex={LatexText} />
 
                             {qa && qa.issues?.length > 0 && (
                               <div className={`mt-2 text-xs p-2 tech-border ${qa.severity === 'critical' ? 'bg-[#FFEBEE]' : qa.severity === 'major' ? 'bg-[#FFF3E0]' : 'bg-[var(--surface)]'}`}>
@@ -3187,112 +2962,68 @@ ${q.stem}`;
                       </div>
                     </div>
                     <div className="p-3">
-                      {questionImages[q.id] && (
-                        <div className="mb-2 tech-border bg-white p-2 flex justify-center">
-                          <img src={questionImages[q.id]} alt="Question" className="max-w-full max-h-48 object-contain" />
-                        </div>
-                      )}
                       {editingId === q.id ? (
-                        <textarea
-                          value={editDraft?.stem || ''}
-                          onChange={e => setEditDraft({ ...editDraft, stem: e.target.value })}
-                          className="w-full tech-border bg-white p-2 text-sm mb-2"
-                          rows={3}
-                        />
-                      ) : (
-                        <div className="tech-border bg-white p-2 text-sm select-all cursor-text mb-2">
-                          <LatexText text={q.stem} />
-                        </div>
-                      )}
+                        <>
+                          {questionImages[q.id] && (
+                            <div className="mb-2 tech-border bg-white p-2 flex justify-center">
+                              <img src={questionImages[q.id]} alt="Question" className="max-w-full max-h-48 object-contain" />
+                            </div>
+                          )}
+                          <textarea
+                            value={editDraft?.stem || ''}
+                            onChange={e => setEditDraft({ ...editDraft, stem: e.target.value })}
+                            className="w-full tech-border bg-white p-2 text-sm mb-2"
+                            rows={3}
+                          />
 
-                      {qType === 'mcq' && q.options?.length > 0 && (
-                        <div className="flex flex-col gap-1 mb-2">
-                          {(editingId === q.id ? editDraft.options : q.options).map((opt: any, i: number) => {
-                            const isCorrect = opt.correct || opt.is_correct;
-                            return (
-                              <div key={i} className={`text-sm p-2 tech-border flex items-start gap-1.5 ${isCorrect ? 'border-2 border-[var(--success)] bg-[#E8F5E9] shadow-sm' : 'bg-white'}`}>
-                                <span className={`font-bold text-xs shrink-0 ${isCorrect ? 'text-[var(--success)]' : ''}`}>
-                                  {opt.label || String.fromCharCode(65+i)}
-                                  {isCorrect ? ' ✓ CORRECT' : '.'}
-                                </span>
-                                {editingId === q.id ? (
-                                  <div className="flex-1 flex items-center gap-2">
-                                    <input
-                                      value={opt.text}
-                                      onChange={e => {
-                                        const newOpts = [...editDraft.options];
-                                        newOpts[i] = { ...newOpts[i], text: e.target.value };
-                                        setEditDraft({ ...editDraft, options: newOpts });
-                                      }}
-                                      className="flex-1 bg-transparent border-b border-[var(--line-dark)] text-sm p-1 focus:outline-none focus:border-[var(--accent)]"
-                                    />
-                                    <label className="text-[10px] flex items-center gap-1 cursor-pointer">
+                          {qType === 'mcq' && editDraft?.options?.length > 0 && (
+                            <div className="flex flex-col gap-1 mb-2">
+                              {editDraft.options.map((opt: any, i: number) => {
+                                const isCorrect = opt.correct || opt.is_correct;
+                                return (
+                                  <div key={i} className={`text-sm p-2 tech-border flex items-start gap-1.5 ${isCorrect ? 'border-2 border-[var(--success)] bg-[#E8F5E9] shadow-sm' : 'bg-white'}`}>
+                                    <span className={`font-bold text-xs shrink-0 ${isCorrect ? 'text-[var(--success)]' : ''}`}>
+                                      {opt.label || String.fromCharCode(65 + i)}{isCorrect ? ' ✓ CORRECT' : '.'}
+                                    </span>
+                                    <div className="flex-1 flex items-center gap-2">
                                       <input
-                                        type="radio"
-                                        checked={!!isCorrect}
-                                        onChange={() => {
-                                          const newOpts = editDraft.options.map((o: any, j: number) => ({ ...o, correct: j === i, is_correct: j === i }));
+                                        value={opt.text}
+                                        onChange={e => {
+                                          const newOpts = [...editDraft.options];
+                                          newOpts[i] = { ...newOpts[i], text: e.target.value };
                                           setEditDraft({ ...editDraft, options: newOpts });
                                         }}
+                                        className="flex-1 bg-transparent border-b border-[var(--line-dark)] text-sm p-1 focus:outline-none focus:border-[var(--accent)]"
                                       />
-                                      correct
-                                    </label>
+                                      <label className="text-[10px] flex items-center gap-1 cursor-pointer">
+                                        <input
+                                          type="radio"
+                                          checked={!!isCorrect}
+                                          onChange={() => {
+                                            const newOpts = editDraft.options.map((o: any, j: number) => ({ ...o, correct: j === i, is_correct: j === i }));
+                                            setEditDraft({ ...editDraft, options: newOpts });
+                                          }}
+                                        />
+                                        correct
+                                      </label>
+                                    </div>
                                   </div>
-                                ) : (
-                                  <span className="select-all cursor-text"><LatexText text={opt.text} /></span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {qType === 'fill_blank' && (
-                        editingId === q.id ? (
-                          <input
-                            value={editDraft?.answer || ''}
-                            onChange={e => setEditDraft({ ...editDraft, answer: e.target.value })}
-                            className="w-full tech-border bg-[#E8F5E9] border-2 border-[var(--success)] p-2 text-sm font-mono mb-2"
-                          />
-                        ) : (
-                          <div className="tech-border bg-[#E8F5E9] border-2 border-[var(--success)] p-2 text-sm font-mono select-all cursor-text mb-2 shadow-sm">
-                            <span className="text-[10px] font-bold text-[var(--success)] uppercase mr-2">Answer ✓</span>
-                            <LatexText text={q.answer} />
-                          </div>
-                        )
-                      )}
-
-                      {qType === 'error_analysis' && q.steps?.length > 0 && (
-                        <div className="flex flex-col gap-1 mb-2">
-                          {q.steps.map((s: any, i: number) => (
-                            <div key={i} className={`text-sm p-2 tech-border ${s.correct ? 'bg-white' : 'bg-[#FFEBEE] border-[var(--danger)]'}`}>
-                              <span className="text-xs font-bold text-[var(--ink-muted)]">Step {i+1}: </span>
-                              <span className={`select-all cursor-text ${!s.correct ? 'line-through text-[var(--danger)]' : ''}`}><LatexText text={s.text} /></span>
-                              {!s.correct && s.fix && <div className="text-xs text-[var(--success)] mt-1 select-all cursor-text">Fix: <LatexText text={s.fix} /></div>}
-                              {s.error_type && !s.correct && <span className="ml-2 text-[9px] font-mono uppercase px-1 py-0.5 bg-[var(--danger)] text-white">{s.error_type}</span>}
+                                );
+                              })}
                             </div>
-                          ))}
-                        </div>
-                      )}
+                          )}
 
-                      {qType === 'match' && q.pairs?.length > 0 && (
-                        <div className="tech-border bg-white overflow-hidden mb-2">
-                          <div className="grid grid-cols-2 bg-[var(--ink)] text-[var(--bg)]"><div className="p-1.5 text-[10px] font-bold">Left</div><div className="p-1.5 text-[10px] font-bold border-l border-[#333]">Right</div></div>
-                          {q.pairs.map((p: any, i: number) => { const [l,r] = typeof p === 'string' ? p.split(' → ') : [p.left, p.right]; return (
-                            <div key={i} className="grid grid-cols-2 border-t border-[var(--line-dark)]"><div className="p-2 text-sm select-all cursor-text"><LatexText text={l} /></div><div className="p-2 text-sm select-all cursor-text border-l border-[var(--line-dark)] text-[var(--success)]"><LatexText text={r} /></div></div>
-                          ); })}
-                        </div>
+                          {qType === 'fill_blank' && (
+                            <input
+                              value={editDraft?.answer || ''}
+                              onChange={e => setEditDraft({ ...editDraft, answer: e.target.value })}
+                              className="w-full tech-border bg-[#E8F5E9] border-2 border-[var(--success)] p-2 text-sm font-mono mb-2"
+                            />
+                          )}
+                        </>
+                      ) : (
+                        <QuestionBody q={q} qType={qType} image={questionImages[q.id]} density="compact" Latex={LatexText} />
                       )}
-
-                      {qType === 'arrange' && q.items?.length > 0 && (
-                        <div className="flex flex-col gap-1 mb-2">
-                          {q.items.map((item: string, i: number) => (
-                            <div key={i} className="flex items-center gap-2 tech-border bg-white p-2"><span className="w-5 h-5 rounded-full bg-[var(--ink)] text-[var(--bg)] flex items-center justify-center text-[10px] font-bold shrink-0">{i+1}</span><span className="text-sm select-all cursor-text"><LatexText text={item} /></span></div>
-                          ))}
-                        </div>
-                      )}
-
-                      {q.rationale && <div className="text-[10px] text-[var(--ink-muted)] bg-[var(--surface)] p-1.5 tech-border select-all cursor-text"><LatexText text={q.rationale} /></div>}
                     </div>
                   </div>
                 );
