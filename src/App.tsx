@@ -1886,14 +1886,95 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
               {/* Cell-by-cell generation review */}
               {currentStep === 7 && currentCellData && (
                 <div className="mb-8">
-                  <div className="flex justify-between items-center mb-4 border-b border-[var(--line-dark)] pb-2">
+                  {/* D5 · dense progress strip */}
+                  {(() => {
+                    const target = cellQueue.reduce((s, cq) => s + (cq.count || 0), 0);
+                    const done = questions.length;
+                    const qaPass = qaResults.filter((r: any) => r.pass).length;
+                    const qaWarn = qaResults.filter((r: any) => !r.pass).length;
+                    return (
+                      <div style={{
+                        padding: '12px 16px', background: '#fff',
+                        border: '1px solid var(--border-subtle)', borderRadius: 12,
+                        display: 'flex', alignItems: 'center', gap: 16,
+                        marginBottom: 12,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 96 }}>
+                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: 'var(--swiftee-deep)', lineHeight: 1 }}>{done}</div>
+                          <div style={{ color: 'var(--fg-muted)', fontSize: 13 }}>/ {target}</div>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div className="sw-bar-track" style={{ height: 6 }}>
+                            <div className="sw-bar-fill" style={{ width: `${target ? (done / target) * 100 : 0}%` }} />
+                          </div>
+                          <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
+                            {cellQueue.map((cq, idx) => {
+                              const isActive = idx === currentCellData.index;
+                              const isDone = idx < currentCellData.index;
+                              const dotColor = isDone ? 'var(--green-500)' : isActive ? 'var(--swiftee-gold)' : 'var(--fg-muted)';
+                              return (
+                                <span
+                                  key={cq.cell}
+                                  style={{
+                                    padding: '5px 9px', borderRadius: 6, fontSize: 11,
+                                    border: `1px solid ${isActive ? 'var(--swiftee-deep)' : 'var(--border-subtle)'}`,
+                                    background: isActive ? 'var(--swiftee-deep)' : '#FAFAFC',
+                                    color: isActive ? '#fff' : 'var(--swiftee-deep)',
+                                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                                  }}
+                                >
+                                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: dotColor }} />
+                                  <b style={{ fontFamily: 'var(--font-display)', fontWeight: 800 }}>{cq.cell}</b>
+                                  <span style={{ opacity: 0.75, fontFamily: 'ui-monospace, Menlo, monospace' }}>
+                                    {isDone ? `${cq.count}/${cq.count}` : isActive ? `${currentCellData.questions.length}/${cq.count}` : `0/${cq.count}`}
+                                  </span>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                          {qaPass > 0 && <span className="sw-chip sw-chip-green sw-chip-sm">{qaPass} pass</span>}
+                          {qaWarn > 0 && <span className="sw-chip sw-chip-gold sw-chip-sm">{qaWarn} warn</span>}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* D5 · dark "Now generating" banner */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '10px 14px', background: 'var(--swiftee-deep)', color: '#fff',
+                    borderRadius: 10, marginBottom: 12, gap: 10,
+                  }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{
+                        fontSize: 9, fontWeight: 800, letterSpacing: '0.1em',
+                        textTransform: 'uppercase', color: 'var(--swiftee-gold)', marginBottom: 1,
+                      }}>
+                        {status === 'running' ? 'Now generating' : 'Current cell'} · {currentCellData.cell}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, lineHeight: 1.3 }}>
+                        {cellData[currentCellData.cell]?.definition || currentCellData.cell}
+                      </div>
+                    </div>
+                    {status === 'running' && (
+                      <span className="sw-chip sw-chip-gold sw-chip-sm" style={{ background: 'rgba(255,186,0,0.2)', color: 'var(--swiftee-gold)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <Loader2 size={10} className="animate-spin" /> Generating
+                      </span>
+                    )}
+                    {status === 'waiting' && (
+                      <span className="sw-chip sw-chip-gold sw-chip-sm" style={{ background: 'rgba(255,186,0,0.2)', color: 'var(--swiftee-gold)' }}>
+                        Awaiting approval
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex justify-between items-center mb-4 gap-3">
                     <div className="flex items-center gap-3">
                       <h3 className="text-lg font-bold">
                         Cell {currentCellData.index + 1}/{cellQueue.length}: {currentCellData.cell}
                       </h3>
-                      <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[var(--accent)] text-white`}>
-                        {cellData[currentCellData.cell]?.definition?.slice(0, 60) || currentCellData.cell}
-                      </span>
                     </div>
                     <div className="flex items-center gap-2 text-xs font-mono text-[var(--ink-muted)]">
                       <span>{currentCellData.questions.length} items</span>
@@ -1901,21 +1982,6 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                         <span className="text-[var(--success)]">({questions.length} approved so far)</span>
                       )}
                     </div>
-                  </div>
-
-                  {/* Cell progress bar */}
-                  <div className="flex gap-1 mb-4">
-                    {cellQueue.map((cq, i) => (
-                      <div
-                        key={cq.cell}
-                        className={`flex-1 h-2 rounded-full transition-colors ${
-                          i < currentCellData.index ? 'bg-[var(--success)]' :
-                          i === currentCellData.index ? 'bg-[var(--accent)]' :
-                          'bg-[var(--line)]'
-                        }`}
-                        title={`${cq.cell}: ${cq.count} questions`}
-                      />
-                    ))}
                   </div>
 
                   {status === 'running' && (
