@@ -68,7 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     } else if (action === 'generateImage') {
       const response = await ai.models.generateContent({
-        model: model || 'gemini-2.5-flash-preview-image-generation',
+        model: model || 'gemini-2.5-flash-image',
         contents: { parts: [{ text: userPayload || '' }] },
         config: {
           responseModalities: ['IMAGE', 'TEXT'],
@@ -85,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else if (action === 'editImage') {
       const { imageData, imageMimeType, editPrompt } = req.body;
       const response = await ai.models.generateContent({
-        model: model || 'gemini-2.5-flash-preview-image-generation',
+        model: model || 'gemini-2.5-flash-image',
         contents: {
           parts: [
             { inlineData: { data: imageData, mimeType: imageMimeType } },
