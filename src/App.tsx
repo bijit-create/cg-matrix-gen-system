@@ -2339,9 +2339,10 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
 };
 
 // ===== FEEDBACK REFINER — takes user feedback and refines questions =====
-const FeedbackRefiner = ({ questions, setQuestions, lo, skill, metadata, log, setStatus, setProgress }: {
+const FeedbackRefiner = ({ questions, setQuestions, lo, skill, metadata, log, setStatus, setProgress, refreshImage }: {
   questions: any[]; setQuestions: (q: any[]) => void; lo: string; skill: string; metadata: any;
   log: (msg: string) => void; setStatus: (s: any) => void; setProgress: (p: string) => void;
+  refreshImage?: (q: any) => void;
 }) => {
   const [feedback, setFeedback] = useState('');
   const [isRefining, setIsRefining] = useState(false);
@@ -2410,6 +2411,13 @@ Simple English, Indian names, short stems.`;
       setQuestions(refinedQs);
       setFeedback('');
       log(`Refinement complete. ${refinedQs.length} questions updated.`);
+      // Refresh images for every refined question (clears stale, regenerates if still needed).
+      if (refreshImage) {
+        for (const rq of refinedQs) {
+          const prevQ = questions.find(x => x.id === rq.id);
+          if (prevQ && prevQ.stem !== rq.stem) refreshImage(rq);
+        }
+      }
     } catch (e: any) {
       log(`Refinement error: ${e.message?.slice(0, 50)}`);
     } finally {
@@ -2809,8 +2817,11 @@ ${q.stem}`;
         JSON.stringify({ id: q.id, type: schemaType, cell: q.cell }),
         GenerationSchema);
 
-      setQuestions(questions.map(x => x.id === q.id ? { ...refined, cell: q.cell, type: q.type, id: q.id } : x));
+      const updated = { ...refined, cell: q.cell, type: q.type, id: q.id };
+      setQuestions(questions.map(x => x.id === q.id ? updated : x));
       log(`${q.id}: ${action} ✓`);
+      // Question changed — stale image must go; regenerate if still needed.
+      refreshImageForQuestion(updated);
     } catch (e: any) {
       log(`${q.id}: ${action} failed — ${e.message?.slice(0, 40)}`);
     } finally {
@@ -2825,9 +2836,37 @@ ${q.stem}`;
   const cancelEdit = () => { setEditingId(null); setEditDraft(null); };
   const saveEdit = () => {
     if (!editDraft) return;
+    const prev = questions.find(x => x.id === editDraft.id);
     setQuestions(questions.map(x => x.id === editDraft.id ? editDraft : x));
     log(`${editDraft.id}: edited ✓`);
+    // If the stem changed, refresh the image (clear + regenerate if still needed)
+    if (prev && prev.stem !== editDraft.stem) refreshImageForQuestion(editDraft);
     cancelEdit();
+  };
+
+  // Clear stale image and auto-regenerate a fresh one if the question still needs an image.
+  const refreshImageForQuestion = async (q: any) => {
+    setQuestionImages(prev => {
+      const next = { ...prev };
+      delete next[q.id];
+      return next;
+    });
+    if (!q?.needs_image || !q?.stem) return;
+    setGeneratingImageId(q.id);
+    try {
+      const { generateQuestionImage } = await import('./agents/imageGen');
+      const result = await generateQuestionImage(q.stem);
+      if (result.status === 'generated' && result.dataUrl) {
+        setQuestionImages(prev => ({ ...prev, [q.id]: result.dataUrl! }));
+        log(`${q.id}: image refreshed (${result.sizeKb}KB)`);
+      } else {
+        log(`${q.id}: image skipped — ${result.reason}`);
+      }
+    } catch {
+      log(`${q.id}: image refresh failed`);
+    } finally {
+      setGeneratingImageId(null);
+    }
   };
 
   return (
@@ -3019,7 +3058,7 @@ ${q.stem}`;
 
               {/* Feedback & Refine */}
               {status === 'done' && (
-                <FeedbackRefiner questions={questions} setQuestions={setQuestions} lo={lo} skill={skill} metadata={metadata} log={log} setStatus={setStatus} setProgress={setProgress} />
+                <FeedbackRefiner questions={questions} setQuestions={setQuestions} lo={lo} skill={skill} metadata={metadata} log={log} setStatus={setStatus} setProgress={setProgress} refreshImage={refreshImageForQuestion} />
               )}
 
               {questions.map((q: any) => {
