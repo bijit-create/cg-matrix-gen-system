@@ -231,6 +231,184 @@ export function renderTable(
   return canvas.toDataURL('image/png');
 }
 
+// --- Line graph (distance-time, speed-time, coordinate plots, multi-segment) ---
+// Deterministic canvas rendering — avoids AI hallucination of axes/values.
+export function renderLineGraph(
+  spec: {
+    title?: string;
+    xLabel?: string;
+    yLabel?: string;
+    xMin?: number; xMax?: number;
+    yMin?: number; yMax?: number;
+    series: Array<{
+      label?: string;
+      color?: string;
+      points: Array<{ x: number; y: number; label?: string }>;
+    }>;
+  },
+  width = 900,
+  height = 600
+): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+
+  const colors = ['#1565C0', '#E65100', '#2E7D32', '#7B1FA2', '#C62828', '#F57F17'];
+  const series = spec.series || [];
+
+  // Auto-range if not provided
+  const allX = series.flatMap(s => s.points.map(p => p.x));
+  const allY = series.flatMap(s => s.points.map(p => p.y));
+  const xMin = spec.xMin ?? Math.min(0, ...allX);
+  const xMax = spec.xMax ?? Math.max(...allX);
+  const yMin = spec.yMin ?? Math.min(0, ...allY);
+  const yMax = spec.yMax ?? Math.max(...allY);
+  const xRange = Math.max(1e-6, xMax - xMin);
+  const yRange = Math.max(1e-6, yMax - yMin);
+
+  const padL = 80, padR = 40, padT = spec.title ? 60 : 30, padB = 80;
+  const plotL = padL, plotR = width - padR;
+  const plotT = padT, plotB = height - padB;
+  const plotW = plotR - plotL;
+  const plotH = plotB - plotT;
+
+  const toPx = (x: number, y: number) => ({
+    px: plotL + ((x - xMin) / xRange) * plotW,
+    py: plotB - ((y - yMin) / yRange) * plotH,
+  });
+
+  // Title
+  if (spec.title) {
+    ctx.fillStyle = '#141414';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(spec.title, width / 2, 30);
+  }
+
+  // Gridlines + tick labels
+  const niceStep = (range: number) => {
+    const raw = range / 6;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / mag;
+    const step = n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10;
+    return step * mag;
+  };
+  const xStep = niceStep(xRange);
+  const yStep = niceStep(yRange);
+
+  ctx.strokeStyle = '#eee';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = '#666';
+  ctx.font = '12px Arial';
+
+  // Y grid + labels
+  ctx.textAlign = 'right';
+  for (let v = Math.ceil(yMin / yStep) * yStep; v <= yMax + 1e-9; v += yStep) {
+    const { py } = toPx(xMin, v);
+    ctx.strokeStyle = '#eee';
+    ctx.beginPath();
+    ctx.moveTo(plotL, py);
+    ctx.lineTo(plotR, py);
+    ctx.stroke();
+    ctx.fillStyle = '#666';
+    ctx.fillText(formatTick(v), plotL - 8, py + 4);
+  }
+
+  // X grid + labels
+  ctx.textAlign = 'center';
+  for (let v = Math.ceil(xMin / xStep) * xStep; v <= xMax + 1e-9; v += xStep) {
+    const { px } = toPx(v, yMin);
+    ctx.strokeStyle = '#eee';
+    ctx.beginPath();
+    ctx.moveTo(px, plotT);
+    ctx.lineTo(px, plotB);
+    ctx.stroke();
+    ctx.fillStyle = '#666';
+    ctx.fillText(formatTick(v), px, plotB + 18);
+  }
+
+  // Axes
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(plotL, plotT);
+  ctx.lineTo(plotL, plotB);
+  ctx.lineTo(plotR, plotB);
+  ctx.stroke();
+
+  // Axis labels
+  ctx.fillStyle = '#141414';
+  ctx.font = 'bold 13px Arial';
+  if (spec.xLabel) {
+    ctx.textAlign = 'center';
+    ctx.fillText(spec.xLabel, (plotL + plotR) / 2, height - 30);
+  }
+  if (spec.yLabel) {
+    ctx.save();
+    ctx.translate(22, (plotT + plotB) / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.fillText(spec.yLabel, 0, 0);
+    ctx.restore();
+  }
+
+  // Series
+  series.forEach((s, si) => {
+    const color = s.color || colors[si % colors.length];
+    const pts = [...s.points].sort((a, b) => a.x - b.x);
+    if (pts.length === 0) return;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const { px, py } = toPx(p.x, p.y);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.stroke();
+
+    // Point markers + labels
+    pts.forEach(p => {
+      const { px, py } = toPx(p.x, p.y);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(px, py, 4, 0, Math.PI * 2);
+      ctx.fill();
+      if (p.label) {
+        ctx.fillStyle = '#141414';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(p.label, px + 8, py - 8);
+      }
+    });
+
+    // Series legend (top-right)
+    if (s.label) {
+      const legendY = plotT + 20 + si * 20;
+      const legendX = plotR - 140;
+      ctx.fillStyle = color;
+      ctx.fillRect(legendX, legendY - 8, 14, 3);
+      ctx.fillStyle = '#333';
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText(s.label, legendX + 20, legendY - 2);
+    }
+  });
+
+  return canvas.toDataURL('image/png');
+}
+
+function formatTick(v: number): string {
+  if (Math.abs(v) >= 1000) return v.toFixed(0);
+  if (Number.isInteger(v)) return String(v);
+  return v.toFixed(Math.abs(v) < 1 ? 2 : 1);
+}
+
 // --- Number line ---
 export function renderNumberLine(
   min: number, max: number, marks: { value: number; label?: string; color?: string }[],

@@ -39,14 +39,19 @@ export async function analyzeVisualIntent(question: string): Promise<{
   try {
     return await generateAgentResponse(
       'Image Analysis',
-      `Classify what visual this question needs.
+      `Classify what visual this question needs. CRITICAL: any visual with AXES, COORDINATES, or NUMERIC DATA must use a RENDER_* option — never GENERATE_IMAGE (AI image-gen hallucinates axes and values).
 
-GENERATE_IMAGE: Real-world objects, food, animals, plants, scenarios, diagrams. Write image prompt.
-RENDER_MATH: Math equations, fractions, algebra. Write LaTeX expression only.
-RENDER_CHART: Data visualization. Write JSON: {"type":"bar"|"pie","title":"...","data":[{"label":"...","value":N}]}
-RENDER_TABLE: Tabular data. Write JSON: {"title":"...","headers":["..."],"rows":[["..."]]}
-RENDER_NUMBERLINE: Number lines. Write JSON: {"min":N,"max":N,"marks":[{"value":N,"label":"..."}]}
-GENERATE_SVG: Precise geometry ONLY (angles, polygons, coordinates).
+RENDER_LINE_GRAPH: Distance-time, speed-time, temperature-time, any x-y plot with line segments or labelled points (P, Q, R, S). Write JSON:
+  {"title":"...","xLabel":"Time (min)","yLabel":"Distance (km)","xMin":0,"xMax":60,"yMin":0,"yMax":10,
+   "series":[{"label":"Rohan","color":"#1565C0",
+     "points":[{"x":0,"y":0,"label":"Home"},{"x":10,"y":2,"label":"P"},{"x":30,"y":2,"label":"Q"},{"x":60,"y":10,"label":"Park"}]}]}
+  Use points to encode each segment transition exactly (include halts as two points with same y).
+RENDER_CHART: Bar or pie ONLY (categorical). JSON: {"type":"bar"|"pie","title":"...","data":[{"label":"...","value":N}]}
+RENDER_TABLE: Tabular data. JSON: {"title":"...","headers":["..."],"rows":[["..."]]}
+RENDER_NUMBERLINE: 1-D number lines. JSON: {"min":N,"max":N,"marks":[{"value":N,"label":"..."}]}
+RENDER_MATH: Math expression to typeset. LaTeX string only.
+GENERATE_SVG: Precise geometry ONLY (angles, polygons, coordinate geometry figures — NOT plots with axes).
+GENERATE_IMAGE: Real-world objects, food, animals, plants, body parts, scenery. NEVER for graphs, charts, data, axes, coordinates, equations, tables.
 SKIP: No visual needed.
 
 Question: "${question}"`,
@@ -54,7 +59,7 @@ Question: "${question}"`,
       {
         type: Type.OBJECT,
         properties: {
-          status: { type: Type.STRING, enum: ['generate_image', 'render_math', 'render_chart', 'render_table', 'render_numberline', 'generate_svg', 'skip'] },
+          status: { type: Type.STRING, enum: ['generate_image', 'render_math', 'render_chart', 'render_table', 'render_numberline', 'render_line_graph', 'generate_svg', 'skip'] },
           reason: { type: Type.STRING },
           prompt: { type: Type.STRING }
         },
@@ -105,6 +110,12 @@ export async function generateQuestionImage(question: string): Promise<{
         const parsed = JSON.parse(intent.prompt);
         const { renderNumberLine } = await import('../utils/preciseRenderer');
         rawDataUrl = renderNumberLine(parsed.min, parsed.max, parsed.marks, parsed.title);
+        break;
+      }
+      case 'render_line_graph': {
+        const parsed = JSON.parse(intent.prompt);
+        const { renderLineGraph } = await import('../utils/preciseRenderer');
+        rawDataUrl = renderLineGraph(parsed);
         break;
       }
       case 'generate_svg': {
