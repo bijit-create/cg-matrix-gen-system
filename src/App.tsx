@@ -47,7 +47,7 @@ import { PhaseChips } from './components/PhaseChips';
 import { TriageBar } from './components/TriageBar';
 import { QuestionBody } from './components/QuestionBody';
 import { PipelineStepper } from './components/swiftee/PipelineStepper';
-import { cx as swCx, Icon as SwIcon } from './components/swiftee/atoms';
+import { cx as swCx, Icon as SwIcon, InlineGateBar, HelpPopover } from './components/swiftee/atoms';
 
 // --- Types ---
 type Tab = 'dashboard' | 'architecture' | 'state-machine' | 'raci' | 'generate' | 'config';
@@ -1424,7 +1424,21 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
               {/* Gate 1: Construct & Subskills */}
               {(currentStep === 2 || (currentStep > 2 && status !== 'idle')) && (
                 <div className={`mb-8 transition-all ${currentStep > 2 ? 'opacity-40 pointer-events-none max-h-24 overflow-hidden' : ''}`}>
-                  <h3 className="text-lg font-bold mb-4 border-b border-[var(--line-dark)] pb-2">1. Construct & Subskills</h3>
+                  <div className="flex justify-between items-center mb-4 border-b border-[var(--line-dark)] pb-2">
+                    <h3 className="text-lg font-bold">1. Construct & Subskills</h3>
+                    {currentStep === 2 && (
+                      <HelpPopover label="Why this step?">
+                        Subskills are the <b style={{ color: 'var(--swiftee-deep)' }}>testable actions</b> your skill decomposes into. You decide which to test, in what order, and whether to add any the AI missed.
+                        <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '12px 0' }} />
+                        <div style={{ fontSize: 10, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 6 }}>Downstream impact</div>
+                        <ul style={{ margin: 0, padding: '0 0 0 16px', lineHeight: 1.65 }}>
+                          <li>Content Scoping keyword-matches each subskill to your sources.</li>
+                          <li>Each Hess cell will target one or more approved subskills.</li>
+                          <li>Rejected subskills won't appear anywhere downstream.</li>
+                        </ul>
+                      </HelpPopover>
+                    )}
+                  </div>
                   <div className="mb-4">
                     <label className="block col-header mb-1">Construct Statement</label>
                     <textarea
@@ -1597,14 +1611,12 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                   )}
 
                   {currentStep === 2 && status === 'waiting' && (
-                    <div className="mt-6 flex justify-end">
-                      <button
-                        onClick={handleApprove}
+                    <div className="mt-6">
+                      <InlineGateBar
+                        onApprove={handleApprove}
+                        approveLabel={`Approve ${selectedSubskills.filter(Boolean).length} subskills`}
                         disabled={selectedSubskills.filter(Boolean).length === 0}
-                        className="bg-[var(--ink)] text-[var(--bg)] px-6 py-2 text-sm font-bold uppercase tracking-wide hover:bg-[var(--success)] transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <CheckSquare size={16} /> Approve {selectedSubskills.filter(Boolean).length} Subskills & Continue
-                      </button>
+                      />
                     </div>
                   )}
                 </div>
@@ -1613,13 +1625,25 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
               {/* Gate 2: CG Matrix & Misconceptions */}
               {currentStep >= 5 && (
                 <div className={`mb-8 transition-opacity ${currentStep > 5 ? 'opacity-50 pointer-events-none' : ''}`}>
-                  <div className="flex justify-between items-center mb-4 border-b border-[var(--line-dark)] pb-2">
+                  <div className="flex justify-between items-center mb-4 border-b border-[var(--line-dark)] pb-2 gap-3">
                     <h3 className="text-lg font-bold">3. Custom Hess Matrix & Misconceptions</h3>
-                    {currentStep === 5 && (
-                      <button onClick={() => handleGoBack(4)} className="px-2 py-1 text-[10px] font-mono uppercase border border-[var(--line-dark)] hover:bg-[var(--line)] flex items-center gap-1">
-                        <ArrowRight size={10} className="rotate-180" /> Back to Content Scope
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {currentStep === 5 && (
+                        <HelpPopover label="Why a matrix?">
+                          <b style={{ color: 'var(--swiftee-deep)' }}>Hess cells control what the assessment measures.</b> Each cell = a row (Bloom cognitive process) × column (Depth of Knowledge). Allocating counts per cell prevents an item set that is all DOK-1 recall.
+                          <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '12px 0' }} />
+                          <div style={{ fontSize: 10, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 6 }}>Downstream</div>
+                          <div style={{ fontSize: 12, color: 'var(--fg-secondary)', lineHeight: 1.5 }}>
+                            Generation drafts one batch per cell, drawing only on the KPs and subskills that fit. Misconceptions become wrong-answer attractors for MCQs.
+                          </div>
+                        </HelpPopover>
+                      )}
+                      {currentStep === 5 && (
+                        <button onClick={() => handleGoBack(4)} className="px-2 py-1 text-[10px] font-mono uppercase border border-[var(--line-dark)] hover:bg-[var(--line)] flex items-center gap-1">
+                          <ArrowRight size={10} className="rotate-180" /> Back
+                        </button>
+                      )}
+                    </div>
                   </div>
                   
                   <div className="mb-6">
@@ -1746,14 +1770,13 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                   </div>
 
                   {currentStep === 5 && status === 'waiting' && (
-                    <div className="mt-6 flex justify-end">
-                      <button 
-                        onClick={handleApprove} 
+                    <div className="mt-6">
+                      <InlineGateBar
+                        onBack={() => handleGoBack(4)}
+                        onApprove={handleApprove}
+                        approveLabel={`Approve matrix · ${totalPlanned} items & generate`}
                         disabled={totalPlanned !== parseInt(count)}
-                        className="bg-[var(--ink)] text-[var(--bg)] px-6 py-2 text-sm font-bold uppercase tracking-wide hover:bg-[var(--success)] transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <CheckSquare size={16} /> Approve Hess Matrix & Generate Questions
-                      </button>
+                      />
                     </div>
                   )}
                 </div>
@@ -1762,31 +1785,32 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
               {/* Gate 2: Content Scope Approval */}
               {(currentStep >= 4 || (currentStep >= 3 && contentScope.length > 0)) && contentScope.length > 0 && (
                 <div className={`mb-8 transition-all ${currentStep > 4 ? 'opacity-40 pointer-events-none max-h-24 overflow-hidden' : ''}`}>
-                  <div className="flex justify-between items-center mb-4 border-b border-[var(--line-dark)] pb-2">
+                  <div className="flex justify-between items-center mb-4 border-b border-[var(--line-dark)] pb-2 gap-3">
                     <h3 className="text-lg font-bold">2. Content Scope — Knowledge Points for Question Generation</h3>
-                    {currentStep === 4 && (
-                      <button onClick={() => handleGoBack(2)} className="px-2 py-1 text-[10px] font-mono uppercase border border-[var(--line-dark)] hover:bg-[var(--line)] flex items-center gap-1">
-                        <ArrowRight size={10} className="rotate-180" /> Back to Subskills
-                      </button>
-                    )}
                     <div className="flex items-center gap-3 text-xs font-mono">
+                      {currentStep === 4 && (
+                        <HelpPopover label="Why this step?">
+                          <b style={{ color: 'var(--swiftee-deep)' }}>Only approved points can become questions.</b> This is what prevents students seeing a question about a concept one source mentioned in passing but that is not in scope for this grade.
+                          <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '12px 0' }} />
+                          <div style={{ fontSize: 10, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, marginBottom: 6 }}>Bulk actions</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <button className="sw-btn sw-btn-sm sw-btn-ghost" onClick={() => setSelectedScope(contentScope.map(() => true))} style={{ justifyContent: 'flex-start' }}>
+                              <SwIcon name="done_all" size="sm" /> Select all
+                            </button>
+                            <button className="sw-btn sw-btn-sm sw-btn-ghost" onClick={() => setSelectedScope(contentScope.map((k: any) => k.scope_type === 'core'))} style={{ justifyContent: 'flex-start' }}>
+                              <SwIcon name="check_circle" size="sm" /> Core only
+                            </button>
+                          </div>
+                        </HelpPopover>
+                      )}
                       <span className="text-[var(--ink-muted)]">{selectedScope.filter(Boolean).length}/{contentScope.length} selected</span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedScope(contentScope.map(() => true))}
-                        className="px-2 py-0.5 border border-[var(--line-dark)] hover:bg-[var(--line)] text-[10px] uppercase"
-                      >Select All</button>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedScope(contentScope.map((k: any) => k.scope_type === 'core'))}
-                        className="px-2 py-0.5 border border-[var(--line-dark)] hover:bg-[var(--line)] text-[10px] uppercase"
-                      >Core Only</button>
+                      {currentStep === 4 && (
+                        <button onClick={() => handleGoBack(2)} className="px-2 py-1 text-[10px] font-mono uppercase border border-[var(--line-dark)] hover:bg-[var(--line)] flex items-center gap-1">
+                          <ArrowRight size={10} className="rotate-180" /> Back
+                        </button>
+                      )}
                     </div>
                   </div>
-
-                  <p className="text-xs text-[var(--ink-muted)] mb-4">
-                    Review the knowledge points extracted from your content. Only selected items will be used for question generation. Deselect anything out of scope or grade-inappropriate.
-                  </p>
 
                   {/* Group by category */}
                   {[...new Set(contentScope.map((k: any) => k.category))].map((category: any) => {
@@ -1847,14 +1871,13 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                   })}
 
                   {currentStep === 4 && status === 'waiting' && (
-                    <div className="mt-6 flex justify-end">
-                      <button
-                        onClick={handleApprove}
+                    <div className="mt-6">
+                      <InlineGateBar
+                        onBack={() => handleGoBack(2)}
+                        onApprove={handleApprove}
+                        approveLabel={`Approve ${selectedScope.filter(Boolean).length} knowledge points`}
                         disabled={selectedScope.filter(Boolean).length === 0}
-                        className="bg-[var(--ink)] text-[var(--bg)] px-6 py-2 text-sm font-bold uppercase tracking-wide hover:bg-[var(--success)] transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <CheckSquare size={16} /> Approve {selectedScope.filter(Boolean).length} Knowledge Points & Build Hess Matrix
-                      </button>
+                      />
                     </div>
                   )}
                 </div>
@@ -2106,16 +2129,19 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                   </div>
 
                   {currentStep === 9 && status === 'waiting' && (
-                    <div className="mt-6 flex justify-between items-center">
-                      <button
-                        onClick={handleAddCustomQuestion}
-                        className="px-4 py-2 text-xs font-bold uppercase tracking-wide border border-[var(--line-dark)] hover:bg-[var(--line)] transition-colors flex items-center gap-2"
-                      >
-                        <Plus size={14} /> Add Custom Question
-                      </button>
-                      <button onClick={handleApprove} className="bg-[var(--ink)] text-[var(--bg)] px-6 py-2 text-sm font-bold uppercase tracking-wide hover:bg-[var(--success)] transition-colors flex items-center gap-2">
-                        <CheckSquare size={16} /> Approve Final Set ({questions.length} items)
-                      </button>
+                    <div className="mt-6 flex flex-col gap-3">
+                      <div className="flex justify-start">
+                        <button
+                          onClick={handleAddCustomQuestion}
+                          className="px-4 py-2 text-xs font-bold uppercase tracking-wide border border-[var(--line-dark)] hover:bg-[var(--line)] transition-colors flex items-center gap-2"
+                        >
+                          <Plus size={14} /> Add Custom Question
+                        </button>
+                      </div>
+                      <InlineGateBar
+                        onApprove={handleApprove}
+                        approveLabel={`Approve final set · ${questions.length} items`}
+                      />
                     </div>
                   )}
                 </div>
