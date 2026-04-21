@@ -6,11 +6,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  LayoutDashboard,
-  Network,
-  GitMerge,
   Users,
-  Settings,
   AlertCircle,
   CheckCircle2,
   Clock,
@@ -50,6 +46,8 @@ import { parseUploadedFile } from './utils/fileParser';
 import { PhaseChips } from './components/PhaseChips';
 import { TriageBar } from './components/TriageBar';
 import { QuestionBody } from './components/QuestionBody';
+import { PipelineStepper } from './components/swiftee/PipelineStepper';
+import { cx as swCx, Icon as SwIcon } from './components/swiftee/atoms';
 
 // --- Types ---
 type Tab = 'dashboard' | 'architecture' | 'state-machine' | 'raci' | 'generate' | 'config';
@@ -94,50 +92,73 @@ const LatexText: React.FC<{ text: any; className?: string; block?: boolean }> = 
 
 // --- Components ---
 
+// Swiftee-styled topbar. Primary nav is "Generate" (workspace). Secondary tabs
+// (Overview / Architecture / State Machine / RACI / Config) live in a kebab menu
+// so the main bar stays minimal per the design brief.
 const TopNav = ({ activeTab, setActiveTab }: { activeTab: Tab, setActiveTab: (t: Tab) => void }) => {
-  const navItems: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'dashboard', label: 'Overview', icon: <LayoutDashboard size={16} /> },
-    { id: 'generate', label: 'Generate', icon: <PlayCircle size={16} /> },
-    { id: 'architecture', label: 'Architecture', icon: <Network size={16} /> },
-    { id: 'state-machine', label: 'State Machine', icon: <GitMerge size={16} /> },
-    { id: 'raci', label: 'RACI Matrix', icon: <Users size={16} /> },
+  const [more, setMore] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!more) return;
+    const onDoc = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMore(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [more]);
+
+  const secondary: { id: Tab; label: string; icon: string }[] = [
+    { id: 'dashboard',     label: 'Overview',      icon: 'dashboard' },
+    { id: 'architecture',  label: 'Architecture',  icon: 'account_tree' },
+    { id: 'state-machine', label: 'State Machine', icon: 'linear_scale' },
+    { id: 'raci',          label: 'RACI',          icon: 'groups' },
+    { id: 'config',        label: 'Config',        icon: 'settings' },
   ];
 
   return (
-    <div className="w-full border-b border-[var(--line-dark)] bg-[var(--surface)] flex items-center justify-between px-6 shrink-0 h-16">
-      <div className="flex items-center gap-3">
-        <BrainCircuit className="text-[var(--accent)]" size={24} />
-        <h1 className="font-sans font-bold text-lg leading-none tracking-tight uppercase">
-          CG-Matrix Gen System
-        </h1>
+    <div className="sw-topbar">
+      <div className="sw-brand">
+        <div className="sw-brand-mark">M</div>
+        <div>
+          <div className="sw-brand-name">CG-Matrix Gen</div>
+          <div className="sw-brand-sub">Assessment Studio</div>
+        </div>
       </div>
-      
-      <nav className="flex items-center gap-1">
-        {navItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setActiveTab(item.id)}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors rounded-md ${
-              activeTab === item.id 
-                ? 'bg-[var(--ink)] text-[var(--bg)]' 
-                : 'hover:bg-[var(--line)] text-[var(--ink)]'
-            }`}
-          >
-            {item.icon}
-            {item.label}
-          </button>
-        ))}
-      </nav>
-
-      <div>
-        <button
-          onClick={() => setActiveTab('config')}
-          className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md ${activeTab === 'config' ? 'bg-[var(--ink)] text-[var(--bg)]' : 'hover:bg-[var(--line)]'}`}
-        >
-          <Settings size={16} />
-          Config
+      <nav className="sw-topnav">
+        <button className={activeTab === 'generate' ? 'on' : ''} onClick={() => setActiveTab('generate')}>
+          <SwIcon name="science" size="sm" /> Workspace
         </button>
+      </nav>
+      <div style={{ flex: 1 }} />
+      <div ref={moreRef} style={{ position: 'relative' }}>
+        <button
+          onClick={() => setMore(v => !v)}
+          className={swCx('sw-btn sw-btn-sm', secondary.some(s => s.id === activeTab) ? 'sw-btn-primary' : 'sw-btn-ghost')}
+        >
+          <SwIcon name="more_horiz" size="sm" /> More
+        </button>
+        {more && (
+          <div
+            style={{
+              position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 50,
+              background: '#fff', border: '1px solid var(--border-subtle)', borderRadius: 10,
+              boxShadow: '0 12px 40px rgba(10,27,57,0.14)', padding: 6, minWidth: 180,
+            }}
+          >
+            {secondary.map(s => (
+              <button
+                key={s.id}
+                onClick={() => { setActiveTab(s.id); setMore(false); }}
+                className={swCx('sw-btn sw-btn-sm sw-btn-ghost', activeTab === s.id && 'sw-btn-primary')}
+                style={{ width: '100%', justifyContent: 'flex-start' }}
+              >
+                <SwIcon name={s.icon} size="sm" /> {s.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
+      <div className="sw-avatar">SME</div>
     </div>
   );
 };
@@ -1274,14 +1295,34 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
         </div>
       </header>
 
-      {/* Phase indicator — Stage A.1 skeleton, lives above the detailed gate stepper */}
-      <div className="mb-2 shrink-0">
-        <PhaseChips phases={[
-          { id: 'brief', label: 'Brief', state: lo && skill ? 'done' : 'active' },
-          { id: 'generate', label: 'Generate', state: currentStep >= 9 ? 'done' : status === 'running' || status === 'waiting' ? 'active' : lo && skill ? 'active' : 'pending' },
-          { id: 'triage', label: 'Triage', state: currentStep >= 9 ? 'active' : 'pending' },
-          { id: 'export', label: 'Export', state: status === 'completed' && questions.length > 0 ? 'active' : 'pending' },
-        ]} />
+      {/* Swiftee pipeline stepper — 8 steps with gate badges */}
+      <div className="shrink-0 -mx-6">
+        {(() => {
+          // Map numeric currentStep → stepper ID
+          const currentId =
+            currentStep <= 1 ? 'intake' :
+            currentStep === 2 ? 'subskills' :
+            currentStep <= 4 ? 'scope' :
+            currentStep === 5 ? 'matrix' :
+            currentStep === 6 ? 'miscon' :
+            currentStep <= 8 ? 'generate' :
+            currentStep === 9 ? 'review' : 'export';
+          const order = ['intake', 'subskills', 'scope', 'matrix', 'miscon', 'generate', 'review', 'export'];
+          const currentIdx = order.indexOf(currentId);
+          const doneIds = order.slice(0, currentIdx);
+          return (
+            <PipelineStepper
+              current={currentId}
+              done={doneIds}
+              run={{
+                id: parsedMetadata?.skillCode ? `#${parsedMetadata.skillCode}` : undefined,
+                title: lo ? (lo.length > 40 ? lo.slice(0, 40) + '…' : lo) : undefined,
+                grade: parsedMetadata?.gradeCode,
+                skillCode: parsedMetadata?.subjectCode,
+              }}
+            />
+          );
+        })()}
       </div>
 
       {/* Gate stepper — click to go back */}
