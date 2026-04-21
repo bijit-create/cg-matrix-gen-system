@@ -83,7 +83,7 @@ function checkContent(stem: string): QAFlag[] {
 }
 
 // === QUALITY CONTROL & HYGIENE ===
-function checkQuality(stem: string, options: any[]): QAFlag[] {
+function checkQuality(stem: string, options: any[], profile: 'cbse' | 'state' = 'cbse'): QAFlag[] {
   const flags: QAFlag[] = [];
 
   // Dummy content
@@ -108,10 +108,17 @@ function checkQuality(stem: string, options: any[]): QAFlag[] {
     }
   });
 
-  // Stem word count (research: non-English stems > 40 words = language load > cognitive demand)
+  // Stem word count. State-board profile tightens cap 40 → 25 and raises severity (Divyansh).
   const wordCount = stem.trim().split(/\s+/).length;
-  if (wordCount > 40) {
-    flags.push({ rule: 'high_language_load', category: 'quality', severity: 'minor', message: `Stem is ${wordCount} words. For non-language subjects, keep under 40 to avoid language load exceeding cognitive demand.`, field: 'stem' });
+  const cap = profile === 'state' ? 25 : 40;
+  if (wordCount > cap) {
+    flags.push({
+      rule: 'high_language_load',
+      category: 'quality',
+      severity: profile === 'state' ? 'major' : 'minor',
+      message: `Stem is ${wordCount} words. ${profile === 'state' ? 'State-board profile' : 'For non-language subjects'}, keep under ${cap}.`,
+      field: 'stem',
+    });
   }
 
   return flags;
@@ -217,7 +224,7 @@ function checkAlignment(stem: string, lo: string, options?: any[]): QAFlag[] {
 }
 
 // === MAIN RUNNER ===
-export function runRuleBasedQA(questions: any[], lo: string): RuleQAResult[] {
+export function runRuleBasedQA(questions: any[], lo: string, profile: 'cbse' | 'state' = 'cbse'): RuleQAResult[] {
   const results: RuleQAResult[] = [];
   const allStems = new Set<string>();
 
@@ -229,7 +236,7 @@ export function runRuleBasedQA(questions: any[], lo: string): RuleQAResult[] {
     // Run ALL checks
     flags.push(...checkFormatting(stem, options));
     flags.push(...checkContent(stem));
-    flags.push(...checkQuality(stem, options));
+    flags.push(...checkQuality(stem, options, profile));
     flags.push(...checkDistractors(options));
     flags.push(...checkLocalization(stem, options));
     flags.push(...checkAlignment(stem, lo, options));
@@ -251,4 +258,55 @@ export function runRuleBasedQA(questions: any[], lo: string): RuleQAResult[] {
   }
 
   return results;
+}
+
+// === NUMERICAL DIVERSITY (Divyansh — pattern-lock detection) ===
+// Jaccard similarity on content-word sets (digits dropped) across numerical stems.
+// Flags: pair-wise Jaccard > 0.6, or ≥ 3 stems sharing leading 6 tokens.
+export function checkNumericalDiversity(questions: any[]): string[] {
+  const findings: string[] = [];
+  const nums = questions.filter(q => /\d/.test(q.stem || ''));
+  if (nums.length < 3) return findings;
+
+  const tokenize = (s: string): Set<string> => {
+    const stop = new Set(['the', 'a', 'an', 'of', 'is', 'are', 'was', 'were', 'be', 'to', 'in', 'on', 'at', 'and', 'or', 'if', 'then', 'for', 'with', 'by', 'as', 'from', 'this', 'that', 'it']);
+    return new Set(
+      s.toLowerCase()
+        .replace(/[^a-z\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 3 && !stop.has(w))
+    );
+  };
+  const jaccard = (a: Set<string>, b: Set<string>): number => {
+    if (a.size === 0 || b.size === 0) return 0;
+    let inter = 0;
+    a.forEach(w => { if (b.has(w)) inter++; });
+    return inter / (a.size + b.size - inter);
+  };
+
+  const sets = nums.map(q => tokenize(q.stem));
+  let highSimPairs = 0;
+  for (let i = 0; i < sets.length; i++) {
+    for (let j = i + 1; j < sets.length; j++) {
+      const s = jaccard(sets[i], sets[j]);
+      if (s > 0.6) {
+        highSimPairs++;
+        findings.push(`High similarity (Jaccard=${s.toFixed(2)}) between ${nums[i].id} and ${nums[j].id}.`);
+      }
+    }
+  }
+  if (highSimPairs === 0) findings.push(`diversity OK — ${nums.length} numericals, no pair above 0.6 Jaccard.`);
+
+  // Leading-6-token repetition
+  const leads: Record<string, string[]> = {};
+  nums.forEach(q => {
+    const key = (q.stem || '').toLowerCase().split(/\s+/).slice(0, 6).join(' ');
+    if (!key) return;
+    (leads[key] ||= []).push(q.id);
+  });
+  Object.entries(leads).forEach(([key, ids]) => {
+    if (ids.length >= 3) findings.push(`${ids.length} numericals share opener "${key}..." — ${ids.join(', ')}.`);
+  });
+
+  return findings;
 }

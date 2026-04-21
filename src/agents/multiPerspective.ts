@@ -110,7 +110,7 @@ Return decision (true/false), confidence (0-100), reason.`
 // =============================================================
 
 export async function evaluateQuestionQuality(
-  question: any, subject: string, grade: string, lo: string
+  question: any, subject: string, grade: string, lo: string, chapterContent?: string
 ): Promise<{
   pass: boolean;
   overallScore: number;
@@ -121,10 +121,11 @@ export async function evaluateQuestionQuality(
   const qType = question.type || 'mcq';
   const options = (question.options || []).map((o: any) => `${o.label || '?'}. ${o.text || ''}`).join('\n');
   const answer = question.answer || question.correct_answer || '';
+  const isPhysics = /phys/i.test(subject || '');
 
   const qSummary = `Type: ${qType}\nStem: ${stem}\n${options ? 'Options:\n' + options : ''}\nAnswer: ${answer}`;
 
-  const perspectives = [
+  const perspectives: { lens: string; prompt: string }[] = [
     // Perspective 1: Factual accuracy
     {
       lens: 'Factual',
@@ -149,9 +150,12 @@ Return: pass (true if no factual errors), score (0-100), issues (list of factual
 - Are distractors plausible and based on real student misconceptions?
 - Is the stem clear and unambiguous?
 - Does the question avoid: negative phrasing, "all of the above", verbatim textbook copying?
+${qType === 'error_analysis' && isPhysics ? `- PHYSICS ERROR ANALYSIS: each wrong step must carry an "error_type" from {unit_dimensional, sign_direction, formula_misapplication, reference_frame, significant_figures}. The error must be physics-meaningful (NOT an arithmetic slip). Flag if error_type is missing, vague, or mismatched to the wrong step.` : ''}
+${qType === 'error_analysis' && /math/i.test(subject) ? `- MATH ERROR ANALYSIS: each wrong step must carry an "error_type" (sign, transposition, distribution, inverse_op, fraction_rule, order_of_ops) naming a real procedural misconception. Flag if the error is just arithmetic miscalculation.` : ''}
 
 Question:
 ${qSummary}
+${question.steps ? `\nSteps:\n${(question.steps as any[]).map((s: any, i: number) => `${i + 1}. [${s.correct ? 'OK' : 'ERR'}${s.error_type ? ':' + s.error_type : ''}] ${s.text}${s.fix ? ' | fix: ' + s.fix : ''}`).join('\n')}` : ''}
 
 LO: ${lo}
 Grade: ${grade}
@@ -173,6 +177,26 @@ ${qSummary}
 Return: pass (true if language is appropriate), score (0-100), issues (list of language problems, empty if none).`
     },
   ];
+
+  // Perspective 4: Terminology / chapter alignment (Bhanu Priya) — only when chapter content is available
+  if (chapterContent && chapterContent.trim().length >= 80) {
+    perspectives.push({
+      lens: 'Terminology',
+      prompt: `You are an NCERT textbook reviewer. Check this question for TERMINOLOGY alignment ONLY.
+- List any noun or technical term in the stem, options, or answer that is NOT present verbatim in the CHAPTER CONTENT below, AND is a non-NCERT synonym for a chapter term (e.g., "food-making process" instead of "photosynthesis"; "drying up" instead of "evaporation").
+- Do NOT flag common vocabulary (articles, common verbs, grade-appropriate general words). Only flag domain-specific substitutions.
+- If every domain-specific term is chapter-aligned, return pass=true.
+
+Question:
+${qSummary}
+
+CHAPTER CONTENT (source of truth):
+${chapterContent.slice(0, 2500)}
+
+Subject: ${subject} | Grade: ${grade}
+Return: pass (true if all domain-specific terms align with chapter), score (0-100), issues (list of non-NCERT substitutions found, each naming the wrong term and the correct chapter term).`,
+    });
+  }
 
   // Run all 3 in parallel
   const results = await Promise.allSettled(

@@ -140,7 +140,9 @@ export const GenerationSchema: Schema = {
             properties: {
                 text: { type: Type.STRING },
                 correct: { type: Type.BOOLEAN },
-                fix: { type: Type.STRING }
+                fix: { type: Type.STRING },
+                // Typed physics/math error categories when applicable
+                error_type: { type: Type.STRING }
             },
             required: ["text", "correct"]
         }},

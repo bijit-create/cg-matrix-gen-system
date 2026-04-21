@@ -37,11 +37,27 @@ Select 4-8 most relevant. Preserve original IDs and sources. Each must be specif
 
 OUTPUT: id, type, stem, answer, rationale, needs_image, + type-specific fields.
 
+LATEX (MANDATORY for any mathematical content):
+- EVERY mathematical expression, equation, exponent, fraction, root, matrix, summation, inequality, or algebraic symbol MUST be wrapped in LaTeX delimiters.
+- Inline math uses \\( ... \\) — e.g., \\(a^m \\cdot a^n = a^{m+n}\\), \\(x^2 + 3x - 4 = 0\\).
+- Display math uses \\[ ... \\] for standalone lines when appropriate.
+- Use \\dfrac{a}{b} for fractions, a^{m+n} for exponents, \\sqrt[n]{a} for roots, \\cdot for multiplication, \\leq / \\geq / \\neq for comparisons.
+- Never use raw ASCII math like "a^m * a^n" or "1/2" in stems, options, answers, steps, pairs, items, or rationale — ALWAYS LaTeX-wrapped.
+- Applies to EVERY field, including Match "pairs" (e.g., "\\(\\dfrac{1}{x^p}\\) → \\(x^{-p}\\)") and Arrange "items".
+- Plain prose (non-mathematical words) stays plain — do not LaTeX-wrap English words.
+
 CONTENT:
-- Generate ONLY from "selected_content". Use EXACT terminology.
+- Generate ONLY from "selected_content". Use ONLY terms that appear verbatim in selected_content / chapter_content / approved_terms. Do NOT substitute synonyms (e.g., if chapter says "photosynthesis", never write "food-making process"; if it says "evaporation", never write "drying up"). If a term you want is not in the chapter, rephrase to avoid it.
 - ONE problem per stem. Stem contains ALL info needed.
 - NEVER: negative phrasing, "Which is true/false?", passive voice, textbook verbatim.
 - Grade language: Primary(1-5)=max 15 words. Middle(6-8)=textbook terms OK. High(9-12)=technical OK.
+
+NUMERICAL DIVERSITY (when generating numericals):
+- Do NOT mirror a template with only the numbers changed. Vary:
+  (i) GIVEN vs UNKNOWN mapping — shift which quantity is the unknown;
+  (ii) OPERATION CLASS — rotate between ratio, linear-equation, mensuration, percentage, data interpretation;
+  (iii) CONTEXT — money, length, time, area, speed, population — don't repeat the same context twice in a row.
+- If a student can solve 2-3 of your numericals, they should NOT be able to solve the rest by pattern-matching.
 
 DIFFICULTY (CRITICAL):
 - Default to SIMPLE, DIRECT questions. A simple concept should be asked simply.
@@ -113,8 +129,8 @@ Return: pass, issues, severity, score (0-100).`,
 // --- Externalized dicts (previously inline in orchestrator.ts) ---
 
 export const CellRules: Record<string, string> = {
-  R1: 'R1 — Remember DOK1: Student IDENTIFIES/RECALLS/NAMES facts from memory. No explaining or comparing.',
-  U1: 'U1 — Understand DOK1: Student EXPLAINS/INTERPRETS defining characteristics. No comparing multiple cases.',
+  R1: 'R1 — Remember DOK1: Student IDENTIFIES/RECALLS/NAMES facts from memory. No explaining or comparing. Stem format MUST be a direct question or one-sentence statement. NO scenario framing. NO character names. NO "Consider the case..." / "Imagine that..." openers.',
+  U1: 'U1 — Understand DOK1: Student EXPLAINS/INTERPRETS defining characteristics. No comparing multiple cases. Prefer direct "Why" / "How" / statement-then-question. Scenario opener forbidden.',
   U2: 'U2 — Understand DOK2: Student COMPARES/CLASSIFIES using explicit criteria. No applying rules to new cases.',
   A2: 'A2 — Apply DOK2: Student APPLIES learned rules to NEW concrete examples. Present NOVEL scenarios.',
   A3: 'A3 — Apply DOK3: Student APPLIES rules across MULTIPLE STEPS. Non-routine problems. Present multi-step scenarios where student must combine conditions or chain reasoning.',
@@ -209,4 +225,23 @@ export function getSubjectHint(subject: string): string {
   if (s.includes('econ')) return SubjectLanguageHint.economics;
   if (s.includes('account')) return SubjectLanguageHint.accountancy;
   return '';
+}
+
+// --- Grade 9/10 math concept boundary (NCERT-aligned). Keeps numericals in-scope. ---
+export const GradeMathBoundary: Record<string, { allow: string[]; disallow: string[] }> = {
+  '9':  {
+    allow: ['number systems (rationals/irrationals)', 'polynomials up to degree 3', 'linear equations in 2 variables', 'Euclid geometry basics', 'lines and angles', 'triangles congruence', 'quadrilaterals', 'areas of parallelograms & triangles', 'circles (basic)', 'Heron\'s formula', 'surface area & volume (cuboid/cone/cylinder/sphere)', 'statistics (mean/median/mode, bar graphs)', 'probability (empirical)'],
+    disallow: ['calculus (limits/derivatives/integrals)', 'matrices & determinants', 'complex numbers', 'trigonometric identities beyond Pythagorean', 'vectors', 'permutations & combinations', 'conic sections', 'binomial theorem', '3D coordinate geometry'],
+  },
+  '10': {
+    allow: ['real numbers (Euclid\'s lemma, HCF/LCM)', 'polynomials (zeroes, division algorithm)', 'pair of linear equations', 'quadratic equations', 'arithmetic progressions', 'triangles (similarity)', 'coordinate geometry (distance, section, area)', 'trigonometry (ratios, identities — basic, heights & distances)', 'circles (tangents)', 'areas related to circles', 'surface area & volume (composites)', 'statistics (cumulative frequency, mean/median/mode)', 'probability (classical)'],
+    disallow: ['calculus', 'matrices & determinants', 'complex numbers', 'conic sections (parabola/ellipse/hyperbola beyond basic)', 'binomial theorem', '3D geometry', 'vectors', 'permutations & combinations', 'inverse trigonometric functions'],
+  },
+};
+
+export function getGradeMathBoundary(grade: string | number | undefined): string {
+  const g = String(grade || '').match(/\d+/)?.[0] || '';
+  const b = GradeMathBoundary[g];
+  if (!b) return '';
+  return `\nGRADE ${g} MATH BOUNDARY (NCERT):\n- IN-SCOPE topics: ${b.allow.join('; ')}.\n- OUT-OF-SCOPE — DO NOT use concepts, formulas, or problem types from: ${b.disallow.join('; ')}.\n- Numericals must stay within in-scope topics. Do NOT require knowledge introduced in later grades.`;
 }

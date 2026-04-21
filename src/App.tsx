@@ -33,14 +33,60 @@ import {
   Globe,
   ExternalLink,
   Youtube,
-  FileDown
+  FileDown,
+  SlidersHorizontal,
+  Sparkles,
+  Zap,
+  Edit3,
+  Save,
+  X,
+  RefreshCw
 } from 'lucide-react';
+
+import katex from 'katex';
 
 import { AgentOrchestrator } from './agents/orchestrator';
 import { parseUploadedFile } from './utils/fileParser';
 
 // --- Types ---
 type Tab = 'dashboard' | 'architecture' | 'state-machine' | 'raci' | 'pipeline' | 'quick' | 'config';
+
+// --- LaTeX renderer: parses \( \), \[ \], $ $, $$ $$ and renders via KaTeX ---
+const LatexText: React.FC<{ text: any; className?: string; block?: boolean }> = ({ text, className, block }) => {
+  const raw = text == null ? '' : String(text);
+  if (!raw) return null;
+  // Regex matches: \[...\] | \(...\) | $$...$$ | $...$
+  const parts: Array<{ type: 'text' | 'inline' | 'display'; value: string }> = [];
+  const re = /\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$/g;
+  let lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw)) !== null) {
+    if (m.index > lastIndex) parts.push({ type: 'text', value: raw.slice(lastIndex, m.index) });
+    if (m[1] !== undefined) parts.push({ type: 'display', value: m[1] });
+    else if (m[2] !== undefined) parts.push({ type: 'inline', value: m[2] });
+    else if (m[3] !== undefined) parts.push({ type: 'display', value: m[3] });
+    else if (m[4] !== undefined) parts.push({ type: 'inline', value: m[4] });
+    lastIndex = re.lastIndex;
+  }
+  if (lastIndex < raw.length) parts.push({ type: 'text', value: raw.slice(lastIndex) });
+  if (parts.length === 0) parts.push({ type: 'text', value: raw });
+
+  const Tag: any = block ? 'div' : 'span';
+  return (
+    <Tag className={className}>
+      {parts.map((p, i) => {
+        if (p.type === 'text') return <span key={i}>{p.value}</span>;
+        let html = '';
+        try {
+          html = katex.renderToString(p.value, { displayMode: p.type === 'display', throwOnError: false, output: 'html' });
+        } catch {
+          return <span key={i}>{p.value}</span>;
+        }
+        return <span key={i} dangerouslySetInnerHTML={{ __html: html }} />;
+      })}
+    </Tag>
+  );
+};
 
 // --- Components ---
 
@@ -1845,7 +1891,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                 {/* Question Stem — copy-pasteable */}
                                 <div className="mb-3">
                                   <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Question Stem</label>
-                                  <div className="tech-border bg-white p-3 text-sm select-all cursor-text min-h-[40px]">{q.stem}</div>
+                                  <div className="tech-border bg-white p-3 text-sm select-all cursor-text min-h-[40px]"><LatexText text={q.stem} /></div>
                                 </div>
 
                                 {/* Stem image if generated */}
@@ -1868,7 +1914,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                             <span className={`font-bold text-sm shrink-0 ${isCorrect ? 'text-[var(--success)]' : ''}`}>
                                               {label}{isCorrect ? ' ✓' : '.'}
                                             </span>
-                                            <span className="text-sm select-all cursor-text flex-1">{opt.text}</span>
+                                            <span className="text-sm select-all cursor-text flex-1"><LatexText text={opt.text} /></span>
                                           </div>
                                         );
                                       })}
@@ -1880,7 +1926,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                 {qType === 'fill_blank' && (
                                   <div className="mb-3">
                                     <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Answer</label>
-                                    <div className="tech-border bg-[#E8F5E9] border-[var(--success)] p-2.5 text-sm font-mono select-all cursor-text">{q.answer || q.correct_answer}</div>
+                                    <div className="tech-border bg-[#E8F5E9] border-[var(--success)] p-2.5 text-sm font-mono select-all cursor-text"><LatexText text={q.answer || q.correct_answer} /></div>
                                   </div>
                                 )}
 
@@ -1894,14 +1940,17 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                           <div className="flex justify-between items-start">
                                             <div className="flex-1">
                                               <span className="font-bold text-xs text-[var(--ink-muted)]">Step {i + 1}: </span>
-                                              <span className={`text-sm select-all cursor-text ${!step.correct ? 'line-through text-[var(--danger)]' : ''}`}>{step.text}</span>
+                                              <span className={`text-sm select-all cursor-text ${!step.correct ? 'line-through text-[var(--danger)]' : ''}`}><LatexText text={step.text} /></span>
                                             </div>
                                             <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ml-2 ${step.correct ? 'bg-[#E8F5E9] text-[#2E7D32]' : 'bg-[#FFEBEE] text-[#C62828]'}`}>
                                               {step.correct ? 'Correct' : 'Incorrect'}
                                             </span>
                                           </div>
                                           {!step.correct && step.fix && (
-                                            <div className="mt-1.5 text-xs text-[var(--success)] select-all cursor-text">Correct: {step.fix}</div>
+                                            <div className="mt-1.5 text-xs text-[var(--success)] select-all cursor-text">Correct: <LatexText text={step.fix} /></div>
+                                          )}
+                                          {step.error_type && !step.correct && (
+                                            <span className="inline-block mt-1 text-[9px] font-mono uppercase px-1.5 py-0.5 bg-[var(--danger)] text-white">{step.error_type}</span>
                                           )}
                                         </div>
                                       ))}
@@ -1923,8 +1972,8 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                         const right = typeof pair === 'string' ? pair.split(' → ')[1] : pair.right;
                                         return (
                                           <div key={i} className="grid grid-cols-2 border-t border-[var(--line-dark)]">
-                                            <div className="p-2.5 text-sm select-all cursor-text">{left}</div>
-                                            <div className="p-2.5 text-sm select-all cursor-text border-l border-[var(--line-dark)] text-[var(--success)] font-medium">{right}</div>
+                                            <div className="p-2.5 text-sm select-all cursor-text"><LatexText text={left} /></div>
+                                            <div className="p-2.5 text-sm select-all cursor-text border-l border-[var(--line-dark)] text-[var(--success)] font-medium"><LatexText text={right} /></div>
                                           </div>
                                         );
                                       })}
@@ -1940,7 +1989,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                       {(q.items || q.arrange_items || []).map((item: string, i: number) => (
                                         <div key={i} className="flex items-center gap-2 tech-border bg-white p-2.5">
                                           <span className="w-6 h-6 rounded-full bg-[var(--ink)] text-[var(--bg)] flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
-                                          <span className="text-sm select-all cursor-text flex-1">{item}</span>
+                                          <span className="text-sm select-all cursor-text flex-1"><LatexText text={item} /></span>
                                         </div>
                                       ))}
                                     </div>
@@ -1951,7 +2000,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                 {q.rationale && (
                                   <div className="mb-2">
                                     <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Rationale</label>
-                                    <div className="tech-border bg-[var(--surface)] p-2.5 text-xs select-all cursor-text">{q.rationale}</div>
+                                    <div className="tech-border bg-[var(--surface)] p-2.5 text-xs select-all cursor-text"><LatexText text={q.rationale} /></div>
                                   </div>
                                 )}
 
@@ -2084,7 +2133,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                             {/* Stem */}
                             <div className="mb-3">
                               <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Question Stem</label>
-                              <div className="tech-border bg-white p-3 text-sm select-all cursor-text min-h-[40px]">{q.stem}</div>
+                              <div className="tech-border bg-white p-3 text-sm select-all cursor-text min-h-[40px]"><LatexText text={q.stem} /></div>
                             </div>
 
                             {questionImages[q.id] && (
@@ -2104,7 +2153,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                     return (
                                       <div key={i} className={`flex items-start gap-2 tech-border p-2.5 ${isCorrect ? 'border-[var(--success)] bg-[#E8F5E9]' : 'bg-white'}`}>
                                         <span className={`font-bold text-sm shrink-0 ${isCorrect ? 'text-[var(--success)]' : ''}`}>{label}{isCorrect ? ' ✓' : '.'}</span>
-                                        <span className="text-sm select-all cursor-text flex-1">{typeof opt === 'string' ? opt : opt.text}</span>
+                                        <span className="text-sm select-all cursor-text flex-1"><LatexText text={typeof opt === 'string' ? opt : opt.text} /></span>
                                       </div>
                                     );
                                   })}
@@ -2116,7 +2165,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                             {qType === 'fill_blank' && (
                               <div className="mb-3">
                                 <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Answer</label>
-                                <div className="tech-border bg-[#E8F5E9] border-[var(--success)] p-2.5 text-sm font-mono select-all cursor-text">{q.correct_answer || q.answer}</div>
+                                <div className="tech-border bg-[#E8F5E9] border-[var(--success)] p-2.5 text-sm font-mono select-all cursor-text"><LatexText text={q.correct_answer || q.answer} /></div>
                               </div>
                             )}
 
@@ -2132,12 +2181,15 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                         <div className="flex justify-between items-start">
                                           <div className="flex-1">
                                             <span className="font-bold text-xs text-[var(--ink-muted)]">Step {i + 1}: </span>
-                                            <span className={`text-sm select-all cursor-text ${!isCorr ? 'line-through text-[var(--danger)]' : ''}`}>{step.text}</span>
+                                            <span className={`text-sm select-all cursor-text ${!isCorr ? 'line-through text-[var(--danger)]' : ''}`}><LatexText text={step.text} /></span>
                                           </div>
                                           <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ml-2 ${isCorr ? 'bg-[#E8F5E9] text-[#2E7D32]' : 'bg-[#FFEBEE] text-[#C62828]'}`}>{isCorr ? 'Correct' : 'Incorrect'}</span>
                                         </div>
                                         {!isCorr && (step.fix || step.correct_version) && (
-                                          <div className="mt-1.5 text-xs text-[var(--success)] select-all cursor-text">Correct: {step.fix || step.correct_version}</div>
+                                          <div className="mt-1.5 text-xs text-[var(--success)] select-all cursor-text">Correct: <LatexText text={step.fix || step.correct_version} /></div>
+                                        )}
+                                        {step.error_type && !isCorr && (
+                                          <span className="inline-block mt-1 text-[9px] font-mono uppercase px-1.5 py-0.5 bg-[var(--danger)] text-white">{step.error_type}</span>
                                         )}
                                       </div>
                                     );
@@ -2160,8 +2212,8 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                     const right = typeof pair === 'string' ? pair.split(' → ')[1] : pair.right;
                                     return (
                                       <div key={i} className="grid grid-cols-2 border-t border-[var(--line-dark)]">
-                                        <div className="p-2.5 text-sm select-all cursor-text">{left}</div>
-                                        <div className="p-2.5 text-sm select-all cursor-text border-l border-[var(--line-dark)] text-[var(--success)] font-medium">{right}</div>
+                                        <div className="p-2.5 text-sm select-all cursor-text"><LatexText text={left} /></div>
+                                        <div className="p-2.5 text-sm select-all cursor-text border-l border-[var(--line-dark)] text-[var(--success)] font-medium"><LatexText text={right} /></div>
                                       </div>
                                     );
                                   })}
@@ -2177,7 +2229,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                                   {(q.items || q.arrange_items || []).map((item: string, i: number) => (
                                     <div key={i} className="flex items-center gap-2 tech-border bg-white p-2.5">
                                       <span className="w-6 h-6 rounded-full bg-[var(--ink)] text-[var(--bg)] flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
-                                      <span className="text-sm select-all cursor-text flex-1">{item}</span>
+                                      <span className="text-sm select-all cursor-text flex-1"><LatexText text={item} /></span>
                                     </div>
                                   ))}
                                 </div>
@@ -2188,7 +2240,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                             {q.rationale && (
                               <div className="mb-2">
                                 <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Rationale</label>
-                                <div className="tech-border bg-[var(--surface)] p-2.5 text-xs select-all cursor-text">{q.rationale}</div>
+                                <div className="tech-border bg-[var(--surface)] p-2.5 text-xs select-all cursor-text"><LatexText text={q.rationale} /></div>
                               </div>
                             )}
 
@@ -2414,7 +2466,74 @@ const QuickGenerateView = () => {
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
 
+  // Customization panel state
+  const ALL_BLOOM = ['Remember', 'Understand', 'Apply', 'Analyze'] as const;
+  const ALL_TYPES = ['mcq', 'fill_blank', 'match', 'arrange', 'error_analysis', 'assertion_reason', 'case_based'] as const;
+  const [bloomLevels, setBloomLevels] = useState<string[]>([...ALL_BLOOM]);
+  // Default OFF: fill_blank, error_analysis (Neha's feedback — opt-in, not opt-out)
+  const [qTypes, setQTypes] = useState<string[]>(['mcq', 'match', 'arrange', 'assertion_reason', 'case_based']);
+  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard' | 'mixed'>('mixed');
+  const [boardProfile, setBoardProfile] = useState<'cbse' | 'state'>('cbse');
+  const [customNotes, setCustomNotes] = useState('');
+  const [showCustomPanel, setShowCustomPanel] = useState(true);
+
+  // Per-question action state
+  const [actioningId, setActioningId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<any>(null);
+
   const log = (msg: string) => setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+
+  const toggleArrayValue = (arr: string[], val: string, setter: (v: string[]) => void) => {
+    setter(arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val]);
+  };
+
+  // Bloom level → CG cells
+  const BLOOM_TO_CELLS: Record<string, string[]> = {
+    Remember: ['R1'], Understand: ['U1', 'U2'], Apply: ['A2', 'A3'], Analyze: ['AN2', 'AN3']
+  };
+
+  // Subject classifier: fill_blank and error_analysis are only allowed for Maths & English.
+  // Maths fill_blank answers must be numeric only.
+  const classifySubject = (code?: string): 'math' | 'english' | 'other' => {
+    const s = (code || '').toLowerCase();
+    if (/math|maths|mat|mth|ganit/.test(s)) return 'math';
+    if (/eng|english|angrezi/.test(s)) return 'english';
+    return 'other';
+  };
+  const subjectKind = classifySubject(metadata?.subjectCode);
+  const typesAllowedBySubject = (t: string) =>
+    (t === 'fill_blank' || t === 'error_analysis') ? subjectKind !== 'other' : true;
+
+  // Physics detection (for error-analysis scaffolding — Sri Niharika's feedback)
+  const isPhysics = /phys|bhautiki/i.test(metadata?.subjectCode || '') || /phys/i.test(skill || '');
+
+  // Subject-aware error-analysis instruction (Sri Niharika — typed error categories for physics)
+  const errorAnalysisInstr = (): string => {
+    const latexLine = ' All mathematical expressions in "text" and "fix" MUST be wrapped in LaTeX delimiters \\( ... \\) (use \\dfrac, \\sqrt, ^{}, \\cdot etc.).';
+    if (isPhysics) return 'Physics error analysis. 4-step worked solution. 1-2 steps contain ONE typed error; each wrong step MUST include "fix" AND "error_type" from: unit_dimensional, sign_direction, formula_misapplication, reference_frame, significant_figures. The error must be physics-meaningful, NOT arithmetic. Correct steps set error_type="".' + latexLine;
+    if (subjectKind === 'math') return 'Math error analysis. 4 steps. 1-2 wrong with "fix" and "error_type" from: sign, transposition, distribution, inverse_op, fraction_rule, order_of_ops. Error must be a NAMED procedural misconception, not arithmetic slip.' + latexLine;
+    return 'Error analysis. "steps" array (4 steps). 1-2 wrong with "fix".';
+  };
+
+  // Derive an approved-terms list from uploaded chapter content (Bhanu Priya — NCERT terminology)
+  const approvedTermsFromContent = (txt: string): string[] => {
+    if (!txt || txt.length < 40) return [];
+    const stop = new Set(['the', 'and', 'for', 'with', 'from', 'this', 'that', 'these', 'those', 'then', 'than', 'are', 'was', 'were', 'has', 'have', 'had', 'but', 'not', 'can', 'could', 'will', 'would', 'should', 'into', 'onto', 'upon', 'such', 'which', 'while', 'when', 'where', 'because', 'there', 'their', 'they', 'them', 'its', 'also', 'some', 'most', 'more', 'less', 'other', 'each', 'every']);
+    const bigrams: Record<string, number> = {};
+    (txt.match(/\b[A-Z][a-z]+(?:\s+[a-z]+){0,2}\b/g) || []).forEach(b => { bigrams[b] = (bigrams[b] || 0) + 1; });
+    const techWords: Record<string, number> = {};
+    (txt.toLowerCase().match(/\b[a-z]{6,}\b/g) || []).forEach(w => {
+      if (stop.has(w)) return;
+      techWords[w] = (techWords[w] || 0) + 1;
+    });
+    const top = (obj: Record<string, number>, n: number) =>
+      Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n).map(([w]) => w);
+    return [...new Set([...top(bigrams, 15), ...top(techWords, 20)])];
+  };
+
+  // Scenario-opener regex (Divyansh — scenario-overuse detection)
+  const SCENARIO_RE = /^\s*(?:Riya|Kabir|Meera|Aarav|Aditi|Rohan|Priya|Sneha|A\s+student|A\s+teacher|A\s+doctor|A\s+farmer|Consider|Imagine|Suppose|In\s+a\s+|An?\s+\w+\s+is\s+|On\s+a\s+|During\s+a\s+)/i;
 
   const handlePasteTSV = (val: string) => {
     setTsvInput(val);
@@ -2469,9 +2588,23 @@ const QuickGenerateView = () => {
       }), CGMapperSchema);
 
       const cgPlan = matrix.matrix || {};
-      const cells = Object.entries(cgPlan)
-        .filter(([_, d]: [string, any]) => d.status === 'active' && d.count > 0)
+      // Filter to only cells matching selected Bloom levels
+      const allowedCells = new Set(bloomLevels.flatMap(b => BLOOM_TO_CELLS[b] || []));
+      let cells = Object.entries(cgPlan)
+        .filter(([cell, d]: [string, any]) => d.status === 'active' && d.count > 0 && allowedCells.has(cell))
         .map(([cell, d]: [string, any]) => ({ cell, count: d.count, def: d.definition }));
+
+      // Re-distribute to hit target total if Bloom filter dropped cells
+      const subtotal = cells.reduce((s, c) => s + c.count, 0);
+      if (subtotal > 0 && subtotal < total && cells.length > 0) {
+        const deficit = total - subtotal;
+        for (let i = 0; i < deficit; i++) cells[i % cells.length].count += 1;
+      }
+      if (cells.length === 0) {
+        log('No cells match selected Bloom levels. Aborting.');
+        setStatus('done');
+        return;
+      }
 
       log(`Matrix: ${cells.map(c => `${c.cell}:${c.count}`).join(', ')}`);
 
@@ -2491,10 +2624,52 @@ const QuickGenerateView = () => {
 
       // Step 3: Generate questions cell by cell
       const allQs: any[] = [];
-      const typeMap: Record<string, string[]> = {
+      const defaultTypeMap: Record<string, string[]> = {
         R1: ['mcq', 'fill_blank'], U1: ['mcq', 'fill_blank'], U2: ['mcq', 'match'],
         A2: ['mcq', 'error_analysis'], A3: ['error_analysis'], AN2: ['mcq', 'error_analysis'], AN3: ['error_analysis']
       };
+
+      // Subject rule: fill_blank + error_analysis allowed only for Maths/English.
+      if (subjectKind === 'other') {
+        log('Subject not Maths/English — FIB & error analysis disabled.');
+      }
+      const subjectFilteredQTypes = qTypes.filter(typesAllowedBySubject);
+
+      // Intersect each cell's natural types with (user selection ∩ subject-allowed); fall back safely.
+      const typeMap: Record<string, string[]> = {};
+      Object.entries(defaultTypeMap).forEach(([cell, types]) => {
+        const filtered = types
+          .filter(typesAllowedBySubject)
+          .filter(t => subjectFilteredQTypes.includes(t));
+        typeMap[cell] = filtered.length > 0
+          ? filtered
+          : (subjectFilteredQTypes.length > 0 ? subjectFilteredQTypes : ['mcq']);
+      });
+
+      const difficultyInstr: Record<string, string> = {
+        easy: 'DIFFICULTY: EASY. Direct recall, single-step, simple vocabulary, familiar context.',
+        medium: 'DIFFICULTY: MEDIUM. Two-step reasoning, moderate vocabulary, familiar application.',
+        hard: 'DIFFICULTY: HARD. Multi-step reasoning, unfamiliar context, distractors require discrimination.',
+        mixed: 'DIFFICULTY: MIXED across questions (vary easy/medium/hard).',
+      };
+
+      // Grade-math boundary — keeps numericals in-scope (Divyansh)
+      const { getGradeMathBoundary } = await import('./agents/prompts');
+      const gradeMathBoundary = subjectKind === 'math' ? getGradeMathBoundary(metadata?.gradeCode) : '';
+      if (gradeMathBoundary) log('Applying grade-math concept boundary.');
+
+      // State-board language profile (Divyansh) — applied for grades 9/10 only
+      const gradeNum = parseInt(String(metadata?.gradeCode || '').match(/\d+/)?.[0] || '0', 10);
+      const stateBoardNote = (boardProfile === 'state' && gradeNum >= 9 && gradeNum <= 10)
+        ? `\nSTATE-BOARD LANGUAGE PROFILE:\n- Max 25 words per stem.\n- Grade-8 vocabulary ceiling — no technical jargon that requires explanation.\n- NO nested clauses (avoid "which, given that..."). Use active voice.\n- Concrete nouns; no filler ("In the context of...", "With respect to...").\n- Break any longer idea into two sentences.`
+        : '';
+      if (stateBoardNote) log('Applying state-board language profile.');
+
+      // Approved terms from uploaded content (Bhanu Priya — NCERT terminology)
+      const approvedTerms = approvedTermsFromContent(content);
+      const approvedTermsNote = approvedTerms.length > 0
+        ? `\nAPPROVED_TERMS (use ONLY these chapter-specific terms; do NOT invent synonyms):\n${approvedTerms.slice(0, 30).join(', ')}`
+        : '';
 
       for (const { cell, count: cellCount, def } of cells) {
         const types = typeMap[cell] || ['mcq'];
@@ -2504,12 +2679,23 @@ const QuickGenerateView = () => {
           setProgress(`Generating ${qId} (${qType})...`);
           log(`Generating ${qId}: ${qType}...`);
 
+          // LaTeX is required for Math, Physics, and any Science subject (chem formulas, biology stats, etc.)
+          const isScience = /sci|bio|chem|phys|bhautiki|rasayan|jeev/i.test(metadata?.subjectCode || '');
+          const needsLatex = subjectKind === 'math' || isPhysics || isScience;
+          const mathLatexReminder = needsLatex
+            ? ' Every mathematical, chemical, or scientific expression (equations, formulas, exponents, fractions, roots, chemical formulas like H_2O or CO_2, ions like Na^+, ratios, units) in stem, options, pairs, items, answer, and rationale MUST be LaTeX-wrapped: inline \\( ... \\), display \\[ ... \\]. Use \\dfrac, \\sqrt[n]{...}, a^{m+n}, \\cdot, subscripts X_{i}, superscripts X^{+} — never raw ASCII math. Plain English prose stays plain.'
+            : '';
+
           const typeInstr: Record<string, string> = {
-            mcq: 'MCQ with 4 options (A,B,C,D). 1 correct. Wrong options need "why_wrong".',
-            fill_blank: 'Fill-in-the-blank. Put ##answer## in stem.',
-            error_analysis: 'Error analysis. "steps" array (4 steps). 1-2 wrong with "fix".',
-            match: 'Match. "pairs" array: ["X → Y", ...].',
-            arrange: 'Arrange. "items" array in correct order.',
+            mcq: 'MCQ with 4 options (A,B,C,D). 1 correct. Wrong options need "why_wrong".' + mathLatexReminder,
+            fill_blank: subjectKind === 'math'
+              ? 'Fill-in-the-blank. Put ##answer## in stem. The answer MUST be a NUMBER only (integer or decimal). No words, no units, no variables, no expressions — just the numeric value (e.g., 42, 3.14, -5, 0.75). The stem should pose a problem whose answer is purely numeric. Wrap every math expression in the stem with LaTeX delimiters \\( ... \\).'
+              : 'Fill-in-the-blank. Put ##answer## in stem.',
+            error_analysis: errorAnalysisInstr(),
+            match: 'Match. "pairs" array: ["X → Y", ...].' + mathLatexReminder,
+            arrange: 'Arrange. "items" array in correct order.' + mathLatexReminder,
+            assertion_reason: 'Assertion–Reason MCQ. Stem must contain "Assertion (A): ..." and "Reason (R): ...". Options MUST be: (A) Both A and R are true, and R is the correct explanation of A; (B) Both A and R are true, but R is not the correct explanation of A; (C) A is true, R is false; (D) A is false, R is true. Mark exactly one correct.' + mathLatexReminder,
+            case_based: 'Case-based / situational MCQ. Stem opens with a short real-life scenario (2-3 sentences) then asks the question. 4 options, 1 correct, wrong options need "why_wrong".' + mathLatexReminder,
           };
 
           // Pass already-generated stems so Gemini avoids repetition
@@ -2518,11 +2704,24 @@ const QuickGenerateView = () => {
             ? `\nALREADY GENERATED (do NOT repeat these topics):\n${alreadyGenerated.map(s => `- "${s}..."`).join('\n')}\nGenerate something DIFFERENT.`
             : '';
 
+          const customNote = customNotes.trim()
+            ? `\nCUSTOM INSTRUCTIONS (obey strictly):\n${customNotes.trim()}`
+            : '';
+
+          // R1/U1: enforce no-scenario opener at the per-question level too (Divyansh)
+          const noScenarioNote = (cell === 'R1' || cell === 'U1')
+            ? '\nR1/U1 RULE: Stem MUST be a direct question or one-sentence statement. Do NOT open with a scenario, character name, or "Consider/Imagine/Suppose".'
+            : '';
+
+          // assertion_reason + case_based are specialised MCQs — map to 'mcq' schema-wise
+          const schemaType = (qType === 'assertion_reason' || qType === 'case_based') ? 'mcq' : qType;
+
           try {
             const exemplarNote = exemplarBank ? `\nEXEMPLAR QUESTIONS (match this quality):\n${exemplarBank.slice(0, 400)}` : '';
+            const contentSlice = content.length > 0 ? content.slice(0, 1500) : lo;
             const q = await generateAgentResponse('Generation Agent',
-              `${Prompts.GenerationStage1}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\nContent: ${content.slice(0, 500) || lo}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''}\nUK English (colour, favourite, organise, centre). Indian names. Grade-appropriate.${avoidNote}${exemplarNote}`,
-              JSON.stringify({ id: qId, type: qType, cell }),
+              `${Prompts.GenerationStage1}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\n${difficultyInstr[difficulty]}${gradeMathBoundary}${stateBoardNote}${approvedTermsNote}${noScenarioNote}\nContent: ${contentSlice}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''}\nUK English (colour, favourite, organise, centre). Indian names. Grade-appropriate.${avoidNote}${customNote}${exemplarNote}`,
+              JSON.stringify({ id: qId, type: schemaType, cell }),
               GenerationSchema
             );
             allQs.push({ ...q, cell, type: qType, id: qId });
@@ -2534,6 +2733,29 @@ const QuickGenerateView = () => {
         }
       }
 
+      // === Post-generation checks ===
+
+      // Scenario-ratio cap (Divyansh) — if > 40% of stems open with a scenario, regenerate the excess
+      const scenarioOpeners = allQs.filter(q => SCENARIO_RE.test(q.stem || ''));
+      const scenarioRatio = allQs.length > 0 ? scenarioOpeners.length / allQs.length : 0;
+      log(`scenarioRatio=${(scenarioRatio * 100).toFixed(0)}% (${scenarioOpeners.length}/${allQs.length})`);
+      if (scenarioRatio > 0.4 && allQs.length >= 5) {
+        const excess = Math.ceil(scenarioOpeners.length - 0.4 * allQs.length);
+        const toFix = scenarioOpeners.slice(0, excess);
+        log(`Scenario ratio > 40%. Regenerating ${toFix.length} as non-scenario.`);
+        setProgress(`Rebalancing scenario/direct mix...`);
+        for (const q of toFix) {
+          await handleQuickAction(q, 'regenerate', 'NO scenario opener. Use a direct question or one-sentence statement. Do NOT use character names or "Consider/Imagine/Suppose".');
+        }
+      }
+
+      // Numerical-diversity check (Divyansh)
+      try {
+        const { checkNumericalDiversity } = await import('./agents/ruleBasedQA');
+        const diagnostics = checkNumericalDiversity(allQs);
+        if (diagnostics.length > 0) diagnostics.forEach(d => log(`diversity: ${d}`));
+      } catch { /* helper optional */ }
+
       log(`Done! ${allQs.length} questions generated.`);
       setProgress('');
       setStatus('done');
@@ -2541,6 +2763,71 @@ const QuickGenerateView = () => {
       log(`Error: ${e.message}`);
       setStatus('done');
     }
+  };
+
+  // Per-question action: regenerate / simplify / harder. extraNote appends caller-specific constraints.
+  const handleQuickAction = async (q: any, action: 'regenerate' | 'simplify' | 'harder', extraNote?: string) => {
+    setActioningId(q.id);
+    log(`${q.id}: ${action}...`);
+    try {
+      const { generateAgentResponse } = await import('./agents/api');
+      const { Prompts } = await import('./agents/prompts');
+      const { GenerationSchema } = await import('./agents/schemas');
+
+      const actionInstr: Record<string, string> = {
+        regenerate: 'Generate a DIFFERENT question testing the same skill. Do not repeat the current stem.',
+        simplify: 'Make this question EASIER: simpler vocabulary, more familiar context, one-step reasoning.',
+        harder: 'Make this question HARDER: multi-step reasoning, less familiar context, sharper distractors.',
+      };
+
+      const typeInstr: Record<string, string> = {
+        mcq: 'MCQ with 4 options (A,B,C,D). 1 correct. Wrong options need "why_wrong".',
+        fill_blank: subjectKind === 'math'
+          ? 'Fill-in-the-blank. Put ##answer## in stem. Answer MUST be a NUMBER only — no words, no units, no variables.'
+          : 'Fill-in-the-blank. Put ##answer## in stem.',
+        error_analysis: errorAnalysisInstr(),
+        match: 'Match. "pairs" array: ["X → Y", ...].',
+        arrange: 'Arrange. "items" array in correct order.',
+        assertion_reason: 'Assertion–Reason MCQ with standard 4-option pattern.',
+        case_based: 'Case-based MCQ. Stem opens with a 2-3 sentence scenario.',
+      };
+
+      const schemaType = (q.type === 'assertion_reason' || q.type === 'case_based') ? 'mcq' : q.type;
+      const extraNoteLine = extraNote ? `\nEXTRA CONSTRAINT: ${extraNote}` : '';
+      const prompt = `${Prompts.GenerationStage1}
+Cell ${q.cell}. ${actionInstr[action]}
+Type: ${q.type}. ${typeInstr[q.type] || typeInstr.mcq}
+Skill: ${skill}
+LO: ${lo}
+Grade: ${metadata?.gradeCode || ''}
+UK English. Indian names. Grade-appropriate.${extraNoteLine}
+
+CURRENT QUESTION (${action === 'regenerate' ? 'replace with something different' : 'rewrite'}):
+${q.stem}`;
+
+      const refined = await generateAgentResponse('Generation Agent', prompt,
+        JSON.stringify({ id: q.id, type: schemaType, cell: q.cell }),
+        GenerationSchema);
+
+      setQuestions(questions.map(x => x.id === q.id ? { ...refined, cell: q.cell, type: q.type, id: q.id } : x));
+      log(`${q.id}: ${action} ✓`);
+    } catch (e: any) {
+      log(`${q.id}: ${action} failed — ${e.message?.slice(0, 40)}`);
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const startEdit = (q: any) => {
+    setEditingId(q.id);
+    setEditDraft(JSON.parse(JSON.stringify(q)));
+  };
+  const cancelEdit = () => { setEditingId(null); setEditDraft(null); };
+  const saveEdit = () => {
+    if (!editDraft) return;
+    setQuestions(questions.map(x => x.id === editDraft.id ? editDraft : x));
+    log(`${editDraft.id}: edited ✓`);
+    cancelEdit();
   };
 
   return (
@@ -2589,6 +2876,109 @@ const QuickGenerateView = () => {
             >
               {status === 'running' ? <><Loader2 size={16} className="animate-spin" /> Generating...</> : <><Activity size={16} /> Generate All</>}
             </button>
+          </div>
+
+          {/* Customization Panel */}
+          <div className="tech-border bg-[var(--surface)]">
+            <button
+              onClick={() => setShowCustomPanel(v => !v)}
+              className="w-full px-3 py-2 flex items-center justify-between text-left border-b border-[var(--line-dark)] hover:bg-[var(--line)]"
+            >
+              <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide">
+                <SlidersHorizontal size={12} /> Customization
+              </span>
+              {showCustomPanel ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+            {showCustomPanel && (
+              <div className="p-3 flex flex-col gap-3">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Bloom's Levels</label>
+                  <div className="flex flex-wrap gap-1">
+                    {ALL_BLOOM.map(b => (
+                      <button
+                        key={b}
+                        onClick={() => toggleArrayValue(bloomLevels, b, setBloomLevels)}
+                        className={`text-[10px] px-2 py-1 border ${bloomLevels.includes(b) ? 'bg-[var(--ink)] text-[var(--bg)] border-[var(--ink)]' : 'bg-[var(--bg)] border-[var(--line-dark)] text-[var(--ink-muted)]'}`}
+                      >
+                        {b}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[9px] text-[var(--ink-muted)] mt-1">Matrix cells: R=Remember, U=Understand, A=Apply, AN=Analyze</p>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Question Types</label>
+                  <div className="flex flex-wrap gap-1">
+                    {ALL_TYPES.map(t => {
+                      const disabled = !typesAllowedBySubject(t);
+                      const active = qTypes.includes(t) && !disabled;
+                      const title = disabled ? 'Only available for Maths/English subjects' : '';
+                      return (
+                        <button
+                          key={t}
+                          title={title}
+                          disabled={disabled}
+                          onClick={() => !disabled && toggleArrayValue(qTypes, t, setQTypes)}
+                          className={`text-[10px] px-2 py-1 border ${active ? 'bg-[var(--ink)] text-[var(--bg)] border-[var(--ink)]' : 'bg-[var(--bg)] border-[var(--line-dark)] text-[var(--ink-muted)]'} ${disabled ? 'opacity-40 cursor-not-allowed line-through' : ''}`}
+                        >
+                          {t.replace('_', ' ')}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[9px] text-[var(--ink-muted)] mt-1">
+                    FIB &amp; error analysis are OFF by default — enable per batch. Assertion–Reason &amp; Case-based map to specialised MCQs.
+                    {subjectKind === 'other' && <> FIB &amp; error analysis are disabled for non-Maths/English.</>}
+                    {subjectKind === 'math' && <> Maths FIB answers will be numeric only.</>}
+                    {isPhysics && <> Physics error-analysis uses typed error categories (unit, sign, formula, reference-frame).</>}
+                  </p>
+                  <p className="text-[9px] text-[var(--accent)] mt-1">
+                    Recommended by subject: {subjectKind === 'math' ? 'mcq, fill_blank, match, arrange, error_analysis' : subjectKind === 'english' ? 'mcq, match, arrange, fill_blank, case_based' : 'mcq, match, case_based, assertion_reason'}.
+                  </p>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Difficulty</label>
+                  <div className="flex gap-1">
+                    {(['easy', 'medium', 'hard', 'mixed'] as const).map(d => (
+                      <button
+                        key={d}
+                        onClick={() => setDifficulty(d)}
+                        className={`flex-1 text-[10px] px-2 py-1 border capitalize ${difficulty === d ? 'bg-[var(--ink)] text-[var(--bg)] border-[var(--ink)]' : 'bg-[var(--bg)] border-[var(--line-dark)] text-[var(--ink-muted)]'}`}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Board Profile</label>
+                  <div className="flex gap-1">
+                    {(['cbse', 'state'] as const).map(b => (
+                      <button
+                        key={b}
+                        onClick={() => setBoardProfile(b)}
+                        className={`flex-1 text-[10px] px-2 py-1 border uppercase ${boardProfile === b ? 'bg-[var(--ink)] text-[var(--bg)] border-[var(--ink)]' : 'bg-[var(--bg)] border-[var(--line-dark)] text-[var(--ink-muted)]'}`}
+                      >
+                        {b === 'cbse' ? 'CBSE' : 'State Board'}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[9px] text-[var(--ink-muted)] mt-1">
+                    State Board (grades 9–10) enforces ≤25-word stems, grade-8 vocabulary ceiling, active voice.
+                  </p>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Custom Instructions</label>
+                  <textarea
+                    value={customNotes}
+                    onChange={e => setCustomNotes(e.target.value)}
+                    placeholder="e.g., 60% direct recall, avoid trick questions, use cricket examples, include diagrams where possible..."
+                    className="w-full tech-border bg-[var(--bg)] p-2 text-xs"
+                    rows={3}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Logs */}
@@ -2673,6 +3063,58 @@ const QuickGenerateView = () => {
                           )
                         )}
                         {!q.needs_image && <span className="text-[9px] text-[var(--ink-muted)]">Text Only</span>}
+                        {/* Quick actions */}
+                        {editingId !== q.id && (
+                          <div className="flex items-center gap-1 pl-2 border-l border-[var(--line-dark)]">
+                            <button
+                              title="Regenerate (new question, same skill)"
+                              onClick={() => handleQuickAction(q, 'regenerate')}
+                              disabled={actioningId === q.id}
+                              className="px-1.5 py-0.5 text-[10px] border border-[var(--line-dark)] hover:bg-[var(--line)] flex items-center gap-1 disabled:opacity-50"
+                            >
+                              {actioningId === q.id ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />} Regen
+                            </button>
+                            <button
+                              title="Simplify (make easier)"
+                              onClick={() => handleQuickAction(q, 'simplify')}
+                              disabled={actioningId === q.id}
+                              className="px-1.5 py-0.5 text-[10px] border border-[var(--line-dark)] hover:bg-[var(--line)] flex items-center gap-1 disabled:opacity-50"
+                            >
+                              <Sparkles size={10} /> Simplify
+                            </button>
+                            <button
+                              title="Make harder"
+                              onClick={() => handleQuickAction(q, 'harder')}
+                              disabled={actioningId === q.id}
+                              className="px-1.5 py-0.5 text-[10px] border border-[var(--line-dark)] hover:bg-[var(--line)] flex items-center gap-1 disabled:opacity-50"
+                            >
+                              <Zap size={10} /> Harder
+                            </button>
+                            <button
+                              title="Inline edit"
+                              onClick={() => startEdit(q)}
+                              className="px-1.5 py-0.5 text-[10px] border border-[var(--line-dark)] hover:bg-[var(--line)] flex items-center gap-1"
+                            >
+                              <Edit3 size={10} /> Edit
+                            </button>
+                          </div>
+                        )}
+                        {editingId === q.id && (
+                          <div className="flex items-center gap-1 pl-2 border-l border-[var(--line-dark)]">
+                            <button
+                              onClick={saveEdit}
+                              className="px-1.5 py-0.5 text-[10px] bg-[var(--success)] text-white flex items-center gap-1"
+                            >
+                              <Save size={10} /> Save
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              className="px-1.5 py-0.5 text-[10px] border border-[var(--line-dark)] hover:bg-[var(--line)] flex items-center gap-1"
+                            >
+                              <X size={10} /> Cancel
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="p-3">
@@ -2681,28 +3123,84 @@ const QuickGenerateView = () => {
                           <img src={questionImages[q.id]} alt="Question" className="max-w-full max-h-48 object-contain" />
                         </div>
                       )}
-                      <div className="tech-border bg-white p-2 text-sm select-all cursor-text mb-2">{q.stem}</div>
-
-                      {qType === 'mcq' && q.options?.length > 0 && (
-                        <div className="flex flex-col gap-1 mb-2">
-                          {q.options.map((opt: any, i: number) => (
-                            <div key={i} className={`text-sm p-2 tech-border flex items-start gap-1.5 ${(opt.correct || opt.is_correct) ? 'border-[var(--success)] bg-[#E8F5E9]' : 'bg-white'}`}>
-                              <span className="font-bold text-xs shrink-0">{opt.label || String.fromCharCode(65+i)}{(opt.correct || opt.is_correct) ? ' ✓' : '.'}</span>
-                              <span className="select-all cursor-text">{opt.text}</span>
-                            </div>
-                          ))}
+                      {editingId === q.id ? (
+                        <textarea
+                          value={editDraft?.stem || ''}
+                          onChange={e => setEditDraft({ ...editDraft, stem: e.target.value })}
+                          className="w-full tech-border bg-white p-2 text-sm mb-2"
+                          rows={3}
+                        />
+                      ) : (
+                        <div className="tech-border bg-white p-2 text-sm select-all cursor-text mb-2">
+                          <LatexText text={q.stem} />
                         </div>
                       )}
 
-                      {qType === 'fill_blank' && <div className="tech-border bg-[#E8F5E9] border-[var(--success)] p-2 text-sm font-mono select-all cursor-text mb-2">{q.answer}</div>}
+                      {qType === 'mcq' && q.options?.length > 0 && (
+                        <div className="flex flex-col gap-1 mb-2">
+                          {(editingId === q.id ? editDraft.options : q.options).map((opt: any, i: number) => {
+                            const isCorrect = opt.correct || opt.is_correct;
+                            return (
+                              <div key={i} className={`text-sm p-2 tech-border flex items-start gap-1.5 ${isCorrect ? 'border-2 border-[var(--success)] bg-[#E8F5E9] shadow-sm' : 'bg-white'}`}>
+                                <span className={`font-bold text-xs shrink-0 ${isCorrect ? 'text-[var(--success)]' : ''}`}>
+                                  {opt.label || String.fromCharCode(65+i)}
+                                  {isCorrect ? ' ✓ CORRECT' : '.'}
+                                </span>
+                                {editingId === q.id ? (
+                                  <div className="flex-1 flex items-center gap-2">
+                                    <input
+                                      value={opt.text}
+                                      onChange={e => {
+                                        const newOpts = [...editDraft.options];
+                                        newOpts[i] = { ...newOpts[i], text: e.target.value };
+                                        setEditDraft({ ...editDraft, options: newOpts });
+                                      }}
+                                      className="flex-1 bg-transparent border-b border-[var(--line-dark)] text-sm p-1 focus:outline-none focus:border-[var(--accent)]"
+                                    />
+                                    <label className="text-[10px] flex items-center gap-1 cursor-pointer">
+                                      <input
+                                        type="radio"
+                                        checked={!!isCorrect}
+                                        onChange={() => {
+                                          const newOpts = editDraft.options.map((o: any, j: number) => ({ ...o, correct: j === i, is_correct: j === i }));
+                                          setEditDraft({ ...editDraft, options: newOpts });
+                                        }}
+                                      />
+                                      correct
+                                    </label>
+                                  </div>
+                                ) : (
+                                  <span className="select-all cursor-text"><LatexText text={opt.text} /></span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {qType === 'fill_blank' && (
+                        editingId === q.id ? (
+                          <input
+                            value={editDraft?.answer || ''}
+                            onChange={e => setEditDraft({ ...editDraft, answer: e.target.value })}
+                            className="w-full tech-border bg-[#E8F5E9] border-2 border-[var(--success)] p-2 text-sm font-mono mb-2"
+                          />
+                        ) : (
+                          <div className="tech-border bg-[#E8F5E9] border-2 border-[var(--success)] p-2 text-sm font-mono select-all cursor-text mb-2 shadow-sm">
+                            <span className="text-[10px] font-bold text-[var(--success)] uppercase mr-2">Answer ✓</span>
+                            <LatexText text={q.answer} />
+                          </div>
+                        )
+                      )}
 
                       {qType === 'error_analysis' && q.steps?.length > 0 && (
                         <div className="flex flex-col gap-1 mb-2">
                           {q.steps.map((s: any, i: number) => (
                             <div key={i} className={`text-sm p-2 tech-border ${s.correct ? 'bg-white' : 'bg-[#FFEBEE] border-[var(--danger)]'}`}>
                               <span className="text-xs font-bold text-[var(--ink-muted)]">Step {i+1}: </span>
-                              <span className={`select-all cursor-text ${!s.correct ? 'line-through text-[var(--danger)]' : ''}`}>{s.text}</span>
-                              {!s.correct && s.fix && <div className="text-xs text-[var(--success)] mt-1 select-all cursor-text">Fix: {s.fix}</div>}
+                              <span className={`select-all cursor-text ${!s.correct ? 'line-through text-[var(--danger)]' : ''}`}><LatexText text={s.text} /></span>
+                              {!s.correct && s.fix && <div className="text-xs text-[var(--success)] mt-1 select-all cursor-text">Fix: <LatexText text={s.fix} /></div>}
+                              {s.error_type && !s.correct && <span className="ml-2 text-[9px] font-mono uppercase px-1 py-0.5 bg-[var(--danger)] text-white">{s.error_type}</span>}
                             </div>
                           ))}
                         </div>
@@ -2712,7 +3210,7 @@ const QuickGenerateView = () => {
                         <div className="tech-border bg-white overflow-hidden mb-2">
                           <div className="grid grid-cols-2 bg-[var(--ink)] text-[var(--bg)]"><div className="p-1.5 text-[10px] font-bold">Left</div><div className="p-1.5 text-[10px] font-bold border-l border-[#333]">Right</div></div>
                           {q.pairs.map((p: any, i: number) => { const [l,r] = typeof p === 'string' ? p.split(' → ') : [p.left, p.right]; return (
-                            <div key={i} className="grid grid-cols-2 border-t border-[var(--line-dark)]"><div className="p-2 text-sm select-all cursor-text">{l}</div><div className="p-2 text-sm select-all cursor-text border-l border-[var(--line-dark)] text-[var(--success)]">{r}</div></div>
+                            <div key={i} className="grid grid-cols-2 border-t border-[var(--line-dark)]"><div className="p-2 text-sm select-all cursor-text"><LatexText text={l} /></div><div className="p-2 text-sm select-all cursor-text border-l border-[var(--line-dark)] text-[var(--success)]"><LatexText text={r} /></div></div>
                           ); })}
                         </div>
                       )}
@@ -2720,12 +3218,12 @@ const QuickGenerateView = () => {
                       {qType === 'arrange' && q.items?.length > 0 && (
                         <div className="flex flex-col gap-1 mb-2">
                           {q.items.map((item: string, i: number) => (
-                            <div key={i} className="flex items-center gap-2 tech-border bg-white p-2"><span className="w-5 h-5 rounded-full bg-[var(--ink)] text-[var(--bg)] flex items-center justify-center text-[10px] font-bold shrink-0">{i+1}</span><span className="text-sm select-all cursor-text">{item}</span></div>
+                            <div key={i} className="flex items-center gap-2 tech-border bg-white p-2"><span className="w-5 h-5 rounded-full bg-[var(--ink)] text-[var(--bg)] flex items-center justify-center text-[10px] font-bold shrink-0">{i+1}</span><span className="text-sm select-all cursor-text"><LatexText text={item} /></span></div>
                           ))}
                         </div>
                       )}
 
-                      {q.rationale && <div className="text-[10px] text-[var(--ink-muted)] bg-[var(--surface)] p-1.5 tech-border select-all cursor-text">{q.rationale}</div>}
+                      {q.rationale && <div className="text-[10px] text-[var(--ink-muted)] bg-[var(--surface)] p-1.5 tech-border select-all cursor-text"><LatexText text={q.rationale} /></div>}
                     </div>
                   </div>
                 );
