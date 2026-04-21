@@ -47,9 +47,12 @@ import katex from 'katex';
 
 import { AgentOrchestrator } from './agents/orchestrator';
 import { parseUploadedFile } from './utils/fileParser';
+import { PhaseChips } from './components/PhaseChips';
+import { TriageBar } from './components/TriageBar';
 
 // --- Types ---
-type Tab = 'dashboard' | 'architecture' | 'state-machine' | 'raci' | 'pipeline' | 'quick' | 'config';
+type Tab = 'dashboard' | 'architecture' | 'state-machine' | 'raci' | 'generate' | 'config';
+type GenerateMode = 'quick' | 'pipeline';
 
 // --- LaTeX renderer: parses \( \), \[ \], $ $, $$ $$ and renders via KaTeX ---
 const LatexText: React.FC<{ text: any; className?: string; block?: boolean }> = ({ text, className, block }) => {
@@ -93,8 +96,7 @@ const LatexText: React.FC<{ text: any; className?: string; block?: boolean }> = 
 const TopNav = ({ activeTab, setActiveTab }: { activeTab: Tab, setActiveTab: (t: Tab) => void }) => {
   const navItems: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Overview', icon: <LayoutDashboard size={16} /> },
-    { id: 'pipeline', label: 'Run Pipeline', icon: <PlayCircle size={16} /> },
-    { id: 'quick', label: 'Quick Generate', icon: <Activity size={16} /> },
+    { id: 'generate', label: 'Generate', icon: <PlayCircle size={16} /> },
     { id: 'architecture', label: 'Architecture', icon: <Network size={16} /> },
     { id: 'state-machine', label: 'State Machine', icon: <GitMerge size={16} /> },
     { id: 'raci', label: 'RACI Matrix', icon: <Users size={16} /> },
@@ -1271,6 +1273,16 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
         </div>
       </header>
 
+      {/* Phase indicator — Stage A.1 skeleton, lives above the detailed gate stepper */}
+      <div className="mb-2 shrink-0">
+        <PhaseChips phases={[
+          { id: 'brief', label: 'Brief', state: lo && skill ? 'done' : 'active' },
+          { id: 'generate', label: 'Generate', state: currentStep >= 9 ? 'done' : status === 'running' || status === 'waiting' ? 'active' : lo && skill ? 'active' : 'pending' },
+          { id: 'triage', label: 'Triage', state: currentStep >= 9 ? 'active' : 'pending' },
+          { id: 'export', label: 'Export', state: status === 'completed' && questions.length > 0 ? 'active' : 'pending' },
+        ]} />
+      </div>
+
       {/* Gate stepper — click to go back */}
       <div className="flex items-center gap-1 mb-3 shrink-0 overflow-x-auto">
         {[
@@ -2092,6 +2104,13 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                       <span>Types: {[...new Set(questions.map(q => q.type))].join(', ')}</span>
                     </div>
                   </div>
+
+                  <TriageBar
+                    total={questions.length}
+                    approved={questions.length}
+                    flagged={qaResults.length > 0 ? qaResults.filter((r: any) => !r.pass).length : undefined}
+                    className="mb-3"
+                  />
 
                   <div className="grid grid-cols-1 gap-6">
                     {questions.map((q) => {
@@ -3030,6 +3049,16 @@ ${q.stem}`;
 
         {/* Right: Results */}
         <div className="flex-1 overflow-y-auto">
+          {/* Phase indicator — Stage A.1 skeleton, wired with richer state later */}
+          <div className="mb-3">
+            <PhaseChips phases={[
+              { id: 'brief', label: 'Brief', state: lo && skill ? 'done' : 'active' },
+              { id: 'generate', label: 'Generate', state: status === 'running' ? 'active' : status === 'done' ? 'done' : lo && skill ? 'active' : 'pending' },
+              { id: 'triage', label: 'Triage', state: status === 'done' && questions.length > 0 ? 'active' : 'pending' },
+              { id: 'export', label: 'Export', state: status === 'done' && questions.length > 0 ? 'active' : 'pending' },
+            ]} />
+          </div>
+
           {questions.length === 0 && status === 'idle' && (
             <div className="h-full flex items-center justify-center text-[var(--ink-muted)] flex-col gap-4">
               <Activity size={48} className="opacity-20" />
@@ -3039,6 +3068,7 @@ ${q.stem}`;
 
           {questions.length > 0 && (
             <div className="flex flex-col gap-4">
+              <TriageBar total={questions.length} approved={questions.length} />
               <div className="flex justify-between items-center">
                 <span className="text-sm font-mono text-[var(--ink-muted)]">{questions.length} questions generated</span>
                 <div className="flex items-center gap-2">
@@ -3452,8 +3482,56 @@ const LoginGate = ({ onLogin }: { onLogin: () => void }) => {
   );
 };
 
+// ===== GENERATE (unified shell: Quick | Pipeline) =====
+// Single tab wraps both generation modes. Mode persists in sessionStorage.
+// Stage A.1: mode toggle only. Brief state is per-mode (lifting comes in Stage A.3).
+const GenerateView = () => {
+  const [mode, setMode] = useState<GenerateMode>(() => {
+    const saved = sessionStorage.getItem('generateMode');
+    return (saved === 'quick' || saved === 'pipeline') ? saved : 'pipeline';
+  });
+
+  const switchMode = (next: GenerateMode) => {
+    setMode(next);
+    sessionStorage.setItem('generateMode', next);
+  };
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Mode toggle */}
+      <div className="shrink-0 px-6 pt-4 pb-0 flex items-center gap-3">
+        <span className="text-[10px] font-bold uppercase text-[var(--ink-muted)]">Mode</span>
+        <div className="inline-flex border border-[var(--line-dark)] bg-[var(--surface)]">
+          <button
+            onClick={() => switchMode('quick')}
+            className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 ${mode === 'quick' ? 'bg-[var(--ink)] text-[var(--bg)]' : 'hover:bg-[var(--line)] text-[var(--ink-muted)]'}`}
+          >
+            <Activity size={12} /> Quick
+          </button>
+          <button
+            onClick={() => switchMode('pipeline')}
+            className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 ${mode === 'pipeline' ? 'bg-[var(--ink)] text-[var(--bg)]' : 'hover:bg-[var(--line)] text-[var(--ink-muted)]'}`}
+          >
+            <PlayCircle size={12} /> Pipeline
+          </button>
+        </div>
+        <span className="text-[10px] text-[var(--ink-muted)]">
+          {mode === 'quick' ? 'One-click generation, no gates.' : 'Multi-stage with agent approvals.'}
+        </span>
+      </div>
+      {/* Active mode body */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <AnimatePresence mode="wait">
+          {mode === 'quick' && <QuickGenerateView key="quick" />}
+          {mode === 'pipeline' && <PipelineRunnerView key="pipeline" />}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('pipeline');
+  const [activeTab, setActiveTab] = useState<Tab>('generate');
   const [authenticated, setAuthenticated] = useState(() => {
     // Auto-login if token already in session
     return !!sessionStorage.getItem('appAccessToken');
@@ -3470,11 +3548,10 @@ export default function App() {
       <main className="flex-1 w-full overflow-y-auto">
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && <DashboardView key="dashboard" />}
-          {activeTab === 'pipeline' && <PipelineRunnerView key="pipeline" />}
+          {activeTab === 'generate' && <GenerateView key="generate" />}
           {activeTab === 'architecture' && <ArchitectureView key="architecture" />}
           {activeTab === 'state-machine' && <StateMachineView key="state-machine" />}
           {activeTab === 'raci' && <RaciView key="raci" />}
-          {activeTab === 'quick' && <QuickGenerateView key="quick" />}
           {activeTab === 'config' && <ConfigView key="config" />}
         </AnimatePresence>
       </main>
