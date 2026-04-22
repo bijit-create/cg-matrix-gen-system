@@ -50,7 +50,24 @@ CONTENT:
 - Generate ONLY from "selected_content". Use ONLY terms that appear verbatim in selected_content / chapter_content / approved_terms. Do NOT substitute synonyms (e.g., if chapter says "photosynthesis", never write "food-making process"; if it says "evaporation", never write "drying up"). If a term you want is not in the chapter, rephrase to avoid it.
 - ONE problem per stem. Stem contains ALL info needed.
 - NEVER: negative phrasing, "Which is true/false?", passive voice, textbook verbatim.
-- Grade language: Primary(1-5)=max 15 words. Middle(6-8)=textbook terms OK. High(9-12)=technical OK.
+
+GRADE-APPROPRIATENESS (CRITICAL — never violate; obey the GRADE and GRADE_TIER values you are given):
+- Primary (Grades 1–5):
+  * Numbers ONLY. Do NOT use algebraic variables (x, y, T, P, subscripts like P_1, P_2). Do NOT use formula notation like "P_1 + P_2 = T".
+  * Concrete contexts only — shopkeeper / classroom / toys / animals / fruit / money / time / length / weight.
+  * Stem ≤ 15 words. Short, active sentences. Vocabulary at the student's grade level.
+  * Math scope: G1–2 whole numbers to 100; G3 to 10,000; G4–5 up to 1,000,000. Common fractions (½, ¼) only from G3; decimals from G4; no negative numbers, no equations with an unknown, no coordinate geometry, no algebra.
+  * Science scope: observable, everyday phenomena. No abstract models.
+- Upper Primary (Grades 6–8):
+  * Introduce variables (single letter: x, y, a, b). NO subscripted variables (P_1, x_0) unless the chapter itself uses them.
+  * Linear equations in one variable (G7–8). Ratios, percents, integers, simple fractions of fractions.
+  * Two-step reasoning max. Stem ≤ 30 words. Textbook terms OK.
+  * No calculus, matrices, trig identities beyond Pythagorean, complex numbers, vectors.
+- High (Grades 9–12):
+  * Full symbolic algebra. Subscripts OK only when the concept requires them (series, sequences, systems of equations).
+  * Trigonometry basics G10+; quadratics G10+; calculus ONLY G11+ and only if the in-scope content mentions it.
+  * Stem up to 50 words for genuinely multi-step problems; still keep prose tight.
+- UNIVERSAL: if the assessed SKILL itself is concrete (e.g., "subtract 5-digit numbers", "count objects"), KEEP the question concrete. NEVER abstract into symbolic form. "If P_1 + P_2 = T, find T − P_1" is WRONG for a Grade 4 subtraction skill — use real numbers in a real context.
 
 NUMERICAL DIVERSITY (when generating numericals):
 - Do NOT mirror a template with only the numbers changed. Vary:
@@ -225,6 +242,54 @@ export function getSubjectHint(subject: string): string {
   if (s.includes('econ')) return SubjectLanguageHint.economics;
   if (s.includes('account')) return SubjectLanguageHint.accountancy;
   return '';
+}
+
+// --- Grade tier + per-call reminder ---
+export type GradeTier = 'primary' | 'upper-primary' | 'high' | 'unknown';
+
+export function getGradeTier(grade: string | number | undefined): GradeTier {
+  const n = parseInt(String(grade || '').match(/\d+/)?.[0] || '0', 10);
+  if (n >= 1 && n <= 5) return 'primary';
+  if (n >= 6 && n <= 8) return 'upper-primary';
+  if (n >= 9 && n <= 12) return 'high';
+  return 'unknown';
+}
+
+export function getGradeAppropriatenessHint(grade: string | number | undefined, subject?: string): string {
+  const tier = getGradeTier(grade);
+  const n = parseInt(String(grade || '').match(/\d+/)?.[0] || '0', 10);
+  const isMath = (subject || '').toLowerCase().includes('math') || (subject || '').toLowerCase().includes('ganit');
+  if (tier === 'unknown') return '';
+
+  const lines: string[] = [];
+  lines.push(`\nGRADE_TIER: ${tier.toUpperCase()} (Grade ${n}).`);
+
+  if (tier === 'primary') {
+    lines.push('- HARD CONSTRAINT: NO algebraic variables (x, y, T, P, P_1, etc.). NO "let X = ..." framing. Use real numbers in concrete contexts.');
+    lines.push('- Stem ≤ 15 words. Active voice. Vocabulary at grade level.');
+    if (isMath) {
+      const upper = n <= 2 ? 100 : n === 3 ? 10000 : 1000000;
+      lines.push(`- Math: whole numbers up to ${upper.toLocaleString()}. ${n >= 3 ? 'Common fractions (1/2, 1/4) allowed.' : 'No fractions.'} ${n >= 4 ? 'Simple decimals allowed.' : 'No decimals.'} No negative numbers, no equations with unknowns, no coordinate geometry.`);
+    }
+  } else if (tier === 'upper-primary') {
+    lines.push('- Variables allowed as single letters (x, y, a, b). NO subscripted variables unless the source chapter uses them.');
+    lines.push('- Stem ≤ 30 words. Two-step reasoning maximum.');
+    if (isMath) {
+      lines.push('- Math: integers, fractions, decimals, ratios, percents, simple linear equations (G7–8). No quadratics, no trig, no calculus, no matrices.');
+    }
+  } else if (tier === 'high') {
+    lines.push('- Full algebra OK. Subscripts allowed when genuinely useful (sequences, systems).');
+    lines.push('- Stem ≤ 50 words for multi-step problems; keep prose tight.');
+    if (isMath) {
+      if (n === 9) lines.push('- Math: no calculus, no matrices, no complex numbers, no conic sections, no vectors, no permutations.');
+      if (n === 10) lines.push('- Math: quadratics, AP, basic trig & identities, similar triangles allowed. No calculus / matrices / conic sections / binomial / 3D geometry / vectors.');
+      if (n >= 11) lines.push('- Math: calculus OK only if in-scope. Always stay within NCERT grade content.');
+    }
+  }
+
+  lines.push('- If the SKILL is concrete (e.g., "subtract 5-digit numbers"), keep the QUESTION concrete. Do NOT convert into symbolic form.');
+
+  return lines.join('\n');
 }
 
 // --- Grade 9/10 math concept boundary (NCERT-aligned). Keeps numericals in-scope. ---

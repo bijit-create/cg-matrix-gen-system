@@ -2402,11 +2402,34 @@ Simple English, Indian names, short stems.`;
 const QuickGenerateView = () => {
   const [lo, setLo] = useState('');
   const [skill, setSkill] = useState('');
+  const [grade, setGrade] = useState('');
+  const [subject, setSubject] = useState('');
   const [count, setCount] = useState('15');
   const [content, setContent] = useState('');
   const [isParsingFile, setIsParsingFile] = useState(false);
   const [tsvInput, setTsvInput] = useState('');
   const [metadata, setMetadata] = useState<any>(null);
+
+  // Grade is the numeric part ("4" from "G4" or "Grade 4"); gradeTier drives the
+  // grade-appropriate block in the generation prompt.
+  const gradeNum = parseInt(String(grade || metadata?.gradeCode || '').match(/\d+/)?.[0] || '0', 10);
+  const gradeTier: 'primary' | 'upper-primary' | 'high' | 'unknown' =
+    gradeNum >= 1 && gradeNum <= 5 ? 'primary'
+    : gradeNum >= 6 && gradeNum <= 8 ? 'upper-primary'
+    : gradeNum >= 9 && gradeNum <= 12 ? 'high'
+    : 'unknown';
+
+  // Keep metadata in sync with manual Grade / Subject edits so downstream code
+  // (which reads metadata.gradeCode / metadata.subjectCode) always sees the
+  // latest values regardless of whether they came from TSV or the inputs.
+  useEffect(() => {
+    if (!grade && !subject) return;
+    setMetadata((prev: any) => ({
+      ...(prev || {}),
+      gradeCode: grade || prev?.gradeCode || '',
+      subjectCode: subject || prev?.subjectCode || '',
+    }));
+  }, [grade, subject]);
 
   const [status, setStatus] = useState<'idle' | 'running' | 'done'>('idle');
   const [progress, setProgress] = useState('');
@@ -2492,6 +2515,8 @@ const QuickGenerateView = () => {
       if (row.length >= 15) {
         if (row[5]) setSkill(row[5]);
         if (row[15]) setLo(row[15]);
+        if (row[1]) setGrade(row[1]);
+        if (row[0]) setSubject(row[0]);
         setMetadata({ subjectCode: row[0], gradeCode: row[1], skillCode: row[3] });
       }
     } catch { /* ignore */ }
@@ -2603,9 +2628,14 @@ const QuickGenerateView = () => {
       };
 
       // Grade-math boundary — keeps numericals in-scope (Divyansh)
-      const { getGradeMathBoundary } = await import('./agents/prompts');
+      const { getGradeMathBoundary, getGradeAppropriatenessHint } = await import('./agents/prompts');
       const gradeMathBoundary = subjectKind === 'math' ? getGradeMathBoundary(metadata?.gradeCode) : '';
       if (gradeMathBoundary) log('Applying grade-math concept boundary.');
+
+      // Grade-appropriate tier hint — applies to every subject; enforces concrete
+      // over symbolic for primary, blocks out-of-grade concepts, caps stem length.
+      const gradeHint = getGradeAppropriatenessHint(metadata?.gradeCode, metadata?.subjectCode);
+      if (gradeHint) log(`Applying grade-appropriate rules for grade ${metadata?.gradeCode}.`);
 
       // State-board language profile (Divyansh) — applied for grades 9/10 only
       const gradeNum = parseInt(String(metadata?.gradeCode || '').match(/\d+/)?.[0] || '0', 10);
@@ -2669,7 +2699,7 @@ const QuickGenerateView = () => {
             const exemplarNote = exemplarBank ? `\nEXEMPLAR QUESTIONS (match this quality):\n${exemplarBank.slice(0, 400)}` : '';
             const contentSlice = content.length > 0 ? content.slice(0, 1500) : lo;
             const q = await generateAgentResponse('Generation Agent',
-              `${Prompts.GenerationStage1}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\n${difficultyInstr[difficulty]}${gradeMathBoundary}${stateBoardNote}${approvedTermsNote}${noScenarioNote}\nContent: ${contentSlice}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''}\nUK English (colour, favourite, organise, centre). Indian names. Grade-appropriate.${avoidNote}${customNote}${exemplarNote}`,
+              `${Prompts.GenerationStage1}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\n${difficultyInstr[difficulty]}${gradeHint}${gradeMathBoundary}${stateBoardNote}${approvedTermsNote}${noScenarioNote}\nContent: ${contentSlice}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''} | Subject: ${metadata?.subjectCode || ''}\nUK English (colour, favourite, organise, centre). Indian names. Grade-appropriate.${avoidNote}${customNote}${exemplarNote}`,
               JSON.stringify({ id: qId, type: schemaType, cell }),
               GenerationSchema
             );
@@ -2720,7 +2750,7 @@ const QuickGenerateView = () => {
     log(`${q.id}: ${action}...`);
     try {
       const { generateAgentResponse } = await import('./agents/api');
-      const { Prompts } = await import('./agents/prompts');
+      const { Prompts, getGradeAppropriatenessHint } = await import('./agents/prompts');
       const { GenerationSchema } = await import('./agents/schemas');
 
       const actionInstr: Record<string, string> = {
@@ -2743,12 +2773,13 @@ const QuickGenerateView = () => {
 
       const schemaType = (q.type === 'assertion_reason' || q.type === 'case_based') ? 'mcq' : q.type;
       const extraNoteLine = extraNote ? `\nEXTRA CONSTRAINT: ${extraNote}` : '';
+      const gradeHint = getGradeAppropriatenessHint(metadata?.gradeCode, metadata?.subjectCode);
       const prompt = `${Prompts.GenerationStage1}
 Cell ${q.cell}. ${actionInstr[action]}
-Type: ${q.type}. ${typeInstr[q.type] || typeInstr.mcq}
+Type: ${q.type}. ${typeInstr[q.type] || typeInstr.mcq}${gradeHint}
 Skill: ${skill}
 LO: ${lo}
-Grade: ${metadata?.gradeCode || ''}
+Grade: ${metadata?.gradeCode || ''} | Subject: ${metadata?.subjectCode || ''}
 UK English. Indian names. Grade-appropriate.${extraNoteLine}
 
 CURRENT QUESTION (${action === 'regenerate' ? 'replace with something different' : 'rewrite'}):
@@ -2833,6 +2864,34 @@ ${q.stem}`;
               <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Skill</label>
               <input required value={skill} onChange={e => setSkill(e.target.value)} className="w-full tech-border bg-[var(--bg)] p-2 text-sm" placeholder="e.g., Classify food items" />
             </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">
+                  Grade <span className="text-[var(--danger)]">*</span>
+                </label>
+                <input
+                  required
+                  value={grade}
+                  onChange={e => setGrade(e.target.value)}
+                  className="w-full tech-border bg-[var(--bg)] p-2 text-sm"
+                  placeholder="e.g., 4 or G4"
+                />
+                {gradeTier !== 'unknown' && (
+                  <div className="text-[9px] text-[var(--ink-muted)] mt-1">
+                    {gradeTier === 'primary' ? 'Primary (1–5)' : gradeTier === 'upper-primary' ? 'Upper primary (6–8)' : 'High (9–12)'}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Subject</label>
+                <input
+                  value={subject}
+                  onChange={e => setSubject(e.target.value)}
+                  className="w-full tech-border bg-[var(--bg)] p-2 text-sm"
+                  placeholder="e.g., MATH, SCI, ENG"
+                />
+              </div>
+            </div>
             <div>
               <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Questions</label>
               <input type="number" min="1" max="30" value={count} onChange={e => setCount(e.target.value)} className="w-full tech-border bg-[var(--bg)] p-2 text-sm" />
@@ -2851,11 +2910,15 @@ ${q.stem}`;
             </div>
             <button
               onClick={handleGenerate}
-              disabled={!lo || !skill || status === 'running'}
+              disabled={!lo || !skill || !grade || status === 'running'}
+              title={!grade ? 'Grade is required for grade-appropriate generation.' : undefined}
               className="bg-[var(--ink)] text-[var(--bg)] py-3 font-bold uppercase tracking-wide hover:bg-[var(--accent)] transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {status === 'running' ? <><Loader2 size={16} className="animate-spin" /> Generating...</> : <><Activity size={16} /> Generate All</>}
             </button>
+            {!grade && (lo || skill) && (
+              <p className="text-[10px] text-[var(--danger)]">Grade required before generation.</p>
+            )}
           </div>
 
           {/* Customization Panel */}
