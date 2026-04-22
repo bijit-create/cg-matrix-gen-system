@@ -39,7 +39,7 @@ export async function analyzeVisualIntent(question: string): Promise<{
   try {
     return await generateAgentResponse(
       'Image Analysis',
-      `Classify what visual this question needs. CRITICAL: any visual with AXES, COORDINATES, or NUMERIC DATA must use a RENDER_* option — never GENERATE_IMAGE (AI image-gen hallucinates axes and values).
+      `Classify what visual this question needs. CRITICAL: any visual with AXES, COORDINATES, NUMERIC DATA, a TABLE, a WORKED SOLUTION, or a STUDENT'S WRITTEN CALCULATION must use a RENDER_* option — never GENERATE_IMAGE (AI image-gen hallucinates axes, values, handwriting, and will produce a stock photo of children instead of their actual working).
 
 RENDER_LINE_GRAPH: Distance-time, speed-time, temperature-time, any x-y plot with line segments or labelled points (P, Q, R, S). Write JSON:
   {"title":"...","xLabel":"Time (min)","yLabel":"Distance (km)","xMin":0,"xMax":60,"yMin":0,"yMax":10,
@@ -47,12 +47,17 @@ RENDER_LINE_GRAPH: Distance-time, speed-time, temperature-time, any x-y plot wit
      "points":[{"x":0,"y":0,"label":"Home"},{"x":10,"y":2,"label":"P"},{"x":30,"y":2,"label":"Q"},{"x":60,"y":10,"label":"Park"}]}]}
   Use points to encode each segment transition exactly (include halts as two points with same y).
 RENDER_CHART: Bar or pie ONLY (categorical). JSON: {"type":"bar"|"pie","title":"...","data":[{"label":"...","value":N}]}
-RENDER_TABLE: Tabular data. JSON: {"title":"...","headers":["..."],"rows":[["..."]]}
+RENDER_TABLE: ANY tabular data. Use this whenever the question shows rows and columns, a data pattern, a daily/weekly measurements table, or a comparison grid. JSON: {"title":"...","headers":["Day","P (kg)","Q (kg)","Total"],"rows":[["1","2.35","1.10","3.45"],["2","2.45","1.25","3.70"]]}
 RENDER_NUMBERLINE: 1-D number lines. JSON: {"min":N,"max":N,"marks":[{"value":N,"label":"..."}]}
-RENDER_MATH: Math expression to typeset. LaTeX string only.
+RENDER_MATH: A single math expression to typeset OR a short worked-solution/column-arithmetic/decimal-alignment "picture" (stacked numbers with a bar, equation alignment). LaTeX string only — use \\begin{array} or aligned environments to show vertical column addition / subtraction / decimal alignment. Example for "Priya's working of 3.45 + 12.7 + 0.825":
+  "\\begin{array}{r} 3.450 \\\\ 12.700 \\\\ + 0.825 \\\\ \\hline 16.975 \\end{array}"
 GENERATE_SVG: Precise geometry ONLY (angles, polygons, coordinate geometry figures — NOT plots with axes).
-GENERATE_IMAGE: Real-world objects, food, animals, plants, body parts, scenery. NEVER for graphs, charts, data, axes, coordinates, equations, tables.
+GENERATE_IMAGE: Real-world objects, food, animals, plants, body parts, scenery. NEVER for graphs, charts, data, axes, coordinates, equations, tables, worked examples, students' handwriting, or anything a student is supposed to "observe and analyse".
 SKIP: No visual needed.
+
+HARD RULES:
+- If the stem says "Observe the image / Look at the working / Look at the picture showing the weight of each item / which student has correctly…" DO NOT pick GENERATE_IMAGE. Pick RENDER_TABLE or RENDER_MATH instead — the reader needs exact values, not a stock photo.
+- If the question compares two students' worked solutions, pick RENDER_MATH and produce BOTH solutions stacked side-by-side with a separator.
 
 Question: "${question}"`,
       '{}',

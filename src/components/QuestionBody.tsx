@@ -11,6 +11,8 @@
 
 import React from 'react';
 import type { ReactNode } from 'react';
+import { splitPair } from '../utils/matchPairs';
+import { extractMarkdownTable } from '../utils/markdownTable';
 
 export type BodyDensity = 'detailed' | 'compact';
 
@@ -67,7 +69,8 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
         </div>
       )}
 
-      {/* Stem */}
+      {/* Stem — detects inline markdown tables and renders them as proper HTML
+           tables so tabular data doesn't collapse into unreadable prose. */}
       <div style={wrapGap}>
         <SectionLabel show={detailed}>Question Stem</SectionLabel>
         <div
@@ -78,7 +81,57 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
             ...stemStyle,
           }}
         >
-          <Latex text={q.stem} />
+          {(() => {
+            const parsed = extractMarkdownTable(String(q.stem || ''));
+            if (!parsed.table) return <Latex text={q.stem} />;
+            return (
+              <>
+                {parsed.before && (
+                  <div style={{ marginBottom: 10 }}><Latex text={parsed.before} /></div>
+                )}
+                <div style={{
+                  overflow: 'auto', borderRadius: 8,
+                  border: '1px solid var(--border-subtle)',
+                  margin: '8px 0',
+                }}>
+                  <table style={{
+                    width: '100%', borderCollapse: 'collapse',
+                    fontSize: 13, fontFamily: 'var(--font-body)',
+                  }}>
+                    <thead>
+                      <tr>
+                        {parsed.table.headers.map((h, i) => (
+                          <th key={i} style={{
+                            background: 'var(--swiftee-deep)', color: '#fff',
+                            padding: '8px 10px', textAlign: 'left',
+                            fontFamily: 'var(--font-display)', fontWeight: 700,
+                            fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em',
+                            borderBottom: '1px solid var(--swiftee-deep)',
+                          }}><Latex text={h} /></th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsed.table.rows.map((row, ri) => (
+                        <tr key={ri} style={{ background: ri % 2 === 0 ? '#fff' : '#FAFAFC' }}>
+                          {row.map((cell, ci) => (
+                            <td key={ci} style={{
+                              padding: '8px 10px',
+                              borderTop: '1px solid var(--border-subtle)',
+                              color: 'var(--swiftee-deep)',
+                            }}><Latex text={cell} /></td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {parsed.after && (
+                  <div style={{ marginTop: 10 }}><Latex text={parsed.after} /></div>
+                )}
+              </>
+            );
+          })()}
         </div>
       </div>
 
@@ -204,8 +257,7 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
           <SectionLabel show={detailed}>Match Pairs</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 24px 1fr', gap: 10, rowGap: 8 }}>
             {(q.pairs || q.match_pairs || []).map((pair: any, i: number) => {
-              const left = typeof pair === 'string' ? pair.split(' → ')[0] : pair.left;
-              const right = typeof pair === 'string' ? pair.split(' → ')[1] : pair.right;
+              const { left, right } = splitPair(pair);
               return (
                 <React.Fragment key={i}>
                   <div style={{

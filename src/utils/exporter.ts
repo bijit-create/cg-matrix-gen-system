@@ -1,6 +1,7 @@
 // Export utility — generates Excel doc + image ZIP for the completed question set
 
 import * as XLSX from 'xlsx';
+import { splitPair } from './matchPairs';
 
 interface ExportQuestion {
   id: string;
@@ -83,12 +84,13 @@ function questionToRow(q: ExportQuestion, qaResult: any, metadata: any) {
     });
   }
 
-  // Match pairs
-  const pairs = q.pairs || (q.match_pairs || []).map((p: any) => `${p.left} → ${p.right}`);
+  // Match pairs — use the tolerant splitter so \to / \rightarrow in LaTeX-ified
+  // pairs still split correctly for the spreadsheet columns.
+  const pairs: any[] = q.pairs || (q.match_pairs || []).map((p: any) => `${p.left} → ${p.right}`);
   if (pairs.length > 0) {
-    pairs.forEach((pair: string, i: number) => {
-      const [left, right] = pair.split(' → ');
-      base[`Match Left ${i + 1}`] = left || pair;
+    pairs.forEach((pair: any, i: number) => {
+      const { left, right } = splitPair(pair);
+      base[`Match Left ${i + 1}`] = left || String(pair);
       base[`Match Right ${i + 1}`] = right || '';
     });
   }

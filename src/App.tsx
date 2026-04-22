@@ -43,6 +43,7 @@ import katex from 'katex';
 
 import { AgentOrchestrator } from './agents/orchestrator';
 import { parseUploadedFile } from './utils/fileParser';
+import { splitPair } from './utils/matchPairs';
 import { PhaseChips } from './components/PhaseChips';
 import { TriageBar } from './components/TriageBar';
 import { QuestionBody } from './components/QuestionBody';
@@ -375,10 +376,7 @@ const PipelineRunnerView = () => {
                     rationale: q.rationale || '',
                     targeted_subskill: q.targeted_subskill || '',
                     steps: q.steps || [],
-                    match_pairs: q.pairs ? q.pairs.map((p: string, i: number) => {
-                        const [l, r] = p.split(' → ');
-                        return { left: l || p, right: r || '' };
-                    }) : q.match_pairs || [],
+                    match_pairs: q.pairs ? q.pairs.map((p: string, _i: number) => splitPair(p)) : q.match_pairs || [],
                     arrange_items: q.items || q.arrange_items || [],
                     needs_image: q.needs_image
                 })));
@@ -2543,7 +2541,9 @@ const QuickGenerateView = () => {
           // Grade-tier image target — lower grades need more visuals.
           const thisPositionIsImage = imageTargetPositions.has(allQs.length);
           const imageDirectiveNote = thisPositionIsImage
-            ? `\nIMAGE REQUIREMENT (this question): needs_image MUST be true. Design the stem to REQUIRE a picture, diagram, graph, chart, or illustration to answer. If MCQ, options may also reference the image. For primary grades especially, prefer concrete visuals (objects to count, pictures to identify, diagrams to label). For the "image_desc" on needs_image=true, describe exactly what to show.`
+            ? `\nIMAGE REQUIREMENT (this question): needs_image MUST be true. Design the stem to REQUIRE a picture, diagram, graph, chart, or illustration to answer.
+SELF-CONTAINED STEM (CRITICAL): even though the image is attached, the stem MUST still carry every essential numeric value, label, or piece of data needed to solve — NEVER write "Look at the image showing the weights" without also listing those weights in the stem text (e.g., "Aisha bought three items weighing 5.250 kg, 3.800 kg, and 1.755 kg. [image shows these]. What is the total?"). The student must be able to see the numbers even if the image fails to render.
+If MCQ, options may also reference the image. For primary grades especially, prefer concrete visuals (objects to count, pictures to identify, diagrams to label). For the "image_desc" on needs_image=true, describe exactly what to show.`
             : '';
 
           // assertion_reason + case_based are specialised MCQs — map to 'mcq' schema-wise

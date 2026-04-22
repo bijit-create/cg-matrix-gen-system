@@ -56,6 +56,11 @@ GRADE-APPROPRIATENESS (obey the GRADE_PROFILE block when one is provided):
 - If no GRADE_PROFILE is given, infer one yourself from the GRADE, SUBJECT, SKILL, LO, and any chapter content you have been shown.
 - UNIVERSAL RULE — never violate: if the assessed SKILL itself is concrete (e.g., "subtract 5-digit numbers", "count objects", "identify parts of a plant"), KEEP the question concrete. NEVER abstract into symbolic or variable form ("let P_1 + P_2 = T …") unless the SKILL explicitly asks for algebraic reasoning. Use real numbers in a real context.
 
+TABULAR DATA (when the stem shows rows and columns):
+- Do NOT paste a markdown table inline in the stem (no "Day | P | Q | Total --- | --- | --- | --- 1 | 2.35 …"). That renders as unreadable prose.
+- Instead: (a) set needs_image=true, (b) describe the table in image_desc, and (c) still include the minimum numeric values the student needs in the stem prose (e.g., "On Days 1–3 the totals were 3.45, 3.70, 3.95 kg …") so the question is answerable if the image fails to render.
+- If you must keep the table in text, use ONE cell per newline (not pipes on one wrapped line) so downstream renderers can detect and re-flow it into an HTML table.
+
 NUMERICAL DIVERSITY (when generating numericals):
 - Do NOT mirror a template with only the numbers changed. Vary:
   (i) GIVEN vs UNKNOWN mapping — shift which quantity is the unknown;

@@ -153,13 +153,43 @@ function checkDistractors(options: any[]): QAFlag[] {
     });
   }
 
-  // Duplicate options
+  // Duplicate options (exact text)
   const seen = new Set<string>();
   texts.forEach((t, i) => {
     if (t && seen.has(t)) {
       flags.push({ rule: 'duplicate_option', category: 'distractor', severity: 'critical', message: 'Duplicate option detected.', field: `option_${String.fromCharCode(65 + i)}` });
     }
     if (t) seen.add(t);
+  });
+
+  // Compound-answer duplicates — same numeric/measurement value appearing in
+  // multiple options even when the surrounding prose differs. Caught "Priya;
+  // 16.975 metres" vs "Sameer: 16.975 metres" in the U2-7 screenshot — only
+  // the name differed, so the question was impossible to answer on maths alone.
+  // Extract canonical numeric/unit tokens ("16.975 metres", "10.805 kg", "3.5"),
+  // and flag if any token appears in ≥2 options.
+  const numericTokenRe = /-?\d+(?:[.,]\d+)?\s*(?:kg|g|mg|m\b|cm|mm|km|ml|l|litre|metres?|meters?|seconds?|minutes?|hours?|%|°c|°f)?/gi;
+  const numberCounts: Record<string, number[]> = {};
+  texts.forEach((t, i) => {
+    const matches = (t.match(numericTokenRe) || []).map(s => s.replace(/\s+/g, ' ').trim().toLowerCase()).filter(Boolean);
+    // only care about tokens long enough to be meaningful (skip lone "1" etc.)
+    const meaningful = matches.filter(m => m.length >= 3 || /\d\D/.test(m));
+    meaningful.forEach(m => {
+      (numberCounts[m] ||= []).push(i);
+    });
+  });
+  Object.entries(numberCounts).forEach(([token, optionIdxs]) => {
+    if (optionIdxs.length >= 2) {
+      optionIdxs.forEach(i => {
+        flags.push({
+          rule: 'compound_duplicate',
+          category: 'distractor',
+          severity: 'major',
+          message: `Numeric/unit value "${token}" appears in ${optionIdxs.length} options. Differentiator cannot rely on a non-mathematical label alone.`,
+          field: `option_${String.fromCharCode(65 + i)}`,
+        });
+      });
+    }
   });
 
   // Combination options (research: adds test-wiseness, not cognition)
