@@ -2437,6 +2437,9 @@ const QuickGenerateView = () => {
   const [questionImages, setQuestionImages] = useState<Record<string, string>>({});
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  // Content-driven grade-appropriateness profile (inferred once per batch;
+  // cached here so Regen/Simplify/Harder reuse it without extra calls).
+  const [gradeScopeProfile, setGradeScopeProfile] = useState<any>(null);
 
   // Customization panel state
   const ALL_BLOOM = ['Remember', 'Understand', 'Apply', 'Analyze'] as const;
@@ -2628,14 +2631,33 @@ const QuickGenerateView = () => {
       };
 
       // Grade-math boundary — keeps numericals in-scope (Divyansh)
-      const { getGradeMathBoundary, getGradeAppropriatenessHint } = await import('./agents/prompts');
+      const { Prompts: Pr, getGradeMathBoundary, getGradeAppropriatenessHint, formatGradeProfile } = await import('./agents/prompts');
       const gradeMathBoundary = subjectKind === 'math' ? getGradeMathBoundary(metadata?.gradeCode) : '';
       if (gradeMathBoundary) log('Applying grade-math concept boundary.');
 
-      // Grade-appropriate tier hint — applies to every subject; enforces concrete
-      // over symbolic for primary, blocks out-of-grade concepts, caps stem length.
-      const gradeHint = getGradeAppropriatenessHint(metadata?.gradeCode, metadata?.subjectCode);
-      if (gradeHint) log(`Applying grade-appropriate rules for grade ${metadata?.gradeCode}.`);
+      // Content-driven GRADE_PROFILE (one call per batch, cached for Regen/Simplify/Harder).
+      let gradeHint = '';
+      if (metadata?.gradeCode) {
+        setProgress('Inferring grade-appropriate profile...');
+        log('Inferring grade-appropriate profile from content + grade...');
+        try {
+          const { GradeScopeSchema } = await import('./agents/schemas');
+          const scopeInput = JSON.stringify({
+            grade: metadata?.gradeCode,
+            subject: metadata?.subjectCode,
+            skill,
+            learning_objective: lo,
+            chapter_content: content ? content.slice(0, 2500) : '',
+          });
+          const profile = await generateAgentResponse('Grade Scope Agent', Pr.GradeScopeAgent, scopeInput, GradeScopeSchema);
+          setGradeScopeProfile(profile);
+          gradeHint = formatGradeProfile(profile);
+          log(`Grade profile ready: ${profile.concrete_lock ? 'concrete-locked; ' : ''}cap ${profile.stem_cap_words || '—'} words.`);
+        } catch (e: any) {
+          log(`Grade scope inference failed: ${e.message?.slice(0, 50)}. Falling back to minimal hint.`);
+          gradeHint = getGradeAppropriatenessHint(metadata?.gradeCode, metadata?.subjectCode);
+        }
+      }
 
       // State-board language profile (Divyansh) — applied for grades 9/10 only
       const gradeNum = parseInt(String(metadata?.gradeCode || '').match(/\d+/)?.[0] || '0', 10);
@@ -2750,8 +2772,8 @@ const QuickGenerateView = () => {
     log(`${q.id}: ${action}...`);
     try {
       const { generateAgentResponse } = await import('./agents/api');
-      const { Prompts, getGradeAppropriatenessHint } = await import('./agents/prompts');
-      const { GenerationSchema } = await import('./agents/schemas');
+      const { Prompts, getGradeAppropriatenessHint, formatGradeProfile } = await import('./agents/prompts');
+      const { GenerationSchema, GradeScopeSchema } = await import('./agents/schemas');
 
       const actionInstr: Record<string, string> = {
         regenerate: 'Generate a DIFFERENT question testing the same skill. Do not repeat the current stem.',
@@ -2773,7 +2795,25 @@ const QuickGenerateView = () => {
 
       const schemaType = (q.type === 'assertion_reason' || q.type === 'case_based') ? 'mcq' : q.type;
       const extraNoteLine = extraNote ? `\nEXTRA CONSTRAINT: ${extraNote}` : '';
-      const gradeHint = getGradeAppropriatenessHint(metadata?.gradeCode, metadata?.subjectCode);
+      // Prefer cached profile from handleGenerate; lazy-infer only if missing.
+      let gradeHint = '';
+      if (gradeScopeProfile) {
+        gradeHint = formatGradeProfile(gradeScopeProfile);
+      } else if (metadata?.gradeCode) {
+        try {
+          const scopeInput = JSON.stringify({
+            grade: metadata?.gradeCode,
+            subject: metadata?.subjectCode,
+            skill, learning_objective: lo,
+            chapter_content: content ? content.slice(0, 2500) : '',
+          });
+          const profile = await generateAgentResponse('Grade Scope Agent', Prompts.GradeScopeAgent, scopeInput, GradeScopeSchema);
+          setGradeScopeProfile(profile);
+          gradeHint = formatGradeProfile(profile);
+        } catch {
+          gradeHint = getGradeAppropriatenessHint(metadata?.gradeCode, metadata?.subjectCode);
+        }
+      }
       const prompt = `${Prompts.GenerationStage1}
 Cell ${q.cell}. ${actionInstr[action]}
 Type: ${q.type}. ${typeInstr[q.type] || typeInstr.mcq}${gradeHint}

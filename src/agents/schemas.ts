@@ -168,3 +168,19 @@ export const QASchema: Schema = {
         required: ["question_id", "pass", "issues", "severity"]
     }
 };
+
+// Grade scope profile — output of GradeScopeAgent, injected into generation prompts.
+export const GradeScopeSchema: Schema = {
+    type: Type.OBJECT,
+    properties: {
+        notation: { type: Type.STRING },
+        number_range: { type: Type.STRING },
+        vocabulary: { type: Type.STRING },
+        familiar_contexts: { type: Type.ARRAY, items: { type: Type.STRING } },
+        in_scope: { type: Type.ARRAY, items: { type: Type.STRING } },
+        out_of_scope: { type: Type.ARRAY, items: { type: Type.STRING } },
+        stem_cap_words: { type: Type.INTEGER },
+        concrete_lock: { type: Type.BOOLEAN }
+    },
+    required: ["notation", "number_range", "vocabulary", "familiar_contexts", "in_scope", "out_of_scope", "concrete_lock"]
+};

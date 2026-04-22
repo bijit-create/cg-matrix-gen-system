@@ -51,23 +51,10 @@ CONTENT:
 - ONE problem per stem. Stem contains ALL info needed.
 - NEVER: negative phrasing, "Which is true/false?", passive voice, textbook verbatim.
 
-GRADE-APPROPRIATENESS (CRITICAL — never violate; obey the GRADE and GRADE_TIER values you are given):
-- Primary (Grades 1–5):
-  * Numbers ONLY. Do NOT use algebraic variables (x, y, T, P, subscripts like P_1, P_2). Do NOT use formula notation like "P_1 + P_2 = T".
-  * Concrete contexts only — shopkeeper / classroom / toys / animals / fruit / money / time / length / weight.
-  * Stem ≤ 15 words. Short, active sentences. Vocabulary at the student's grade level.
-  * Math scope: G1–2 whole numbers to 100; G3 to 10,000; G4–5 up to 1,000,000. Common fractions (½, ¼) only from G3; decimals from G4; no negative numbers, no equations with an unknown, no coordinate geometry, no algebra.
-  * Science scope: observable, everyday phenomena. No abstract models.
-- Upper Primary (Grades 6–8):
-  * Introduce variables (single letter: x, y, a, b). NO subscripted variables (P_1, x_0) unless the chapter itself uses them.
-  * Linear equations in one variable (G7–8). Ratios, percents, integers, simple fractions of fractions.
-  * Two-step reasoning max. Stem ≤ 30 words. Textbook terms OK.
-  * No calculus, matrices, trig identities beyond Pythagorean, complex numbers, vectors.
-- High (Grades 9–12):
-  * Full symbolic algebra. Subscripts OK only when the concept requires them (series, sequences, systems of equations).
-  * Trigonometry basics G10+; quadratics G10+; calculus ONLY G11+ and only if the in-scope content mentions it.
-  * Stem up to 50 words for genuinely multi-step problems; still keep prose tight.
-- UNIVERSAL: if the assessed SKILL itself is concrete (e.g., "subtract 5-digit numbers", "count objects"), KEEP the question concrete. NEVER abstract into symbolic form. "If P_1 + P_2 = T, find T − P_1" is WRONG for a Grade 4 subtraction skill — use real numbers in a real context.
+GRADE-APPROPRIATENESS (obey the GRADE_PROFILE block when one is provided):
+- A GRADE_PROFILE is injected per batch by an upstream scoping step. It specifies the notation, number range, vocabulary, and concept scope the student is known to have encountered. Treat it as the source of truth.
+- If no GRADE_PROFILE is given, infer one yourself from the GRADE, SUBJECT, SKILL, LO, and any chapter content you have been shown.
+- UNIVERSAL RULE — never violate: if the assessed SKILL itself is concrete (e.g., "subtract 5-digit numbers", "count objects", "identify parts of a plant"), KEEP the question concrete. NEVER abstract into symbolic or variable form ("let P_1 + P_2 = T …") unless the SKILL explicitly asks for algebraic reasoning. Use real numbers in a real context.
 
 NUMERICAL DIVERSITY (when generating numericals):
 - Do NOT mirror a template with only the numbers changed. Vary:
@@ -141,6 +128,26 @@ Return improved question. If already good, return unchanged.`,
 
   QAAgent: `Check this question for: (1) factual accuracy — is the answer correct? (2) cognitive match — does it test the intended CG cell level? (3) distractor quality — are wrong options plausible and diagnostic? (4) language — UK English, grade-appropriate, culturally relevant for Indian students?
 Return: pass, issues, severity, score (0-100).`,
+
+  // --- Grade scope (content-driven; runs once per batch) ---
+  // Replaces hard-coded per-tier rules. The model infers the profile from the
+  // actual skill + LO + content + grade, so it adapts to curriculum nuance
+  // (e.g., an ICSE Grade 5 vs CBSE Grade 5 will get different profiles).
+  GradeScopeAgent: `You are an Indian curriculum expert. For the given GRADE, SUBJECT, SKILL, LEARNING OBJECTIVE, and optional CHAPTER_CONTENT, produce a compact GRADE_PROFILE that will govern how questions are written.
+
+Think first: what has a student at this grade in this subject likely been taught by now (NCERT / common state-board conventions)? If CHAPTER_CONTENT is provided, treat it as the PRIMARY source of truth — infer conventions from the content itself (notation, example style, vocabulary). If not, reason from the SKILL wording and typical curriculum scope.
+
+Output JSON with these fields — each keep to 1–2 short sentences or a comma-separated list:
+- notation: notation conventions the student knows (e.g., "whole numbers only, no variables" OR "letters x, y as unknowns; no subscripts" OR "full algebra with subscripts for sequences").
+- number_range: typical number magnitudes and types (e.g., "up to 10,000; common fractions 1/2, 1/4; no decimals" OR "integers, decimals, percents; linear equations in one variable").
+- vocabulary: reading level and allowed technical terms (e.g., "Grade 4 English; textbook term 'place value' OK, no jargon").
+- familiar_contexts: 3–6 concrete real-world contexts the question can use (e.g., "shopkeeper, classroom, playground, family, rupees, sports").
+- in_scope: 3–6 in-scope concepts for THIS SKILL at this grade.
+- out_of_scope: 3–6 concepts to AVOID (not yet taught / curriculum-inappropriate / pattern-matched from later grades).
+- stem_cap_words: integer maximum stem word count appropriate to this grade.
+- concrete_lock: true if the SKILL is concrete and the question MUST stay concrete (no symbolic / variable abstraction); false only when the skill itself calls for symbolic reasoning.
+
+Keep the whole profile under 600 characters. No commentary outside the JSON.`,
 };
 
 // --- Externalized dicts (previously inline in orchestrator.ts) ---
@@ -255,41 +262,32 @@ export function getGradeTier(grade: string | number | undefined): GradeTier {
   return 'unknown';
 }
 
+// Minimal fallback only — used when a GRADE_PROFILE is NOT available
+// (e.g., scope-inference call failed). Content-driven profile from GradeScopeAgent
+// is always preferred; this is a last-resort hint so output doesn't drift badly.
 export function getGradeAppropriatenessHint(grade: string | number | undefined, subject?: string): string {
   const tier = getGradeTier(grade);
   const n = parseInt(String(grade || '').match(/\d+/)?.[0] || '0', 10);
-  const isMath = (subject || '').toLowerCase().includes('math') || (subject || '').toLowerCase().includes('ganit');
   if (tier === 'unknown') return '';
+  const subj = (subject || '').toLowerCase();
+  const _isMath = subj.includes('math') || subj.includes('ganit');
+  void _isMath; // reserved for future subject-aware fallback
+  return `\nFALLBACK GRADE HINT (no full profile available): Grade ${n} — ${tier}. Infer appropriate notation, vocabulary, and concept scope yourself from the SKILL and LO. Keep the question concrete unless the SKILL explicitly asks for symbolic reasoning.`;
+}
 
-  const lines: string[] = [];
-  lines.push(`\nGRADE_TIER: ${tier.toUpperCase()} (Grade ${n}).`);
-
-  if (tier === 'primary') {
-    lines.push('- HARD CONSTRAINT: NO algebraic variables (x, y, T, P, P_1, etc.). NO "let X = ..." framing. Use real numbers in concrete contexts.');
-    lines.push('- Stem ≤ 15 words. Active voice. Vocabulary at grade level.');
-    if (isMath) {
-      const upper = n <= 2 ? 100 : n === 3 ? 10000 : 1000000;
-      lines.push(`- Math: whole numbers up to ${upper.toLocaleString()}. ${n >= 3 ? 'Common fractions (1/2, 1/4) allowed.' : 'No fractions.'} ${n >= 4 ? 'Simple decimals allowed.' : 'No decimals.'} No negative numbers, no equations with unknowns, no coordinate geometry.`);
-    }
-  } else if (tier === 'upper-primary') {
-    lines.push('- Variables allowed as single letters (x, y, a, b). NO subscripted variables unless the source chapter uses them.');
-    lines.push('- Stem ≤ 30 words. Two-step reasoning maximum.');
-    if (isMath) {
-      lines.push('- Math: integers, fractions, decimals, ratios, percents, simple linear equations (G7–8). No quadratics, no trig, no calculus, no matrices.');
-    }
-  } else if (tier === 'high') {
-    lines.push('- Full algebra OK. Subscripts allowed when genuinely useful (sequences, systems).');
-    lines.push('- Stem ≤ 50 words for multi-step problems; keep prose tight.');
-    if (isMath) {
-      if (n === 9) lines.push('- Math: no calculus, no matrices, no complex numbers, no conic sections, no vectors, no permutations.');
-      if (n === 10) lines.push('- Math: quadratics, AP, basic trig & identities, similar triangles allowed. No calculus / matrices / conic sections / binomial / 3D geometry / vectors.');
-      if (n >= 11) lines.push('- Math: calculus OK only if in-scope. Always stay within NCERT grade content.');
-    }
-  }
-
-  lines.push('- If the SKILL is concrete (e.g., "subtract 5-digit numbers"), keep the QUESTION concrete. Do NOT convert into symbolic form.');
-
-  return lines.join('\n');
+// Format a GradeScopeAgent JSON response into the GRADE_PROFILE prompt block.
+export function formatGradeProfile(p: any): string {
+  if (!p) return '';
+  const parts: string[] = ['\nGRADE_PROFILE (source of truth for this batch):'];
+  if (p.notation) parts.push(`- NOTATION: ${p.notation}`);
+  if (p.number_range) parts.push(`- NUMBER_RANGE: ${p.number_range}`);
+  if (p.vocabulary) parts.push(`- VOCABULARY: ${p.vocabulary}`);
+  if (p.familiar_contexts) parts.push(`- FAMILIAR_CONTEXTS: ${Array.isArray(p.familiar_contexts) ? p.familiar_contexts.join(', ') : p.familiar_contexts}`);
+  if (p.in_scope) parts.push(`- IN_SCOPE: ${Array.isArray(p.in_scope) ? p.in_scope.join('; ') : p.in_scope}`);
+  if (p.out_of_scope) parts.push(`- OUT_OF_SCOPE (avoid entirely): ${Array.isArray(p.out_of_scope) ? p.out_of_scope.join('; ') : p.out_of_scope}`);
+  if (typeof p.stem_cap_words === 'number') parts.push(`- STEM_CAP_WORDS: ${p.stem_cap_words}`);
+  if (p.concrete_lock) parts.push('- CONCRETE_LOCK: true — KEEP the question concrete. Do NOT abstract into symbolic form or variables.');
+  return parts.join('\n');
 }
 
 // --- Grade 9/10 math concept boundary (NCERT-aligned). Keeps numericals in-scope. ---
