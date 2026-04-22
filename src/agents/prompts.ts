@@ -275,6 +275,18 @@ export function getGradeAppropriatenessHint(grade: string | number | undefined, 
   return `\nFALLBACK GRADE HINT (no full profile available): Grade ${n} — ${tier}. Infer appropriate notation, vocabulary, and concept scope yourself from the SKILL and LO. Keep the question concrete unless the SKILL explicitly asks for symbolic reasoning.`;
 }
 
+// Grade-tier → visual-question ratio (bijit's spec).
+//   Primary   1-5  : min 50%, max 60% of the set should be image-based
+//   Upper     6-8  : 30-40%
+//   High      9-12 : 10-20% (can exceed on visual-heavy topics)
+export function getImageRatioForGrade(grade: string | number | undefined): { minPct: number; maxPct: number } {
+  const tier = getGradeTier(grade);
+  if (tier === 'primary') return { minPct: 50, maxPct: 60 };
+  if (tier === 'upper-primary') return { minPct: 30, maxPct: 40 };
+  if (tier === 'high') return { minPct: 10, maxPct: 20 };
+  return { minPct: 20, maxPct: 35 }; // unknown grade — conservative default
+}
+
 // Format a GradeScopeAgent JSON response into the GRADE_PROFILE prompt block.
 export function formatGradeProfile(p: any): string {
   if (!p) return '';

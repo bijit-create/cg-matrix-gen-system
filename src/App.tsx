@@ -2631,7 +2631,7 @@ const QuickGenerateView = () => {
       };
 
       // Grade-math boundary — keeps numericals in-scope (Divyansh)
-      const { Prompts: Pr, getGradeMathBoundary, getGradeAppropriatenessHint, formatGradeProfile } = await import('./agents/prompts');
+      const { Prompts: Pr, getGradeMathBoundary, getGradeAppropriatenessHint, formatGradeProfile, getImageRatioForGrade } = await import('./agents/prompts');
       const gradeMathBoundary = subjectKind === 'math' ? getGradeMathBoundary(metadata?.gradeCode) : '';
       if (gradeMathBoundary) log('Applying grade-math concept boundary.');
 
@@ -2671,6 +2671,23 @@ const QuickGenerateView = () => {
       const approvedTermsNote = approvedTerms.length > 0
         ? `\nAPPROVED_TERMS (use ONLY these chapter-specific terms; do NOT invent synonyms):\n${approvedTerms.slice(0, 30).join(', ')}`
         : '';
+
+      // Grade-tier image ratio — distribute image targets across the batch.
+      // First targetImageMin positions (rounded up) carry a hard image directive;
+      // beyond that, AI decides naturally. Post-loop correction flips extras if
+      // the model ignores the directive.
+      const imageRatio = getImageRatioForGrade(metadata?.gradeCode);
+      const targetImageMin = Math.ceil((total * imageRatio.minPct) / 100);
+      log(`Grade ${metadata?.gradeCode || '?'}: target ${imageRatio.minPct}-${imageRatio.maxPct}% visual (min ${targetImageMin}/${total}).`);
+      // Evenly interleave image-targeted positions so visuals aren't clumped at
+      // the start of the set.
+      const imageTargetPositions = new Set<number>();
+      if (targetImageMin > 0 && total > 0) {
+        const step = total / targetImageMin;
+        for (let k = 0; k < targetImageMin; k++) {
+          imageTargetPositions.add(Math.floor(k * step));
+        }
+      }
 
       for (const { cell, count: cellCount, def } of cells) {
         const types = typeMap[cell] || ['mcq'];
@@ -2714,6 +2731,12 @@ const QuickGenerateView = () => {
             ? '\nR1/U1 RULE: Stem MUST be a direct question or one-sentence statement. Do NOT open with a scenario, character name, or "Consider/Imagine/Suppose".'
             : '';
 
+          // Grade-tier image target — lower grades need more visuals.
+          const thisPositionIsImage = imageTargetPositions.has(allQs.length);
+          const imageDirectiveNote = thisPositionIsImage
+            ? `\nIMAGE REQUIREMENT (this question): needs_image MUST be true. Design the stem to REQUIRE a picture, diagram, graph, chart, or illustration to answer. If MCQ, options may also reference the image. For primary grades especially, prefer concrete visuals (objects to count, pictures to identify, diagrams to label). For the "image_desc" on needs_image=true, describe exactly what to show.`
+            : '';
+
           // assertion_reason + case_based are specialised MCQs — map to 'mcq' schema-wise
           const schemaType = (qType === 'assertion_reason' || qType === 'case_based') ? 'mcq' : qType;
 
@@ -2721,10 +2744,12 @@ const QuickGenerateView = () => {
             const exemplarNote = exemplarBank ? `\nEXEMPLAR QUESTIONS (match this quality):\n${exemplarBank.slice(0, 400)}` : '';
             const contentSlice = content.length > 0 ? content.slice(0, 1500) : lo;
             const q = await generateAgentResponse('Generation Agent',
-              `${Prompts.GenerationStage1}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\n${difficultyInstr[difficulty]}${gradeHint}${gradeMathBoundary}${stateBoardNote}${approvedTermsNote}${noScenarioNote}\nContent: ${contentSlice}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''} | Subject: ${metadata?.subjectCode || ''}\nUK English (colour, favourite, organise, centre). Indian names. Grade-appropriate.${avoidNote}${customNote}${exemplarNote}`,
+              `${Prompts.GenerationStage1}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\n${difficultyInstr[difficulty]}${gradeHint}${gradeMathBoundary}${stateBoardNote}${approvedTermsNote}${noScenarioNote}${imageDirectiveNote}\nContent: ${contentSlice}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''} | Subject: ${metadata?.subjectCode || ''}\nUK English (colour, favourite, organise, centre). Indian names. Grade-appropriate.${avoidNote}${customNote}${exemplarNote}`,
               JSON.stringify({ id: qId, type: schemaType, cell }),
               GenerationSchema
             );
+            // If this position was image-targeted but the model ignored the directive, force-flip.
+            if (thisPositionIsImage && !q.needs_image) q.needs_image = true;
             allQs.push({ ...q, cell, type: qType, id: qId });
             setQuestions([...allQs]);
             log(`${qId}: ${qType} ✓`);
@@ -2735,6 +2760,24 @@ const QuickGenerateView = () => {
       }
 
       // === Post-generation checks ===
+
+      // Image-ratio floor — ensure the grade-tier visual minimum is met.
+      const imagesFlagged = allQs.filter(q => q.needs_image).length;
+      const imagesPct = allQs.length > 0 ? (imagesFlagged / allQs.length) * 100 : 0;
+      log(`imageRatio=${imagesPct.toFixed(0)}% (${imagesFlagged}/${allQs.length}; target ${imageRatio.minPct}-${imageRatio.maxPct}%)`);
+      if (imagesFlagged < targetImageMin && allQs.length > 0) {
+        const deficit = targetImageMin - imagesFlagged;
+        // Pick questions currently text-only, preferring those whose stems look
+        // visualisable (mention shapes, diagrams, objects, count, compare, etc.).
+        const visualCueRe = /\b(shape|diagram|figure|picture|image|graph|chart|count|compare|identify|label|parts?|object|organism|circle|triangle|rectangle|square|fraction|map|cycle)\b/i;
+        const candidates = allQs
+          .filter(q => !q.needs_image)
+          .sort((a, b) => (visualCueRe.test(b.stem || '') ? 1 : 0) - (visualCueRe.test(a.stem || '') ? 1 : 0));
+        const toFlip = candidates.slice(0, deficit);
+        toFlip.forEach(q => { q.needs_image = true; });
+        log(`Image floor not met. Flipped ${toFlip.length} text-only questions to needs_image=true.`);
+        setQuestions([...allQs]);
+      }
 
       // Scenario-ratio cap (Divyansh) — if > 40% of stems open with a scenario, regenerate the excess
       const scenarioOpeners = allQs.filter(q => SCENARIO_RE.test(q.stem || ''));
