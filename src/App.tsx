@@ -1147,51 +1147,58 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
   if (status === 'idle') {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-8 max-w-3xl mx-auto">
-        <header className="mb-8">
-          <h2 className="text-4xl font-light tracking-tight mb-2">New Generation Task</h2>
-          <p className="col-header">Initialize the multi-agent pipeline</p>
+        <header className="mb-6">
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 700, color: 'var(--swiftee-deep)', lineHeight: 1.15, marginBottom: 4 }}>
+            New generation task
+          </h2>
+          <p style={{ fontSize: 13, color: 'var(--fg-secondary)' }}>
+            Initialize the multi-agent pipeline. Paste a TSV row, or fill each field manually.
+          </p>
         </header>
 
-        <form onSubmit={handleStart} className="tech-border bg-[var(--surface)] p-8 flex flex-col gap-6">
+        <form onSubmit={handleStart} className="sw-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div>
-            <label className="block col-header mb-2">Quick Paste (TSV Row)</label>
-            <textarea 
+            <label className="sw-field-label">Quick paste (TSV row)</label>
+            <textarea
               value={tsvInput}
               onChange={handlePasteTSV}
-              className="w-full tech-border bg-[#0a0a0a] text-[#e5e5e5] p-3 font-mono text-xs focus:outline-none focus:border-[var(--accent)]"
-              placeholder="Paste Excel/Sheets row here to auto-fill..."
+              className="sw-textarea"
+              style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11, minHeight: 56, background: '#FAFAFC' }}
+              placeholder="Paste Excel/Sheets row here to auto-fill…"
               rows={2}
             />
           </div>
-          
-          <div className="border-t border-[var(--line-dark)] pt-6">
-            <label className="block col-header mb-2">Learning Objective (LO)</label>
-            <textarea 
+
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 18 }}>
+            <label className="sw-field-label">Learning objective (LO)</label>
+            <textarea
               required
               value={lo}
               onChange={(e) => setLo(e.target.value)}
-              className="w-full tech-border bg-[var(--bg)] p-3 font-sans text-sm focus:outline-none focus:border-[var(--accent)]"
-              placeholder="e.g., Understand and apply the Pythagorean theorem..."
+              className="sw-textarea"
+              placeholder="e.g., Understand and apply the Pythagorean theorem…"
               rows={3}
             />
           </div>
           <div>
-            <label className="block col-header mb-2">Target Skill</label>
-            <input 
+            <label className="sw-field-label">Target skill</label>
+            <input
               required
               type="text"
               value={skill}
               onChange={(e) => setSkill(e.target.value)}
-              className="w-full tech-border bg-[var(--bg)] p-3 font-sans text-sm focus:outline-none focus:border-[var(--accent)]"
+              className="sw-input"
               placeholder="e.g., Calculate hypotenuse"
             />
           </div>
           {/* Content Sources — PRIMARY material for question generation */}
-          <div className="border-t border-[var(--line-dark)] pt-6">
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 18 }}>
             <div className="flex justify-between items-center mb-3">
               <div>
-                <label className="block col-header">Content Sources (Primary Material)</label>
-                <p className="text-xs text-[var(--ink-muted)] mt-0.5">Questions will be generated from these sources first. Add chapter PDFs, YouTube explainers, or website links.</p>
+                <label className="sw-field-label">Content sources (primary material)</label>
+                <p style={{ fontSize: 11, color: 'var(--fg-secondary)', marginTop: 2 }}>
+                  Questions will be generated from these sources first. Add chapter PDFs, YouTube explainers, or website links.
+                </p>
               </div>
             </div>
 
@@ -1202,16 +1209,17 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                 value={newUrl}
                 onChange={e => setNewUrl(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddUrl())}
-                placeholder="Paste YouTube link or website URL..."
-                className="flex-1 tech-border bg-[var(--bg)] p-2.5 font-sans text-sm focus:outline-none focus:border-[var(--accent)]"
+                placeholder="Paste YouTube link or website URL…"
+                className="sw-input"
+                style={{ flex: 1 }}
               />
               <button
                 type="button"
                 onClick={handleAddUrl}
                 disabled={!newUrl.trim()}
-                className="px-4 py-2 bg-[var(--ink)] text-[var(--bg)] text-xs font-bold uppercase tracking-wide hover:bg-[var(--accent)] transition-colors disabled:opacity-30 flex items-center gap-2"
+                className="sw-btn sw-btn-primary sw-btn-sm"
               >
-                <Globe size={14} /> Add Link
+                <Globe size={14} /> Add link
               </button>
               <div className="relative">
                 <input
@@ -1222,35 +1230,61 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   disabled={isParsingFile}
                 />
-                <button type="button" className={`px-4 py-2 border border-[var(--line-dark)] hover:bg-[var(--line)] bg-[var(--bg)] text-xs font-bold uppercase tracking-wide flex items-center gap-2 ${isParsingFile ? 'opacity-50' : ''}`}>
+                <button type="button" className={`sw-btn sw-btn-ghost sw-btn-sm ${isParsingFile ? 'opacity-50' : ''}`}>
                   {isParsingFile ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-                  Upload Files
+                  Upload files
                 </button>
               </div>
             </div>
 
-            {/* Content source list */}
+            {/* Content source list — Swiftee card rows */}
             {contentSources.length > 0 && (
-              <div className="flex flex-col gap-1.5 mb-3">
-                {contentSources.map(src => (
-                  <div key={src.id} className={`flex items-center gap-2 p-2 tech-border text-sm ${
-                    src.status === 'ready' ? 'bg-[#E8F5E9] border-[var(--success)]' :
-                    src.status === 'extracting' ? 'bg-[var(--surface)]' :
-                    src.status === 'failed' ? 'bg-[#FFEBEE] border-[var(--danger)]' : 'bg-[var(--surface)]'
-                  }`}>
-                    {src.type === 'youtube' && <Youtube size={14} className="text-[#FF0000] shrink-0" />}
-                    {src.type === 'website' && <Globe size={14} className="text-[#1976D2] shrink-0" />}
-                    {src.type === 'file' && <FileText size={14} className="text-[var(--ink-muted)] shrink-0" />}
-                    <span className="flex-1 truncate font-mono text-xs">{src.name}</span>
-                    {src.url && <span className="text-[10px] text-[var(--accent)] truncate max-w-xs">{src.url}</span>}
-                    {src.status === 'extracting' && <Loader2 size={12} className="animate-spin text-[var(--accent)] shrink-0" />}
-                    {src.status === 'ready' && <CheckCircle2 size={12} className="text-[var(--success)] shrink-0" />}
-                    {src.status === 'failed' && <AlertCircle size={12} className="text-[var(--danger)] shrink-0" />}
-                    <button type="button" onClick={() => removeContentSource(src.id)} className="p-0.5 hover:text-[var(--danger)] text-[var(--ink-muted)] shrink-0">
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                ))}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                {contentSources.map(src => {
+                  const statusChip =
+                    src.status === 'ready' ? <span className="sw-chip sw-chip-green sw-chip-sm"><CheckCircle2 size={10} /> Ready</span>
+                    : src.status === 'extracting' ? <span className="sw-chip sw-chip-gold sw-chip-sm"><Loader2 size={10} className="animate-spin" /> Extracting</span>
+                    : src.status === 'failed' ? <span className="sw-chip sw-chip-red sw-chip-sm"><AlertCircle size={10} /> Failed</span>
+                    : <span className="sw-chip sw-chip-grey sw-chip-sm">Pending</span>;
+                  return (
+                    <div key={src.id} style={{
+                      display: 'grid', gridTemplateColumns: '36px 1fr auto auto', gap: 12,
+                      alignItems: 'center', padding: '10px 12px',
+                      border: '1px solid var(--border-subtle)', borderRadius: 10, background: '#FAFAFC',
+                    }}>
+                      <div style={{
+                        width: 36, height: 36, borderRadius: 8, background: '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: src.type === 'youtube' ? '#FF0000' : src.type === 'website' ? '#1976D2' : 'var(--swiftee-purple)',
+                      }}>
+                        {src.type === 'youtube' && <Youtube size={16} />}
+                        {src.type === 'website' && <Globe size={16} />}
+                        {src.type === 'file' && <FileText size={16} />}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{
+                          fontSize: 13, fontWeight: 600, color: 'var(--swiftee-deep)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>{src.name}</div>
+                        {src.url && (
+                          <div style={{ fontSize: 11, color: 'var(--fg-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {src.url}
+                          </div>
+                        )}
+                      </div>
+                      {statusChip}
+                      <button
+                        type="button"
+                        onClick={() => removeContentSource(src.id)}
+                        className="sw-btn sw-btn-ghost sw-btn-sm"
+                        style={{ padding: 6 }}
+                        title="Remove"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -1258,30 +1292,33 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
             <textarea
               value={chapterContent}
               onChange={(e) => setChapterContent(e.target.value)}
-              className="w-full tech-border bg-[var(--bg)] p-3 font-sans text-sm focus:outline-none focus:border-[var(--accent)]"
-              placeholder="Or paste chapter text / syllabus content directly here..."
+              className="sw-textarea"
+              placeholder="Or paste chapter text / syllabus content directly here…"
               rows={3}
             />
             {contentSources.filter(s => s.status === 'ready').length > 0 && (
-              <div className="mt-2 text-xs font-mono text-[var(--success)] flex items-center gap-1">
+              <div style={{
+                marginTop: 8, fontSize: 11, color: 'var(--green-400)',
+                display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600,
+              }}>
                 <CheckCircle2 size={12} />
                 {contentSources.filter(s => s.status === 'ready').length} source(s) loaded — questions will be generated from this content
               </div>
             )}
           </div>
           <div>
-            <label className="block col-header mb-2">Number of Questions (15-22)</label>
-            <input 
+            <label className="sw-field-label">Number of questions (15–22)</label>
+            <input
               required
               type="number"
               min="1" max="50"
               value={count}
               onChange={(e) => setCount(e.target.value)}
-              className="w-full tech-border bg-[var(--bg)] p-3 font-sans text-sm focus:outline-none focus:border-[var(--accent)]"
+              className="sw-input"
             />
           </div>
-          <button type="submit" className="bg-[var(--ink)] text-[var(--bg)] py-4 font-bold tracking-wide uppercase hover:bg-[var(--accent)] transition-colors mt-4">
-            Initialize Pipeline
+          <button type="submit" className="sw-btn sw-btn-primary" style={{ padding: '12px 16px', marginTop: 4 }}>
+            Initialize pipeline
           </button>
         </form>
       </motion.div>
@@ -2020,7 +2057,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                           const qId = q.question_id || q.id;
                           const qType = q.type || q.question_type || 'mcq';
                           return (
-                            <div key={qId} className={`tech-border bg-[var(--bg)] ${q.needs_image ? 'border-l-4 border-l-[#1565C0]' : ''} ${qa && !qa.pass ? 'border-[var(--warning)]' : ''}`}>
+                            <div key={qId} className={`bg-white rounded-[12px] border border-[var(--border-subtle)] ${q.needs_image ? 'border-l-4 border-l-[var(--swiftee-purple)]' : ''} ${qa && !qa.pass ? 'border-[var(--swiftee-gold)]' : ''}`}>
                               {/* Header bar */}
                               <div className={`flex justify-between items-center px-4 py-2 border-b border-[var(--line-dark)] ${q.needs_image ? 'bg-[#E3F2FD]' : 'bg-[var(--surface)]'}`}>
                                 <div className="flex items-center gap-2">
@@ -2158,7 +2195,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                       const typeBg: Record<string, string> = { mcq: 'bg-[#E3F2FD] text-[#1565C0]', true_false: 'bg-[#E8EAF6] text-[#283593]', fill_blank: 'bg-[#F3E5F5] text-[#7B1FA2]', one_word: 'bg-[#E8F5E9] text-[#2E7D32]', match: 'bg-[#E0F7FA] text-[#00695C]', arrange: 'bg-[#FFF8E1] text-[#F57F17]' };
 
                       return (
-                        <div key={q.id} className={`tech-border bg-[var(--bg)] ${q.needs_image ? 'border-l-4 border-l-[#1565C0]' : ''} ${qa && !qa.pass ? 'border-[var(--warning)]' : ''}`}>
+                        <div key={q.id} className={`bg-white rounded-[12px] border border-[var(--border-subtle)] ${q.needs_image ? 'border-l-4 border-l-[var(--swiftee-purple)]' : ''} ${qa && !qa.pass ? 'border-[var(--swiftee-gold)]' : ''}`}>
                           {/* Header bar */}
                           <div className={`flex justify-between items-center px-4 py-2 border-b border-[var(--line-dark)] ${q.needs_image ? 'bg-[#E3F2FD]' : 'bg-[var(--surface)]'}`}>
                             <div className="flex items-center gap-2">
@@ -3200,8 +3237,8 @@ ${q.stem}`;
               {questions.map((q: any) => {
                 const qType = q.type || 'mcq';
                 return (
-                  <div key={q.id} className={`tech-border bg-[var(--bg)] ${q.needs_image ? 'border-l-4 border-l-[#1565C0]' : ''}`}>
-                    <div className={`flex justify-between items-center px-3 py-1.5 border-b border-[var(--line-dark)] ${q.needs_image ? 'bg-[#E3F2FD]' : 'bg-[var(--surface)]'}`}>
+                  <div key={q.id} className={`bg-white rounded-[12px] border border-[var(--border-subtle)] overflow-hidden ${q.needs_image ? 'border-l-4 border-l-[var(--swiftee-purple)]' : ''}`}>
+                    <div className={`flex justify-between items-center px-3 py-1.5 border-b border-[var(--border-subtle)] ${q.needs_image ? 'bg-[var(--bg-tint)]' : 'bg-[#FAFAFC]'}`}>
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-xs font-mono bg-[var(--ink)] text-[var(--bg)] px-1.5 py-0.5">{q.id}</span>
                         <span className="text-[10px] font-mono uppercase px-1 py-0.5 rounded bg-[#E3F2FD] text-[#1565C0] font-bold">{qType.replace('_', ' ')}</span>
