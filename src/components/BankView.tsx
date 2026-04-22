@@ -6,16 +6,26 @@ import React, { useState } from 'react';
 import { useBank, bankStore } from './bankStore';
 import { QuestionBody } from './QuestionBody';
 import { Icon } from './swiftee/atoms';
-import type { AuditResult } from '../agents/audit';
+import { AuditView } from './AuditView';
+import type { AuditResult, AuditReport } from '../agents/audit';
 
 export interface BankViewProps {
   /** LatexText component threaded in from App.tsx so the bank doesn't re-import katex. */
   Latex: React.FC<{ text: any; className?: string; block?: boolean }>;
   /** Triggers a browser download via the existing exporter. */
   onExport: () => Promise<void> | void;
+  /** Optional — wired in Stage E4. Regenerates a single question using the audit flags as EXTRA CONSTRAINT. */
+  onRegenerateWithFeedback?: (q: any, report: AuditReport) => void | Promise<void>;
+  /** Optional — wired in Stage E4. Serially regenerates all fails or all warns. */
+  onBulkRegen?: (sev: 'fail' | 'warn') => void | Promise<void>;
+  /** Optional — id of the question currently being regenerated. */
+  busyQuestionId?: string | null;
+  bulkBusy?: boolean;
 }
 
-export const BankView: React.FC<BankViewProps> = ({ Latex, onExport }) => {
+export const BankView: React.FC<BankViewProps> = ({
+  Latex, onExport, onRegenerateWithFeedback, onBulkRegen, busyQuestionId, bulkBusy,
+}) => {
   const bank = useBank();
   const [auditing, setAuditing] = useState(false);
   const [auditProgress, setAuditProgress] = useState<{ done: number; total: number } | null>(null);
@@ -119,92 +129,57 @@ export const BankView: React.FC<BankViewProps> = ({ Latex, onExport }) => {
         </div>
       </div>
 
-      {/* Set-level audit flags (if any) */}
-      {bank.audit && bank.audit.setFlags.length > 0 && (
-        <div style={{
-          padding: '10px 14px', borderRadius: 10,
-          background: '#FFF9E6', borderLeft: '3px solid var(--swiftee-gold)',
-          marginBottom: 14, fontSize: 12, color: '#8A5A00',
-        }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Set-level findings</div>
-          {bank.audit.setFlags.map((f, i) => (
-            <div key={i} style={{ marginTop: 2 }}>
-              · <b style={{ textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.05em' }}>{f.category}</b> — {f.message}
-            </div>
-          ))}
+      {/* Audit view when results exist; otherwise a plain pre-audit question list. */}
+      {bank.audit ? (
+        <AuditView
+          questions={bank.questions}
+          audit={bank.audit}
+          questionImages={bank.questionImages}
+          Latex={Latex}
+          onRegenerateWithFeedback={onRegenerateWithFeedback}
+          onBulkRegen={onBulkRegen}
+          busyQuestionId={busyQuestionId}
+          bulkBusy={bulkBusy}
+        />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{
+            padding: '10px 14px', borderRadius: 10,
+            background: '#F7F0FE', borderLeft: '3px solid var(--swiftee-purple)',
+            fontSize: 12, color: 'var(--swiftee-deep)',
+          }}>
+            <b>No audit run yet.</b> Click <b>Run audit</b> above to evaluate every question against factual, pedagogical, language, terminology, grade, distractor, scenario, and visual-ratio checks. Results will be color-coded.
+          </div>
+          {bank.questions.map(q => {
+            const qId = q.id || q.question_id;
+            return (
+              <div
+                key={qId}
+                style={{
+                  background: '#fff',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 12,
+                  padding: 14,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span className="sw-chip sw-chip-purple sw-chip-sm">{q.cell || q.cg_cell}</span>
+                  <span className="sw-chip sw-chip-outline sw-chip-sm">{String(q.type || 'mcq').toUpperCase().replace('_', ' ')}</span>
+                  <div style={{ flex: 1 }} />
+                  <span style={{ fontSize: 10, color: 'var(--fg-muted)', fontFamily: 'ui-monospace, Menlo, monospace' }}>{qId}</span>
+                </div>
+                <QuestionBody
+                  q={q}
+                  qType={q.type || 'mcq'}
+                  image={bank.questionImages[qId]}
+                  density="compact"
+                  Latex={Latex}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
-
-      {/* Question list (E3 will replace this with the full AuditView cards) */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {bank.questions.map(q => {
-          const report = bank.audit?.perQuestion.find(r => r.questionId === (q.id || q.question_id));
-          const borderColor =
-            report?.severity === 'fail' ? '#C8573B'
-            : report?.severity === 'warn' ? 'var(--swiftee-gold)'
-            : report?.severity === 'pass' ? 'var(--green-300)'
-            : 'var(--border-subtle)';
-          return (
-            <div
-              key={q.id || q.question_id}
-              style={{
-                background: '#fff',
-                border: '1px solid var(--border-subtle)',
-                borderLeft: `4px solid ${borderColor}`,
-                borderRadius: 12,
-                padding: 16,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <span className="sw-chip sw-chip-purple sw-chip-sm">{q.cell || q.cg_cell}</span>
-                <span className="sw-chip sw-chip-outline sw-chip-sm">{String(q.type || 'mcq').toUpperCase().replace('_', ' ')}</span>
-                {report?.severity === 'fail' && <span className="sw-chip sw-chip-red sw-chip-sm">FAIL</span>}
-                {report?.severity === 'warn' && <span className="sw-chip sw-chip-gold sw-chip-sm">WARN</span>}
-                {report?.severity === 'pass' && <span className="sw-chip sw-chip-green sw-chip-sm">PASS</span>}
-                <div style={{ flex: 1 }} />
-                <span style={{ fontSize: 10, color: 'var(--fg-muted)', fontFamily: 'ui-monospace, Menlo, monospace' }}>
-                  {q.id || q.question_id}
-                </span>
-              </div>
-              <QuestionBody
-                q={q}
-                qType={q.type || 'mcq'}
-                image={bank.questionImages[q.id || q.question_id]}
-                density="compact"
-                Latex={Latex}
-              />
-              {report && report.flags.length > 0 && (
-                <div style={{
-                  marginTop: 10, padding: '8px 10px', borderRadius: 8,
-                  background: '#FAFAFC', border: '1px solid var(--border-subtle)',
-                  fontSize: 11, color: 'var(--fg-secondary)',
-                }}>
-                  <div style={{
-                    fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em',
-                    fontWeight: 700, color: 'var(--fg-muted)', marginBottom: 4,
-                  }}>
-                    Findings · {report.flags.length}
-                  </div>
-                  {report.flags.slice(0, 5).map((f, i) => {
-                    const dot = f.severity === 'fail' ? '#C8573B' : f.severity === 'warn' ? '#F5B301' : 'var(--green-300)';
-                    return (
-                      <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', marginTop: 2 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot, marginTop: 5, flexShrink: 0 }} />
-                        <span><b style={{ color: 'var(--swiftee-deep)' }}>{f.category}:</b> {f.message}</span>
-                      </div>
-                    );
-                  })}
-                  {report.flags.length > 5 && (
-                    <div style={{ marginTop: 4, fontStyle: 'italic', color: 'var(--fg-muted)' }}>
-                      +{report.flags.length - 5} more…
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 };
