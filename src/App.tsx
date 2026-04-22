@@ -48,6 +48,8 @@ import { TriageBar } from './components/TriageBar';
 import { QuestionBody } from './components/QuestionBody';
 import { PipelineStepper } from './components/swiftee/PipelineStepper';
 import { cx as swCx, Icon as SwIcon, InlineGateBar, HelpPopover } from './components/swiftee/atoms';
+import { AgentLogDrawer } from './components/swiftee/AgentLogDrawer';
+import { ExportHero } from './components/swiftee/ExportHero';
 
 // --- Types ---
 type Tab = 'dashboard' | 'architecture' | 'state-machine' | 'raci' | 'generate' | 'config';
@@ -1363,28 +1365,28 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col gap-4 min-w-0">
           
-          {/* Terminal Logs (Top) */}
-          <div className="h-32 shrink-0 flex flex-col tech-border bg-[#0a0a0a] text-[#e5e5e5] font-mono text-xs overflow-hidden">
-            <div className="bg-[#1a1a1a] p-2 border-b border-[#333] flex items-center justify-between text-[#888]">
-              <div className="flex items-center gap-2">
-                <Terminal size={12} />
-                orchestrator.log
-              </div>
-              <div className="text-[#4ade80] flex items-center gap-2">
-                {status === 'running' && <Loader2 size={12} className="animate-spin" />}
-                {PIPELINE_STATES[currentStep]?.name || 'Initializing...'}
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
-              {logs.map((log, i) => (
-                <div key={i} className="flex gap-3">
-                  <span className="text-[#4ade80] shrink-0">[{log.time}]</span>
-                  <span className="text-[#60a5fa] shrink-0 w-48 truncate">{log.agent}</span>
-                  <span className="text-[#a3a3a3]">{log.action}</span>
-                </div>
-              ))}
-              <div ref={logsEndRef} />
-            </div>
+          {/* D6 · Agent log moved to fixed-bottom drawer (see bottom of component).
+               Lightweight running-state banner remains here so users can see the
+               current pipeline state at a glance without opening the drawer. */}
+          <div
+            style={{
+              padding: '8px 14px',
+              background: 'var(--swiftee-deep)',
+              color: '#fff',
+              borderRadius: 10,
+              display: 'flex', alignItems: 'center', gap: 10,
+              fontSize: 11, flexShrink: 0,
+            }}
+          >
+            {status === 'running' && <Loader2 size={12} className="animate-spin" style={{ color: 'var(--swiftee-gold)' }} />}
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, color: 'var(--swiftee-gold)', textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 10 }}>
+              {status.toUpperCase()}
+            </span>
+            <span style={{ opacity: 0.85 }}>{PIPELINE_STATES[currentStep]?.name || 'Initializing...'}</span>
+            <span style={{ marginLeft: 'auto', opacity: 0.5, fontFamily: 'ui-monospace, Menlo, monospace' }}>
+              {logs.length} events · open log ↓
+            </span>
+            <div ref={logsEndRef} />
           </div>
 
           {/* Workspace / Artifacts (Bottom) */}
@@ -2213,14 +2215,24 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                 </div>
               )}
 
-              {/* Completion State */}
+              {/* D6 · Completion — Swiftee ExportHero */}
               {status === 'completed' && (
-                <div className="mt-8 p-6 tech-border bg-[#E8F5E9] border-[#2E7D32] text-[#1B5E20] flex flex-col items-center text-center">
-                  <CheckCircle2 size={48} className="mb-4" />
-                  <h3 className="text-2xl font-bold mb-2">Pipeline Complete</h3>
-                  <p className="mb-6">Successfully generated {questions.length} items calibrated and ready for banking.</p>
-                  <button
-                    onClick={async () => {
+                <ExportHero
+                  itemCount={questions.length}
+                  title={lo || skill || 'Run complete'}
+                  subtitle={
+                    parsedMetadata?.gradeCode && parsedMetadata?.subjectCode
+                      ? `${parsedMetadata.subjectCode} · ${parsedMetadata.gradeCode}`
+                      : undefined
+                  }
+                  stats={[
+                    { label: 'Items', v: questions.length, sub: 'banked' },
+                    { label: 'QA passed', v: `${qaResults.filter((r: any) => r.pass).length}/${qaResults.length || questions.length}`, sub: 'structural + pedagogical' },
+                    { label: 'Cells', v: new Set(questions.map((q: any) => q.cell)).size, sub: 'Hess matrix coverage' },
+                  ]}
+                  primary={{
+                    label: 'Download ZIP',
+                    onClick: async () => {
                       const { exportToExcelAndZip } = await import('./utils/exporter');
                       await exportToExcelAndZip({
                         questions,
@@ -2234,12 +2246,9 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                         },
                         qaResults,
                       });
-                    }}
-                    className="bg-[#1B5E20] text-white px-6 py-3 font-bold uppercase tracking-wide hover:bg-[#2E7D32] transition-colors flex items-center gap-2"
-                  >
-                    <FileDown size={20} /> Export to Item Bank (.zip)
-                  </button>
-                </div>
+                    },
+                  }}
+                />
               )}
 
             </div>
@@ -2261,6 +2270,11 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
           </div>
         </div>
       </div>
+
+      {/* D6 · Agent log drawer (fixed bottom, click to expand) */}
+      <AgentLogDrawer
+        lines={logs.map(l => ({ t: l.time, a: l.agent, m: l.action }))}
+      />
     </motion.div>
   );
 };
