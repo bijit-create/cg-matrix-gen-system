@@ -54,7 +54,7 @@ import { BankView } from './components/BankView';
 import { useBank, bankStore } from './components/bankStore';
 
 // --- Types ---
-type Tab = 'dashboard' | 'architecture' | 'state-machine' | 'raci' | 'generate' | 'bank' | 'config';
+type Tab = 'dashboard' | 'generate' | 'bank';
 type GenerateMode = 'quick' | 'pipeline';
 
 // --- LaTeX renderer: parses \( \), \[ \], $ $, $$ $$ and renders via KaTeX ---
@@ -96,81 +96,33 @@ const LatexText: React.FC<{ text: any; className?: string; block?: boolean }> = 
 
 // --- Components ---
 
-// Swiftee-styled topbar. Primary nav is "Generate" (workspace). Secondary tabs
-// (Overview / Architecture / State Machine / RACI / Config) live in a kebab menu
-// so the main bar stays minimal per the design brief.
-const TopNav = ({ activeTab, setActiveTab }: { activeTab: Tab, setActiveTab: (t: Tab) => void }) => {
-  const [more, setMore] = useState(false);
-  const moreRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!more) return;
-    const onDoc = (e: MouseEvent) => {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMore(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [more]);
-
-  const secondary: { id: Tab; label: string; icon: string }[] = [
-    { id: 'dashboard',     label: 'Overview',      icon: 'dashboard' },
-    { id: 'architecture',  label: 'Architecture',  icon: 'account_tree' },
-    { id: 'state-machine', label: 'State Machine', icon: 'linear_scale' },
-    { id: 'raci',          label: 'RACI',          icon: 'groups' },
-    { id: 'config',        label: 'Config',        icon: 'settings' },
-  ];
-
-  return (
-    <div className="sw-topbar">
-      <div className="sw-brand">
-        <div className="sw-brand-mark">M</div>
-        <div>
-          <div className="sw-brand-name">CG-Matrix Gen</div>
-          <div className="sw-brand-sub">Assessment Studio</div>
-        </div>
+// Swiftee topbar. Three primary tabs: Workspace · Bank · Overview.
+const TopNav = ({ activeTab, setActiveTab }: { activeTab: Tab, setActiveTab: (t: Tab) => void }) => (
+  <div className="sw-topbar">
+    <div className="sw-brand">
+      <div className="sw-brand-mark">M</div>
+      <div>
+        <div className="sw-brand-name">CG-Matrix Gen</div>
+        <div className="sw-brand-sub">Assessment Studio</div>
       </div>
-      <nav className="sw-topnav">
-        <button className={activeTab === 'generate' ? 'on' : ''} onClick={() => setActiveTab('generate')}>
-          <SwIcon name="science" size="sm" /> Workspace
-        </button>
-        <button className={activeTab === 'bank' ? 'on' : ''} onClick={() => setActiveTab('bank')}>
-          <SwIcon name="inventory_2" size="sm" /> Bank
-        </button>
-      </nav>
-      <div style={{ flex: 1 }} />
-      <div ref={moreRef} style={{ position: 'relative' }}>
-        <button
-          onClick={() => setMore(v => !v)}
-          className={swCx('sw-btn sw-btn-sm', secondary.some(s => s.id === activeTab) ? 'sw-btn-primary' : 'sw-btn-ghost')}
-        >
-          <SwIcon name="more_horiz" size="sm" /> More
-        </button>
-        {more && (
-          <div
-            style={{
-              position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 50,
-              background: '#fff', border: '1px solid var(--border-subtle)', borderRadius: 10,
-              boxShadow: '0 12px 40px rgba(10,27,57,0.14)', padding: 6, minWidth: 180,
-            }}
-          >
-            {secondary.map(s => (
-              <button
-                key={s.id}
-                onClick={() => { setActiveTab(s.id); setMore(false); }}
-                className={swCx('sw-btn sw-btn-sm sw-btn-ghost', activeTab === s.id && 'sw-btn-primary')}
-                style={{ width: '100%', justifyContent: 'flex-start' }}
-              >
-                <SwIcon name={s.icon} size="sm" /> {s.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="sw-avatar">SME</div>
     </div>
-  );
-};
+    <nav className="sw-topnav">
+      <button className={activeTab === 'generate' ? 'on' : ''} onClick={() => setActiveTab('generate')}>
+        <SwIcon name="science" size="sm" /> Workspace
+      </button>
+      <button className={activeTab === 'bank' ? 'on' : ''} onClick={() => setActiveTab('bank')}>
+        <SwIcon name="inventory_2" size="sm" /> Bank
+      </button>
+      <button className={activeTab === 'dashboard' ? 'on' : ''} onClick={() => setActiveTab('dashboard')}>
+        <SwIcon name="dashboard" size="sm" /> Overview
+      </button>
+    </nav>
+    <div style={{ flex: 1 }} />
+    <div className="sw-avatar">SME</div>
+  </div>
+);
 
-// ... (Keep existing DashboardView, ArchitectureView, StateMachineView, RaciView)
+// Dashboard (Overview) — only secondary view still wired.
 const MetricCard = ({ title, value, status, target }: { title: string, value: string | number, status: 'good' | 'warning' | 'danger', target?: string }) => {
   const statusColors = {
     good: 'text-[var(--success)]',
@@ -230,207 +182,8 @@ const DashboardView = () => {
   );
 };
 
-const ArchitectureView = () => {
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      className="p-8 max-w-7xl mx-auto h-full flex flex-col"
-    >
-      <header className="mb-8">
-        <h2 className="text-4xl font-light tracking-tight mb-2">System Architecture</h2>
-        <p className="col-header">Three-Plane Multi-Agent Topology</p>
-      </header>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Production Plane */}
-        <div className="tech-border bg-[var(--surface)] p-6 flex flex-col">
-          <div className="flex items-center gap-2 mb-6 border-b border-[var(--line-dark)] pb-4">
-            <Database size={20} />
-            <h3 className="font-bold uppercase tracking-wide">1. Production Plane</h3>
-          </div>
-          <div className="flex-1 flex flex-col gap-3">
-            {['Intake Agent', 'Construct Agent', 'CG Mapper Agent', 'Subskill Agent', 'Misconception Agent', 'Distractor Rule Agent', 'Item Blueprint Agent', 'Generation Agents'].map((agent, i) => (
-              <div key={i} className="tech-border p-3 bg-[var(--bg)] flex items-center justify-between group hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors">
-                <span className="font-mono text-sm">{agent}</span>
-                <ArrowRight size={14} className="opacity-30 group-hover:opacity-100" />
-              </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Quality Plane */}
-        <div className="tech-border bg-[var(--surface)] p-6 flex flex-col">
-          <div className="flex items-center gap-2 mb-6 border-b border-[var(--line-dark)] pb-4">
-            <ShieldCheck size={20} />
-            <h3 className="font-bold uppercase tracking-wide">2. Quality Plane</h3>
-          </div>
-          <div className="flex-1 flex flex-col gap-3">
-            {['Structural QA', 'Cognitive QA', 'Misconception QA', 'Developmental QA', 'Bias & Language QA', 'Set Balancing Agent'].map((agent, i) => (
-              <div key={i} className="tech-border p-3 bg-[#FFF3E0] border-[#EF6C00] text-[#E65100] flex items-center justify-between">
-                <span className="font-mono text-sm">{agent}</span>
-                <CheckCircle2 size={14} className="opacity-50" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Governance Plane */}
-        <div className="tech-border bg-[var(--surface)] p-6 flex flex-col">
-          <div className="flex items-center gap-2 mb-6 border-b border-[var(--line-dark)] pb-4">
-            <Users size={20} />
-            <h3 className="font-bold uppercase tracking-wide">3. Governance Plane</h3>
-          </div>
-          <div className="flex-1 flex flex-col gap-3">
-            <div className="tech-border p-4 bg-[#FFEbee] border-[#c62828] text-[#b71c1c]">
-              <div className="font-bold text-sm mb-1">Gate 1: Construct Approval</div>
-              <div className="text-xs opacity-80">Human SME required</div>
-            </div>
-            <div className="tech-border p-4 bg-[#FFEbee] border-[#c62828] text-[#b71c1c]">
-              <div className="font-bold text-sm mb-1">Gate 2: Misconception Approval</div>
-              <div className="text-xs opacity-80">Human SME required</div>
-            </div>
-            <div className="tech-border p-4 bg-[#FFEbee] border-[#c62828] text-[#b71c1c]">
-              <div className="font-bold text-sm mb-1">Gate 3: Final Set Approval</div>
-              <div className="text-xs opacity-80">Human SME required</div>
-            </div>
-            <div className="mt-auto tech-border p-4 bg-[#E8F5E9] border-[#2E7D32] text-[#1B5E20]">
-              <div className="font-bold text-sm mb-1">Calibration Agent / Pilot</div>
-              <div className="text-xs opacity-80">Data-driven refinement</div>
-            </div>
-            <div className="tech-border p-4 bg-[#E8F5E9] border-[#2E7D32] text-[#1B5E20]">
-              <div className="font-bold text-sm mb-1">Operational Item Bank</div>
-              <div className="text-xs opacity-80">Version controlled storage</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-};
-
-const StateMachineView = () => {
-  const states = [
-    { id: 'S0', name: 'Task Received', status: 'done' },
-    { id: 'S1', name: 'Construct Defined', status: 'done' },
-    { id: 'S2', name: 'CG Mapped', status: 'done' },
-    { id: 'S3', name: 'Misconceptions Approved', status: 'done' },
-    { id: 'S4', name: 'Blueprint Approved', status: 'done' },
-    { id: 'S5', name: 'Draft Generated', status: 'active' },
-    { id: 'S6', name: 'Local QA Passed', status: 'pending' },
-    { id: 'S7', name: 'Set QA Passed', status: 'pending' },
-    { id: 'S8', name: 'Human Review Passed', status: 'pending' },
-    { id: 'S9', name: 'Pilot Ready', status: 'pending' },
-    { id: 'S10', name: 'Calibrated', status: 'pending' },
-    { id: 'S11', name: 'Banked', status: 'pending' },
-  ];
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      className="p-8 max-w-5xl mx-auto"
-    >
-      <header className="mb-12">
-        <h2 className="text-4xl font-light tracking-tight mb-2">Item State Machine</h2>
-        <p className="col-header">Strict linear lifecycle. Items cannot skip states.</p>
-      </header>
-
-      <div className="relative">
-        {/* Connecting Line */}
-        <div className="absolute left-[27px] top-4 bottom-4 w-px bg-[var(--line-dark)] opacity-20"></div>
-        
-        <div className="flex flex-col gap-6 relative z-10">
-          {states.map((state, i) => (
-            <div key={state.id} className="flex items-center gap-6 group">
-              <div className={`w-14 h-14 rounded-full border-2 flex items-center justify-center bg-[var(--bg)] transition-colors ${
-                state.status === 'done' ? 'border-[var(--ink)] text-[var(--ink)]' :
-                state.status === 'active' ? 'border-[var(--accent)] text-[var(--accent)] shadow-[0_0_15px_rgba(242,125,38,0.3)]' :
-                'border-[var(--line)] text-[var(--line-dark)] opacity-40'
-              }`}>
-                <span className="font-mono text-sm font-bold">{state.id}</span>
-              </div>
-              
-              <div className={`flex-1 tech-border p-4 transition-colors ${
-                state.status === 'active' ? 'bg-[var(--ink)] text-[var(--bg)]' : 'bg-[var(--surface)] hover:bg-[var(--line)]'
-              } ${state.status === 'pending' ? 'opacity-50' : ''}`}>
-                <h4 className="font-bold text-lg">{state.name}</h4>
-                {state.status === 'active' && (
-                  <div className="mt-2 text-sm font-mono opacity-80 flex items-center gap-2">
-                    <Activity size={14} className="animate-pulse" /> Processing via Generation Agents...
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </motion.div>
-  );
-};
-
-const RaciView = () => {
-  const raciData = [
-    { phase: '1. Construct & Subskill Design', ai: 'R', sme: 'A', lead: 'I', ed: '-', ops: '-' },
-    { phase: '2. Misconception & Distractor Rules', ai: 'R', sme: 'C', lead: 'A', ed: '-', ops: '-' },
-    { phase: '3. Item Generation (Drafting)', ai: 'R', sme: 'C', lead: 'I', ed: '-', ops: '-' },
-    { phase: '4. Independent QA Validation', ai: 'R', sme: 'C', lead: 'A', ed: 'C', ops: '-' },
-    { phase: '5. Bias & Sensitivity Review', ai: 'R', sme: 'C', lead: 'A', ed: 'C', ops: '-' },
-    { phase: '6. Final Set Approval', ai: '-', sme: 'R', lead: 'A', ed: 'I', ops: '-' },
-    { phase: '7. Pilot Data & Calibration', ai: 'R', sme: 'C', lead: 'A', ed: '-', ops: 'C' },
-    { phase: '8. Banking & Version Control', ai: 'R', sme: '-', lead: 'A', ed: '-', ops: 'R' },
-  ];
-
-  const getRoleColor = (role: string) => {
-    switch(role) {
-      case 'R': return 'bg-[var(--ink)] text-[var(--bg)] font-bold';
-      case 'A': return 'bg-[var(--accent)] text-white font-bold';
-      case 'C': return 'bg-[var(--line)] text-[var(--ink)]';
-      case 'I': return 'bg-transparent text-[var(--ink-muted)]';
-      default: return 'text-[var(--line)]';
-    }
-  };
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      className="p-8 max-w-6xl mx-auto"
-    >
-      <header className="mb-8">
-        <h2 className="text-4xl font-light tracking-tight mb-2">RACI Responsibility Matrix</h2>
-        <p className="col-header">Clear delineation of ownership across the production cycle.</p>
-      </header>
-
-      <div className="tech-border bg-[var(--surface)] overflow-hidden">
-        <div className="grid grid-cols-6 border-b border-[var(--line-dark)] bg-[var(--bg)]">
-          <div className="p-4 col-header">Production Phase</div>
-          <div className="p-4 col-header text-center">AI System / Agents</div>
-          <div className="p-4 col-header text-center">Human SME</div>
-          <div className="p-4 col-header text-center">Assessment Lead</div>
-          <div className="p-4 col-header text-center">Editorial</div>
-          <div className="p-4 col-header text-center">Ops / Data</div>
-        </div>
-        
-        {raciData.map((row, i) => (
-          <div key={i} className="grid grid-cols-6 border-b border-[var(--line-dark)] last:border-b-0 hover:bg-[var(--bg)] transition-colors">
-            <div className="p-4 font-medium flex items-center">{row.phase}</div>
-            {[row.ai, row.sme, row.lead, row.ed, row.ops].map((role, j) => (
-              <div key={j} className="p-4 flex items-center justify-center border-l border-[var(--line-dark)]">
-                <div className={`w-8 h-8 flex items-center justify-center rounded-sm text-sm ${getRoleColor(role)}`}>
-                  {role}
-                </div>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-    </motion.div>
-  );
-};
 
 // --- Pipeline Runner Simulation ---
 
@@ -3404,116 +3157,6 @@ ${q.stem}`;
   );
 };
 
-const ConfigView = () => {
-  const [cacheStats, setCacheStats] = useState({ size: 0, hits: 0, misses: 0, maxEntries: 100 });
-  const [queueStats, setQueueStats] = useState({ active: 0, pending: 0 });
-
-  const refreshStats = async () => {
-    const { responseCache } = await import('./services/responseCache');
-    const { requestQueue } = await import('./services/requestQueue');
-    setCacheStats(responseCache.getStats());
-    setQueueStats(requestQueue.getStats());
-  };
-
-  useEffect(() => { refreshStats(); const t = setInterval(refreshStats, 3000); return () => clearInterval(t); }, []);
-
-  const handleClearCache = async () => {
-    const { responseCache } = await import('./services/responseCache');
-    responseCache.clear();
-    refreshStats();
-  };
-
-  return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-8 max-w-4xl mx-auto">
-      <header className="mb-8">
-        <h2 className="text-4xl font-light tracking-tight mb-2">Configuration</h2>
-        <p className="col-header">API keys, agent settings, cache management</p>
-      </header>
-
-      {/* API Keys — Server-Side */}
-      <div className="tech-border bg-[#E8F5E9] border-[var(--success)] p-6 mb-6">
-        <h3 className="font-bold uppercase tracking-wide mb-3 flex items-center gap-2">
-          <ShieldCheck size={16} className="text-[var(--success)]" /> API Keys (Server-Side)
-        </h3>
-        <p className="text-sm mb-3">API keys are managed securely on the server via Vercel Environment Variables. They never reach the browser.</p>
-        <div className="text-xs font-mono bg-[var(--bg)] p-3 tech-border">
-          <p>Set these in Vercel Dashboard → Settings → Environment Variables:</p>
-          <ul className="mt-2 flex flex-col gap-1">
-            <li><strong>GEMINI_API_KEY</strong> — Primary key</li>
-            <li><strong>GEMINI_API_KEY_1</strong> — Rotation key 1</li>
-            <li><strong>GEMINI_API_KEY_2</strong> — Rotation key 2</li>
-            <li><strong>GEMINI_API_KEY_3</strong> — Rotation key 3 (optional)</li>
-          </ul>
-          <p className="mt-2 text-[var(--ink-muted)]">The server rotates between all configured keys automatically.</p>
-        </div>
-      </div>
-
-      {/* Queue & Cache Stats */}
-      <div className="grid grid-cols-2 gap-6 mb-6">
-        <div className="tech-border bg-[var(--surface)] p-6">
-          <h3 className="font-bold uppercase tracking-wide mb-4 flex items-center gap-2">
-            <Activity size={16} /> Request Queue
-          </h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="col-header">Active</div>
-              <div className="text-3xl font-light">{queueStats.active}</div>
-            </div>
-            <div>
-              <div className="col-header">Pending</div>
-              <div className="text-3xl font-light">{queueStats.pending}</div>
-            </div>
-          </div>
-          <p className="text-xs text-[var(--ink-muted)] mt-3">Max 3 concurrent requests. Server rotates between configured keys.</p>
-        </div>
-        <div className="tech-border bg-[var(--surface)] p-6">
-          <h3 className="font-bold uppercase tracking-wide mb-4 flex items-center gap-2">
-            <Database size={16} /> Response Cache
-          </h3>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <div className="col-header">Entries</div>
-              <div className="text-3xl font-light">{cacheStats.size}/{cacheStats.maxEntries}</div>
-            </div>
-            <div>
-              <div className="col-header">Hits</div>
-              <div className="text-3xl font-light text-[var(--success)]">{cacheStats.hits}</div>
-            </div>
-            <div>
-              <div className="col-header">Misses</div>
-              <div className="text-3xl font-light">{cacheStats.misses}</div>
-            </div>
-          </div>
-          <button onClick={handleClearCache} className="mt-3 text-xs text-[var(--danger)] hover:underline">Clear Cache</button>
-        </div>
-      </div>
-
-      {/* Agent Temperatures */}
-      <div className="tech-border bg-[var(--surface)] p-6">
-        <h3 className="font-bold uppercase tracking-wide mb-4 flex items-center gap-2">
-          <BrainCircuit size={16} /> Agent Settings
-        </h3>
-        <div className="grid grid-cols-1 gap-2">
-          {[
-            { name: 'Intake Agent', temp: 0.1 }, { name: 'Construct Agent', temp: 0.1 },
-            { name: 'Subskill Agent', temp: 0.2 }, { name: 'Content Scoping Agent', temp: 0.1 },
-            { name: 'Custom Hess Matrix Agent', temp: 0.15 }, { name: 'Misconception Agent', temp: 0.1 },
-            { name: 'Generation Agent', temp: 0.4 }, { name: 'AI SME QA', temp: 0.1 },
-          ].map(agent => (
-            <div key={agent.name} className="flex items-center justify-between p-2 tech-border bg-[var(--bg)]">
-              <span className="font-mono text-sm">{agent.name}</span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[var(--ink-muted)]">temp:</span>
-                <span className="text-sm font-bold">{agent.temp}</span>
-                <span className="text-xs text-[var(--ink-muted)]">| gemini-2.5-flash</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </motion.div>
-  );
-};
 
 const LoginGate = ({ onLogin }: { onLogin: () => void }) => {
   const [token, setToken] = useState('');
@@ -3794,10 +3437,6 @@ export default function App() {
           {activeTab === 'dashboard' && <DashboardView key="dashboard" />}
           {activeTab === 'generate' && <GenerateView key="generate" />}
           {activeTab === 'bank' && <BankRoute key="bank" />}
-          {activeTab === 'architecture' && <ArchitectureView key="architecture" />}
-          {activeTab === 'state-machine' && <StateMachineView key="state-machine" />}
-          {activeTab === 'raci' && <RaciView key="raci" />}
-          {activeTab === 'config' && <ConfigView key="config" />}
         </AnimatePresence>
       </main>
     </div>
