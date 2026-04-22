@@ -50,9 +50,11 @@ import { PipelineStepper } from './components/swiftee/PipelineStepper';
 import { cx as swCx, Icon as SwIcon, InlineGateBar, HelpPopover } from './components/swiftee/atoms';
 import { AgentLogDrawer } from './components/swiftee/AgentLogDrawer';
 import { ExportHero } from './components/swiftee/ExportHero';
+import { BankView } from './components/BankView';
+import { useBank, bankStore } from './components/bankStore';
 
 // --- Types ---
-type Tab = 'dashboard' | 'architecture' | 'state-machine' | 'raci' | 'generate' | 'config';
+type Tab = 'dashboard' | 'architecture' | 'state-machine' | 'raci' | 'generate' | 'bank' | 'config';
 type GenerateMode = 'quick' | 'pipeline';
 
 // --- LaTeX renderer: parses \( \), \[ \], $ $, $$ $$ and renders via KaTeX ---
@@ -129,6 +131,9 @@ const TopNav = ({ activeTab, setActiveTab }: { activeTab: Tab, setActiveTab: (t:
       <nav className="sw-topnav">
         <button className={activeTab === 'generate' ? 'on' : ''} onClick={() => setActiveTab('generate')}>
           <SwIcon name="science" size="sm" /> Workspace
+        </button>
+        <button className={activeTab === 'bank' ? 'on' : ''} onClick={() => setActiveTab('bank')}>
+          <SwIcon name="inventory_2" size="sm" /> Bank
         </button>
       </nav>
       <div style={{ flex: 1 }} />
@@ -920,7 +925,21 @@ const PipelineRunnerView = () => {
       return;
     }
 
-    // Gate 4+ (step 9+): proceed with post-generation steps
+    // Gate 4+ (step 9+): proceed with post-generation steps.
+    // Also land the approved set in the Bank so the user can audit / regen / export.
+    bankStore.set({
+      mode: 'pipeline',
+      questions,
+      metadata: parsedMetadata,
+      lo,
+      skill,
+      boardProfile: 'cbse',
+      gradeScopeProfile: null,
+      chapterContent,
+      questionImages,
+      audit: null,
+    });
+
     setStatus('running');
     if (currentStep < PIPELINE_STATES.length - 1) {
       setCurrentStep(prev => prev + 1);
@@ -2801,6 +2820,21 @@ const QuickGenerateView = () => {
       } catch { /* helper optional */ }
 
       log(`Done! ${allQs.length} questions generated.`);
+
+      // Land this batch in the Bank so the user can audit / regen / export.
+      bankStore.set({
+        mode: 'quick',
+        questions: allQs,
+        metadata,
+        lo,
+        skill,
+        boardProfile,
+        gradeScopeProfile,
+        chapterContent: content,
+        questionImages,
+        audit: null,
+      });
+
       setProgress('');
       setStatus('done');
     } catch (e: any) {
@@ -2873,7 +2907,11 @@ ${q.stem}`;
         GenerationSchema);
 
       const updated = { ...refined, cell: q.cell, type: q.type, id: q.id };
-      setQuestions(questions.map(x => x.id === q.id ? updated : x));
+      const nextQuestions = questions.map(x => x.id === q.id ? updated : x);
+      setQuestions(nextQuestions);
+      // Mirror the change into the bank if this batch is already banked (so the
+      // Bank tab and its audit stay in sync with Quick's edits).
+      if (bankStore.get().mode === 'quick') bankStore.setQuestions(nextQuestions);
       log(`${q.id}: ${action} ✓`);
       // Question changed — stale image must go; regenerate if still needed.
       refreshImageForQuestion(updated);
@@ -3554,6 +3592,28 @@ const GenerateView = () => {
   );
 };
 
+// Bank route wrapper — threads the app-level LatexText renderer and a single
+// export handler into BankView so that component stays independent of both.
+const BankRoute = () => {
+  const bank = useBank();
+  const onExport = async () => {
+    if (bank.questions.length === 0) return;
+    const { exportToExcelAndZip } = await import('./utils/exporter');
+    await exportToExcelAndZip({
+      questions: bank.questions,
+      questionImages: bank.questionImages,
+      metadata: {
+        lo: bank.lo, skill: bank.skill, count: bank.questions.length, construct: bank.skill,
+        grade: bank.metadata?.gradeCode,
+        subject: bank.metadata?.subjectCode,
+        skillCode: bank.metadata?.skillCode,
+      },
+      qaResults: [],
+    });
+  };
+  return <BankView Latex={LatexText} onExport={onExport} />;
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('generate');
   const [authenticated, setAuthenticated] = useState(() => {
@@ -3573,6 +3633,7 @@ export default function App() {
         <AnimatePresence mode="wait">
           {activeTab === 'dashboard' && <DashboardView key="dashboard" />}
           {activeTab === 'generate' && <GenerateView key="generate" />}
+          {activeTab === 'bank' && <BankRoute key="bank" />}
           {activeTab === 'architecture' && <ArchitectureView key="architecture" />}
           {activeTab === 'state-machine' && <StateMachineView key="state-machine" />}
           {activeTab === 'raci' && <RaciView key="raci" />}
