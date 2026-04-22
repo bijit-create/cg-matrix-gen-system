@@ -3596,6 +3596,9 @@ const GenerateView = () => {
 // export handler into BankView so that component stays independent of both.
 const BankRoute = () => {
   const bank = useBank();
+  const [busyQuestionId, setBusyQuestionId] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   const onExport = async () => {
     if (bank.questions.length === 0) return;
     const { exportToExcelAndZip } = await import('./utils/exporter');
@@ -3611,7 +3614,127 @@ const BankRoute = () => {
       qaResults: [],
     });
   };
-  return <BankView Latex={LatexText} onExport={onExport} />;
+
+  /** Regenerate a single question using the audit flags as an EXTRA CONSTRAINT.
+   * Works for both Quick-mode and Pipeline-mode batches since it goes straight
+   * to the generator with the current bank state. After regen, re-runs
+   * runFullAudit on just that question and merges the updated report back in. */
+  const regenerateOne = async (q: any, reportOrFlags: any) => {
+    const qId = q.id || q.question_id;
+    setBusyQuestionId(qId);
+    try {
+      const [{ generateAgentResponse }, promptsMod, { GenerationSchema }, { runFullAudit, auditFlagsToExtraNote }] = await Promise.all([
+        import('./agents/api'),
+        import('./agents/prompts'),
+        import('./agents/schemas'),
+        import('./agents/audit'),
+      ]);
+      const Prompts = promptsMod.Prompts;
+      const formatGradeProfile = promptsMod.formatGradeProfile;
+
+      const extraNote = auditFlagsToExtraNote(reportOrFlags);
+      const gradeHint = bank.gradeScopeProfile ? formatGradeProfile(bank.gradeScopeProfile) : '';
+      const qType = q.type || 'mcq';
+      const schemaType = (qType === 'assertion_reason' || qType === 'case_based') ? 'mcq' : qType;
+
+      const typeInstr: Record<string, string> =  {
+        mcq: 'MCQ with 4 options (A,B,C,D). 1 correct. Wrong options need "why_wrong".',
+        fill_blank: 'Fill-in-the-blank. Put ##answer## in stem.',
+        error_analysis: 'Error analysis. "steps" array (4 steps). 1-2 wrong with "fix".',
+        match: 'Match. "pairs" array: ["X → Y", ...].',
+        arrange: 'Arrange. "items" array in correct order.',
+        assertion_reason: 'Assertion–Reason MCQ with standard 4-option pattern.',
+        case_based: 'Case-based MCQ. Stem opens with a 2-3 sentence scenario.',
+        true_false: 'True/False question with a clear factual statement.',
+        one_word: 'One-word / short-answer question.',
+      };
+
+      const prompt = `${Prompts.GenerationStage1}
+Cell ${q.cell || q.cg_cell}. Regenerate this question to FIX the audit findings below. Preserve the topic and skill.
+Type: ${qType}. ${typeInstr[qType] || typeInstr.mcq}${gradeHint}
+Skill: ${bank.skill}
+LO: ${bank.lo}
+Grade: ${bank.metadata?.gradeCode || ''} | Subject: ${bank.metadata?.subjectCode || ''}
+UK English. Indian names. Grade-appropriate.
+${extraNote}
+
+CURRENT QUESTION:
+${q.stem}`;
+
+      const refined: any = await generateAgentResponse('Bank Regen',
+        prompt,
+        JSON.stringify({ id: qId, type: schemaType, cell: q.cell || q.cg_cell }),
+        GenerationSchema);
+      const updated = { ...refined, cell: q.cell || q.cg_cell, type: qType, id: qId };
+
+      // Write back into the bank.
+      const nextQuestions = bank.questions.map(x => (x.id || x.question_id) === qId ? updated : x);
+      bankStore.setQuestions(nextQuestions);
+
+      // Re-audit just this question and merge.
+      try {
+        const single = await runFullAudit([updated], {
+          lo: bank.lo,
+          skill: bank.skill,
+          metadata: bank.metadata,
+          profile: bank.gradeScopeProfile,
+          chapterContent: bank.chapterContent,
+          boardProfile: bank.boardProfile,
+        });
+        if (bank.audit) {
+          const merged = {
+            perQuestion: bank.audit.perQuestion.map(r => r.questionId === qId ? (single.perQuestion[0] || r) : r),
+            setFlags: single.setFlags, // set-level flags are set-wide; recompute from just this one isn't ideal, but keeps UI fresh
+          };
+          bankStore.setAudit(merged);
+        }
+      } catch {
+        /* audit merge optional */
+      }
+    } finally {
+      setBusyQuestionId(null);
+    }
+  };
+
+  const bulkRegen = async (sev: 'fail' | 'warn') => {
+    if (!bank.audit) return;
+    const targets = bank.audit.perQuestion.filter(r => r.severity === sev);
+    if (targets.length === 0) return;
+    setBulkBusy(true);
+    try {
+      for (const r of targets) {
+        const q = bankStore.get().questions.find(x => (x.id || x.question_id) === r.questionId);
+        if (!q) continue;
+        await regenerateOne(q, r);
+      }
+      // After bulk: re-run the full audit so set-level flags and category bars recompute accurately.
+      try {
+        const { runFullAudit } = await import('./agents/audit');
+        const fresh = await runFullAudit(bankStore.get().questions, {
+          lo: bank.lo,
+          skill: bank.skill,
+          metadata: bank.metadata,
+          profile: bank.gradeScopeProfile,
+          chapterContent: bank.chapterContent,
+          boardProfile: bank.boardProfile,
+        });
+        bankStore.setAudit(fresh);
+      } catch { /* optional */ }
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  return (
+    <BankView
+      Latex={LatexText}
+      onExport={onExport}
+      onRegenerateWithFeedback={regenerateOne}
+      onBulkRegen={bulkRegen}
+      busyQuestionId={busyQuestionId}
+      bulkBusy={bulkBusy}
+    />
+  );
 };
 
 export default function App() {
