@@ -295,9 +295,115 @@ export class AgentOrchestrator {
                     .filter((m: any) => subject.includes('math') ? (m.SUBJECT || '').toLowerCase() === 'math' : subject.includes('sci') ? (m.SUBJECT || '').toLowerCase() === 'science' : true)
                     .map((m: any) => m.SOURCE_URL).filter(Boolean)
                 )].slice(0, 6);
+                // Seed Gemini's grounded search with subject-tiered authoritative sources.
+                // Indian sources are listed first per board (CBSE/ICSE/state boards). The
+                // subject-specific tier is gated on the detected subject so the prompt stays
+                // focused. Full reasoning + citations live in
+                // memory/reference_misconception_sources.md.
+                const indianSources = [
+                    'HBCSE TIFR (Ramadas, Chunawala, Haydock, Deshmukh, Subramaniam, Vijapurkar, Padalkar)',
+                    'epiSTEME conference proceedings 1-9 (HBCSE) — episteme9.hbcse.tifr.res.in',
+                    'Eklavya HSTP bibliography (eklavya.in)',
+                    'NCERT exemplar problems + Voices of Teachers & Teacher Educators',
+                    'Azim Premji University: At Right Angles, Learning Curve',
+                ];
+                let subjectSources: string[] = [];
+                if (subject.includes('phys') || subject.includes('sci')) {
+                    subjectSources = [
+                        'PhysPort.org/assessments — FCI (Hestenes 1992), FMCE (Thornton & Sokoloff 1998), TUG-K (Beichner 1994), BEMA, CSEM',
+                        'AAAS Project 2061 Energy Assessment (Herrmann-Abell & DeBoer 2018) — assessment.aaas.org',
+                        'MOSART (Sadler, Harvard) — lweb.cfa.harvard.edu/smgphp/mosart',
+                        'TOAST (Slater 2008), LSCI (Bardar 2007), SPCI (Bailey 2011)',
+                    ];
+                }
+                if (subject.includes('chem')) {
+                    subjectSources = [
+                        'Taber (2002, 2009) Chemical Misconceptions: Prevention, Diagnosis and Cure (RSC, 2 vols)',
+                        'Mulford & Robinson (2002) Chemical Concepts Inventory — J Chem Ed 79(6):739',
+                        'AAAS Project 2061 Atoms, Molecules, States of Matter item bank',
+                        'Treagust (1988) two-tier diagnostic methodology — IJSE 10(2):159',
+                    ];
+                }
+                if (subject.includes('bio')) {
+                    subjectSources = [
+                        'CINS — Anderson, Fisher, Norman (2002) JRST 39:952',
+                        'CANS — Kalinowski, Pelletier, Heath (2016) CBE-LSE',
+                        'GCA — Smith, Wood, Knight (2008) CBE-LSE 7(4):422',
+                        'Driver et al. (1994) Making Sense of Secondary Science (Routledge)',
+                        'Deshmukh (2012) Misconceptions in Biology at Secondary School Level (HBCSE PhD)',
+                        'Haydock (2013, 2014) — evolution / natural selection in Indian students',
+                    ];
+                }
+                if (subject.includes('earth') || subject.includes('geo')) {
+                    subjectSources = [
+                        'MOSART (Sadler, Harvard) earth & space items',
+                        'Vosniadou & Brewer (1992, 1994) — mental models of Earth, day/night',
+                        'Padalkar & Ramadas (2009) — indigenous astronomy — epiSTEME-3',
+                    ];
+                }
+                if (subject.includes('math')) {
+                    subjectSources = [
+                        'CSMS / Hart (1981) Children\'s Understanding of Mathematics: 11-16',
+                        'Eedi NeurIPS 2020 dataset — arXiv:2007.12061 (17M+ misconception-tagged responses)',
+                        'Stacey & Steinle Decimal Comparison Test',
+                        'Booth & Koedinger — algebra equation-solving errors',
+                        'van Hiele (1986) geometry levels',
+                        'Subramaniam, Banerjee — Indian primary/middle math (HBCSE)',
+                        'Calculus Concept Inventory — Epstein (2013) Notices AMS 60:1018',
+                    ];
+                }
+                if (subject.includes('comp') || subject.includes('cs') || subject.includes('progra')) {
+                    subjectSources = [
+                        'SCS1 — Parker, Guzdial, Engleman (2016) ICER',
+                        'BDSI — Porter et al. (2019, 2022) — basic data structures',
+                        'MG-CSCI — Rachmatullah et al. (2020) — middle-school CS',
+                    ];
+                }
+                if (subject.includes('econ') || subject.includes('com')) {
+                    subjectSources = [
+                        'Test of Economic Literacy (TEL) — Walstad, Rebeck, Butters (2013) J Econ Ed 44(3):261',
+                        'TEK (grades 8-9), BET (grades 5-6) — Walstad & Rebeck',
+                    ];
+                }
+                if (subject.includes('hist') || subject.includes('soc')) {
+                    subjectSources = [
+                        'Wineburg (2001) Historical Thinking and Other Unnatural Acts',
+                        'Seixas & Morton (2013) The Big Six Historical Thinking Concepts',
+                        'Stanford History Education Group — Beyond the Bubble (sheg.stanford.edu)',
+                    ];
+                }
+                if (subjectSources.length === 0) {
+                    // Fallback: cross-cutting bibliographies and methodology refs.
+                    subjectSources = [
+                        'Pfundt & Duit STCSE bibliography (IPN Kiel) — archiv.ipn.uni-kiel.de/stcse',
+                        'AAAS Project 2061 — assessment.aaas.org',
+                        'PhysPort.org/assessments',
+                        'DIAGNOSER (Minstrell, diagnoser.com) — facet-based item bank',
+                    ];
+                }
                 try {
                     const searchResult = await generateWithGroundedSearch('Misconception Agent',
-                        `Search for student misconceptions about: "${this.config.lo}" (${subject}, grade ${grade}). Check: ${sourceUrls.join(', ')}, MOSART, AAAS. If none, say "NO_MISCONCEPTIONS_FOUND".`,
+                        `Search for student misconceptions about: "${this.config.lo}" (${subject}, grade ${grade}).
+
+CITATION CHAIN (mandatory): each misconception you return must trace to a primary peer-reviewed source. For Indian curricula, ALSO pair with an Indian replication where one exists.
+
+INDIAN-CONTEXT SOURCES (highest priority for CBSE / ICSE / state boards):
+${indianSources.map((s, i) => `  I${i + 1}. ${s}`).join('\n')}
+
+SUBJECT-SPECIFIC FIRST-TIER SOURCES (${subject}):
+${subjectSources.map((s, i) => `  S${i + 1}. ${s}`).join('\n')}
+
+CROSS-CUTTING BIBLIOGRAPHIES:
+  X1. Pfundt & Duit STCSE (IPN Kiel) — 8000+ refs
+  X2. AAAS Project 2061 — assessment.aaas.org
+  X3. Eedi NeurIPS dataset — eedi.com (math)
+  X4. Treagust two-tier methodology — IJSE 10(2):159
+
+Existing catalog source URLs: ${sourceUrls.join(', ')}.
+
+For each misconception, write incorrect_reasoning as the STUDENT'S flawed thinking ("a student picking this is reasoning that …"), not as a teacher's correction. Tag each entry with one theoretical framework when possible (p-prim, ontological-category, mental-model, threshold-concept, learning-progression facet).
+
+If absolutely nothing relevant found, say "NO_MISCONCEPTIONS_FOUND".`,
                         JSON.stringify({ lo: this.config.lo, skill: this.config.skill })
                     );
                     if (!searchResult.text.includes('NO_MISCONCEPTIONS_FOUND')) {
@@ -376,6 +482,14 @@ Focus on grade-appropriate, well-framed questions. Only REAL questions. UK Engli
         // --- Content Selection for ALL cells upfront (lightweight) ---
         this.log('Content Selector', 'Selecting content for each cell...');
         const allScopePoints = approvedContentScope.map((k: any) => k.knowledge_point);
+        // F4: track which knowledge_points are flagged as edge-cases by ContentScopingAgent.
+        // Used (a) to bias per-cell distribution so ≥20% of items hit an edge case, and
+        // (b) to tag generated questions with edge_case_flag for the audit's set-level check.
+        const edgeCaseSet = new Set<string>(
+            approvedContentScope
+                .filter((k: any) => String(k.flag || '').toLowerCase() === 'edge-case')
+                .map((k: any) => k.knowledge_point as string)
+        );
         const cellContentMap: Record<string, string[]> = {};
 
         for (const { cell } of cellQueue) {
@@ -384,17 +498,19 @@ Focus on grade-appropriate, well-framed questions. Only REAL questions. UK Engli
                 const selection = await generateAgentResponse(
                     'Content Selector',
                     `Pick 3-8 knowledge points MOST appropriate for cell ${cell} (${thisCellDef}). Grade: ${grade}, Subject: ${subjectName}. Return JSON array of strings.
-R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=patterns to analyze. Pick DIFFERENT points per cell.`,
+R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=patterns to analyze. Pick DIFFERENT points per cell. INCLUDE at least one edge-case knowledge point per cell when available (these are flagged in the source data).`,
                     JSON.stringify(allScopePoints),
                     { type: 'ARRAY' as any, items: { type: 'STRING' as any } }
                 );
                 cellContentMap[cell] = selection || allScopePoints.slice(0, 5);
-                this.log('Content Selector', `${cell}: ${(selection || []).length} points.`);
+                const edgesIn = (cellContentMap[cell] || []).filter((p: string) => edgeCaseSet.has(p)).length;
+                this.log('Content Selector', `${cell}: ${(selection || []).length} points (${edgesIn} edge-case).`);
             } catch {
                 cellContentMap[cell] = allScopePoints.slice(0, 5);
             }
         }
         this.artifacts.cellContentMap = cellContentMap;
+        this.artifacts.edgeCaseContentSet = Array.from(edgeCaseSet);
 
         // Emit the cell queue so UI can show progress
         if (this.config.onData) {
@@ -425,7 +541,26 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
         const cellDataMap = this.artifacts.cellData || {};
         const thisCellDef = cellDataMap[cell]?.definition || cell;
         const cellScope = (this.artifacts.cellContentMap?.[cell] || []);
-        const misconceptions = (this.artifacts.approvedMisconceptions || []).slice(0, 4).map((m: any) => m.text || m.misconception_text || '');
+
+        // Build a structured misconception payload — ID + text + incorrect reasoning.
+        // The generator must pick from this list (or set misconception_id_targeted="").
+        // We pass up to 6 candidates per cell so the model has range; targets are
+        // round-robin-assigned per slot below to enforce coverage without sequential
+        // generation.
+        const misconceptionPool: { id: string; text: string; incorrect_reasoning: string }[] =
+            (this.artifacts.approvedMisconceptions || [])
+                .slice(0, 6)
+                .map((m: any) => ({
+                    id: m.misconception_id || m.id || '',
+                    text: m.misconception_text || m.text || '',
+                    incorrect_reasoning: m.incorrect_reasoning || '',
+                }))
+                .filter((m: { id: string; text: string }) => m.id && m.text);
+        const misconceptionMenu = misconceptionPool.length === 0 ? '' :
+            'Misconceptions menu (pick one ID per question for misconception_id_targeted):\n' +
+            misconceptionPool.map((m, i) =>
+                `  ${i + 1}. [${m.id}] ${m.text}${m.incorrect_reasoning ? ' — error: ' + m.incorrect_reasoning : ''}`
+            ).join('\n');
 
         this.log('Generation Agent', `Cell ${cellIndex + 1}/${cellQueue.length}: Generating ${count} item(s) for ${cell}...`);
 
@@ -438,20 +573,47 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
         const typesForCell = rotation[cell] || ['mcq', 'mcq', 'mcq'];
         const startId = (this.artifacts.allQuestions || []).length + 1;
 
-        // Distribute content uniquely
+        // Distribute content uniquely.
+        // F4: bias toward edge cases. We aim for ⌈20% × count⌉ slots to consume
+        // an edge-case content point when at least that many are available in
+        // the cell scope; the remainder fills from the non-edge pool. This
+        // ensures the generated bank tests boundary cases rather than only
+        // canonical examples.
         const distributedContent: string[] = [];
+        const distributedIsEdge: boolean[] = [];
+        const edgeCaseSetForCell = new Set<string>(this.artifacts.edgeCaseContentSet || []);
         if (cellScope.length === 0) {
-            for (let i = 0; i < count; i++) distributedContent.push(this.config.skill);
-        } else {
-            const shuffled = [...cellScope].sort(() => Math.random() - 0.5);
             for (let i = 0; i < count; i++) {
-                if (i < shuffled.length) distributedContent.push(shuffled[i]);
-                else {
-                    const a = shuffled[i % shuffled.length];
-                    const b = shuffled[(i + 1) % shuffled.length];
-                    distributedContent.push(a !== b ? `${a} AND ${b}` : a);
+                distributedContent.push(this.config.skill);
+                distributedIsEdge.push(false);
+            }
+        } else {
+            const shuffle = <T>(arr: T[]) => [...arr].sort(() => Math.random() - 0.5);
+            const cellScopeStrings: string[] = (cellScope as any[]).map((p: any) => String(p));
+            const edgePool = shuffle(cellScopeStrings.filter((p: string) => edgeCaseSetForCell.has(p)));
+            const nonEdgePool = shuffle(cellScopeStrings.filter((p: string) => !edgeCaseSetForCell.has(p)));
+            const targetEdges = Math.min(edgePool.length, Math.max(1, Math.ceil(count * 0.2)));
+            const picked: { value: string; isEdge: boolean }[] = [];
+            // First, fill the edge quota.
+            for (let i = 0; i < targetEdges; i++) picked.push({ value: edgePool[i], isEdge: true });
+            // Then, fill remaining slots from the non-edge pool, recycling if needed.
+            const remaining = count - picked.length;
+            for (let i = 0; i < remaining; i++) {
+                if (nonEdgePool.length > 0) {
+                    picked.push({ value: nonEdgePool[i % nonEdgePool.length], isEdge: false });
+                } else if (edgePool.length > 0) {
+                    // No non-edge content available — keep filling from edge pool.
+                    picked.push({ value: edgePool[(targetEdges + i) % edgePool.length], isEdge: true });
+                } else {
+                    picked.push({ value: this.config.skill, isEdge: false });
                 }
             }
+            // Shuffle the final order so the edge cases don't all sit at the front.
+            const finalOrder = shuffle(picked);
+            finalOrder.forEach(p => {
+                distributedContent.push(p.value);
+                distributedIsEdge.push(p.isEdge);
+            });
         }
 
         // --- TWO-STAGE GENERATION (parallel Stage 1, then sequential Stage 2) ---
@@ -465,6 +627,18 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
             const names = ['Riya', 'Aarav', 'Kabir', 'Priya', 'Meera', 'Ananya', 'Rohan', 'Zara', 'Dev', 'Isha'];
             const useName = names[(startId + qi) % names.length];
 
+            // Round-robin assign a target misconception ID per slot. Parallel
+            // generation can't see what siblings claimed, so we hand each slot a
+            // distinct preferred misconception_id; the generator can override only
+            // by setting misconception_id_targeted="" with a valid typed
+            // reasoning_error per the prompt.
+            const targetMisconception = misconceptionPool.length > 0
+                ? misconceptionPool[qi % misconceptionPool.length]
+                : null;
+            const targetLine = targetMisconception
+                ? `PREFERRED TARGET for this slot: misconception_id_targeted="${targetMisconception.id}" (${targetMisconception.text}). Use this ID unless it genuinely does not fit; in that case set misconception_id_targeted="" and pick a typed reasoning_error per the prompt.`
+                : 'No misconceptions available for this cell — set misconception_id_targeted="" and pick a typed reasoning_error per the prompt.';
+
             // STAGE 1: Create question (creative, temp 0.4)
             const subjectHint = getSubjectHint(subjectName);
             const stage1Prompt = `${Prompts.GenerationStage1}
@@ -476,8 +650,10 @@ use_name: ${useName}
 Other questions test: ${otherPoints}. DO NOT overlap. DO NOT test the same fact.
 Grade: ${grade}, Subject: ${subjectName}, Skill: ${this.config.skill}
 ${subjectHint}
-${misconceptions.length > 0 ? 'Misconceptions: ' + misconceptions.slice(0, 2).join('; ') : ''}`;
+${misconceptionMenu}
+${targetLine}`;
 
+            const isEdgeSlot = !!distributedIsEdge[qi];
             return generateAgentResponse('Generation Agent', stage1Prompt, JSON.stringify({ id: qId, type: qType, cell }), GenerationSchema)
                 .then(async (draft) => {
                     // STAGE 2: Review & polish (evaluative, temp 0.1)
@@ -489,11 +665,11 @@ Question to review: ${JSON.stringify(draft).slice(0, 1500)}`;
                             JSON.stringify({ id: qId, type: qType, cell }),
                             GenerationSchema);
                         this.log('Generation Agent', `${qId}: ${qType} ✓ (2-stage)`);
-                        return { ...polished, cell, type: qType, id: qId };
+                        return { ...polished, cell, type: qType, id: qId, edge_case_flag: isEdgeSlot };
                     } catch {
                         // Stage 2 failed — use Stage 1 draft
                         this.log('Generation Agent', `${qId}: ${qType} ✓ (stage 1 only)`);
-                        return { ...draft, cell, type: qType, id: qId };
+                        return { ...draft, cell, type: qType, id: qId, edge_case_flag: isEdgeSlot };
                     }
                 })
                 .catch(e => {

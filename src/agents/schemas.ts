@@ -126,7 +126,17 @@ export const GenerationSchema: Schema = {
         // DEPICT (the answer subject), not what the question text says.
         // Used by the image-gen step to build the final gpt-image-2 prompt.
         image_desc: { type: Type.STRING },
-        // MCQ: 4 options
+        // The misconception this question PROBES — picked from the approved
+        // list passed in the prompt. Empty string means "no listed misconception
+        // applies"; the audit treats that as a warn, not a fail. Required so the
+        // generator must declare intent rather than guess.
+        misconception_id_targeted: { type: Type.STRING },
+        // Plain-text echo of the reasoning error this item is designed to
+        // catch — used by the rationale and the audit's coverage check.
+        misconception_reasoning_error: { type: Type.STRING },
+        // MCQ: 4 options. Each wrong option must trace either to a
+        // misconception_id from the approved list or to a typed
+        // reasoning_error (e.g., 'over-generalisation', 'size-based-classification').
         options: { type: Type.ARRAY, items: {
             type: Type.OBJECT,
             properties: {
@@ -134,9 +144,11 @@ export const GenerationSchema: Schema = {
                 text: { type: Type.STRING },
                 correct: { type: Type.BOOLEAN },
                 why_wrong: { type: Type.STRING },
-                image_desc: { type: Type.STRING }
+                image_desc: { type: Type.STRING },
+                misconception_id: { type: Type.STRING },
+                reasoning_error: { type: Type.STRING }
             },
-            required: ["label", "text", "correct"]
+            required: ["label", "text", "correct", "why_wrong"]
         }},
         // Error analysis: steps
         steps: { type: Type.ARRAY, items: {
@@ -155,7 +167,7 @@ export const GenerationSchema: Schema = {
         // Arrange: items in correct order
         items: { type: Type.ARRAY, items: { type: Type.STRING } }
     },
-    required: ["id", "type", "stem", "answer", "rationale"]
+    required: ["id", "type", "stem", "answer", "rationale", "misconception_id_targeted", "misconception_reasoning_error"]
 };
 
 export const QASchema: Schema = {

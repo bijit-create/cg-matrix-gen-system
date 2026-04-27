@@ -18,16 +18,22 @@ import { getImageRatioForGrade } from './prompts';
 export type AuditSeverity = 'pass' | 'warn' | 'fail';
 
 export type AuditCategory =
-  | 'rule'        // rule-based (formatting, content, distractor hygiene, quality)
-  | 'factual'     // SME factual lens
-  | 'pedagogical' // SME pedagogical lens
-  | 'language'    // SME language lens + localization (UK spelling)
-  | 'terminology' // SME 4th lens — chapter-aligned term check
-  | 'grade'       // matches grade-profile / concrete-lock
-  | 'scenario'    // R1/U1 scenario-opener ban (per-question) + set ratio (set)
-  | 'diversity'   // numerical diversity Jaccard (set)
-  | 'image'       // set-level image-ratio floor (set)
-  | 'alignment';  // LO keyword overlap, duplicates
+  | 'rule'                  // rule-based (formatting, content, distractor hygiene, quality)
+  | 'factual'               // SME factual lens
+  | 'pedagogical'           // SME pedagogical lens
+  | 'language'              // SME language lens + localization (UK spelling)
+  | 'terminology'           // SME 4th lens — chapter-aligned term check
+  | 'grade'                 // matches grade-profile / concrete-lock
+  | 'scenario'              // R1/U1 scenario-opener ban (per-question) + set ratio (set)
+  | 'diversity'             // numerical diversity Jaccard (set)
+  | 'image'                 // set-level image-ratio floor (set)
+  | 'alignment'             // LO keyword overlap, duplicates
+  | 'distractor_source'     // F1: every wrong option must trace to a misconception_id or typed reasoning_error
+  | 'misconception_coverage'// F1: question must claim a misconception_id_targeted; set-level no duplicate per cell
+  | 'rationale_hygiene'     // F1: rationale references the misconception, no author meta
+  | 'answer_leak'           // F2: stem leaks the defining word(s) of the correct answer
+  | 'image_material'        // F5: image-driven question hinges on a tactile/material property
+  | 'edge_case_coverage';   // F4: set-level — too few items hit edge/boundary cases
 
 export interface AuditFlag {
   category: AuditCategory;
@@ -77,6 +83,12 @@ const SYMBOLIC_STEM_RE = /\b[A-Z]_\d+|let\s+[a-z]\s*=|\b[a-z]\s*=\s*[\d.]+\s*[+\
 const ruleCategoryToAudit = (c: RuleFlag['category']): AuditCategory => {
   if (c === 'localization') return 'language';
   if (c === 'alignment') return 'alignment';
+  // F1/F2/F5 categories pass through to the audit unchanged.
+  if (c === 'distractor_source') return 'distractor_source';
+  if (c === 'misconception_coverage') return 'misconception_coverage';
+  if (c === 'rationale_hygiene') return 'rationale_hygiene';
+  if (c === 'answer_leak') return 'answer_leak';
+  if (c === 'image_material') return 'image_material';
   return 'rule';
 };
 
@@ -263,6 +275,53 @@ export async function runFullAudit(
       message: `Visual ratio ${imagePct.toFixed(0)}% below target ${target.minPct}% for this grade.`,
       fix: 'Regenerate some text-only questions with needs_image=true, or flip visualisable ones.',
     });
+  }
+
+  // F1 (set-level): no two questions in the SAME cell may target the same
+  // misconception_id. Cross-cell duplicates are allowed because they probe
+  // different cognitive levels of the same misconception.
+  const perCellMisconceptions = new Map<string, Map<string, string[]>>();
+  for (const q of questions) {
+    const cell = q.cell || q.cg_cell;
+    const id = typeof q.misconception_id_targeted === 'string' ? q.misconception_id_targeted.trim() : '';
+    if (!cell || !id) continue;
+    if (!perCellMisconceptions.has(cell)) perCellMisconceptions.set(cell, new Map());
+    const cellMap = perCellMisconceptions.get(cell)!;
+    if (!cellMap.has(id)) cellMap.set(id, []);
+    cellMap.get(id)!.push(q.id || q.question_id);
+  }
+  perCellMisconceptions.forEach((idMap, cell) => {
+    idMap.forEach((qIds, id) => {
+      if (qIds.length > 1) {
+        setFlags.push({
+          category: 'misconception_coverage',
+          severity: 'warn',
+          message: `Cell ${cell} has ${qIds.length} questions targeting the same misconception "${id}" (${qIds.join(', ')}). One probe per misconception per cell.`,
+          fix: 'Regenerate the duplicates so each picks a different misconception_id from the approved list.',
+        });
+      }
+    });
+  });
+
+  // F4 (set-level): edge-case coverage. Warn if fewer than 20% of items
+  // reference a content point flagged as edge-case during ContentScoping.
+  // We use q.edge_case_flag (set by the orchestrator at generation time)
+  // as the signal. Skip the check entirely when no question carries the
+  // flag — that means the upstream pipeline didn't surface any edge cases
+  // (likely a domain with no documented boundaries) and the warn would
+  // otherwise fire spuriously.
+  const anyFlagged = questions.some(q => q.edge_case_flag === true);
+  if (anyFlagged) {
+    const edgeHits = questions.filter(q => q.edge_case_flag === true).length;
+    const pct = (edgeHits / total) * 100;
+    if (pct < 20) {
+      setFlags.push({
+        category: 'edge_case_coverage',
+        severity: 'warn',
+        message: `Only ${pct.toFixed(0)}% of items hit an edge/boundary case (target ≥20%).`,
+        fix: 'Regenerate ~20-30% of items to use the edge-case content points (e.g., banana / sugarcane / bamboo for plant taxonomy).',
+      });
+    }
   }
 
   return { perQuestion, setFlags };

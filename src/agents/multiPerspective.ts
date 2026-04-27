@@ -146,8 +146,10 @@ Return: pass (true if no factual errors), score (0-100), issues (list of factual
       lens: 'Pedagogical',
       prompt: `You are a curriculum and assessment specialist. Check this question for PEDAGOGICAL quality ONLY.
 - Does the question test the intended cognitive level (${question.cell || 'unknown'})?
+- KEYWORD-MATCH SOLVABILITY (CRITICAL): If a student who only memorised the textbook definitions could answer this by matching a word in the stem to a definition (with no real reasoning), the item is functionally R1 — regardless of its label. For U2/A2/A3 cells: flag this as a critical pedagogical failure ("functionally R1 despite ${question.cell || 'higher'} label"). For R1 cells, this is acceptable.
+- ANSWER LEAK: Does the stem already contain the defining word(s) of the correct answer or a near-synonym? (e.g., answer "creeper" with stem "weak stem along the ground" — the definition IS the stem; collapses to vocabulary matching). Flag as critical if so.
+- DISTRACTOR SOURCING: Each wrong option must trace to a specific student misconception or named reasoning error — generic "the other categories" foils are filler. Look at why_wrong / misconception_id / reasoning_error fields. Flag any wrong option whose error cannot be named.
 - Is the question diagnostic — does a wrong answer reveal a specific gap?
-- Are distractors plausible and based on real student misconceptions?
 - Is the stem clear and unambiguous?
 - Does the question avoid: negative phrasing, "all of the above", verbatim textbook copying?
 ${qType === 'error_analysis' && isPhysics ? `- PHYSICS ERROR ANALYSIS: each wrong step must carry an "error_type" from {unit_dimensional, sign_direction, formula_misapplication, reference_frame, significant_figures}. The error must be physics-meaningful (NOT an arithmetic slip). Flag if error_type is missing, vague, or mismatched to the wrong step.` : ''}

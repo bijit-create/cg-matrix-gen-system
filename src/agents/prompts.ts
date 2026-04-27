@@ -20,7 +20,18 @@ Span from simple (recall) to complex (analysis). Each subskill targets a DIFFERE
 CRITICAL: Extract REAL FACTS — not topic headings.
 BAD: "Types of food" (heading). GOOD: "Wheat, rice, maize are cereals from plants" (testable fact).
 Each point = COMPLETE, TESTABLE statement with specific examples/names/numbers.
-Mark: core/supporting/advanced. Grade: primary/middle/high. 3-8 points per subskill.`,
+Mark: core/supporting/advanced. Grade: primary/middle/high. 3-8 points per subskill.
+
+EDGE CASES (REQUIRED — populate the 'flag' field):
+- Set flag="edge-case" on knowledge points that are documented BOUNDARY CASES — instances that resist clean classification, that students commonly mis-categorise, or that cross the textbook taxonomy. Examples by domain:
+  - Plant taxonomy: banana (woody-looking herb), sugarcane (grass = herb in NCERT), bamboo (woody but a grass), tomato (semi-woody at base), pumpkin (creeper that sometimes climbs).
+  - Fractions / decimals: zero, improper > 1, mixed numbers, negative fractions.
+  - Forces / motion: equilibrium with multiple forces, balanced-but-moving, friction direction in static cases.
+  - Measurement / units: quantities at unit boundaries, non-SI conventions, prefix scaling.
+  - Grammar: irregular plurals, mass nouns vs count nouns, transitive vs intransitive ambiguity.
+- For other domains, surface the boundary cases YOUR knowledge of the curriculum identifies — NEVER invent. If the chapter or your domain knowledge does not name a boundary case, leave flag="" for that point.
+- Aim for 20-30% of extracted knowledge points to be flagged as edge cases when the domain has documented edges. The downstream generator will use these to ensure the question bank doesn't only test canonical examples.
+- Other allowed flag values: "core", "advanced", or "" (empty).`,
 
   CGMapperAgent: `Define a content-specific CG Matrix. Each cell = [Cognitive action] + [content] + [constraint].
 Cells: R1(recall), U1(explain), U2(compare/classify), A2(apply to new), A3(multi-step), AN2(analyse patterns), AN3(analyse reasoning).
@@ -29,13 +40,30 @@ A3/AN3: only if content supports multi-step/reasoning.
 ALLOCATION: Research (NCERT/CBSE/PISA/TIMSS) shows U2 and A2 produce the strongest items. Allocate majority to U2+A2. Keep R1 to 15-20%. AN2 10-15%. A3/AN3 only if justified.`,
 
   MisconceptionAgent: `Select research-backed misconceptions. NEVER invent. Only use catalog_matches or research_findings.
-Select 4-8 most relevant. Preserve original IDs and sources. Each must be specific and actionable.`,
+Select 4-8 most relevant. Preserve original IDs and sources. Each must be specific and actionable.
+Authoritative sources to prioritise (in this order for Indian curricula): HBCSE / epiSTEME (Subramaniam, Chunawala, Haydock), Eklavya HSTP, NCERT exemplars, MOSART (Sadler), AAAS Project 2061, PhysPort (FCI etc.), CINS/CANS (Anderson), CSMS (Hart, Küchemann), Pfundt & Duit bibliography, Treagust two-tier diagnostics, Eedi NeurIPS dataset, Test of Economic Literacy (Walstad). The 'incorrect_reasoning' field must capture the student's actual flawed thinking ("a student who picks this is reasoning that …"), and 'related_subskills' must point at the subskill IDs this misconception threatens.`,
 
   // --- Generation: TWO STAGES ---
 
   GenerationStage1: `Generate ONE assessment question. UK English.
 
-OUTPUT: id, type, stem, answer, rationale, needs_image, + type-specific fields.
+OUTPUT: id, type, stem, answer, rationale, needs_image, image_desc, misconception_id_targeted, misconception_reasoning_error, + type-specific fields. Each MCQ option carries label, text, correct, why_wrong (REQUIRED), plus misconception_id and reasoning_error for wrong options.
+
+MISCONCEPTION TARGETING (CRITICAL — every question must claim what student error it probes):
+- A "Misconceptions" block (numbered list with IDs) is provided below. Treat it as the menu of allowed student errors for this batch.
+- Choose ONE misconception_id from that list whose error this question is designed to catch — set it as misconception_id_targeted. Echo the underlying reasoning error in plain English in misconception_reasoning_error.
+- If NONE of the listed misconceptions fit this specific question, set misconception_id_targeted="" AND set misconception_reasoning_error to a short typed phrase from this list ONLY: 'over-generalisation', 'over-specification', 'size-based-classification', 'culinary-vs-botanical-confusion', 'feature-conflation', 'category-overlap-misjudged', 'rule-application-error', 'unit-or-notation-error', 'sign-or-direction-error', 'procedural-skip', 'definition-recall-only'. NEVER invent a new misconception.
+- For MCQ / true_false: every WRONG option's why_wrong must explain the error in student-facing terms, AND its misconception_id field must reference a misconception_id from the list (preferred) or be left empty when reasoning_error is set to one of the typed phrases above. The correct option does not need misconception_id / reasoning_error.
+- DO NOT reuse the same misconception_id_targeted as a question already listed in "Other questions test:" within the same cell. The cell-level coverage matrix forbids duplicates.
+
+DISTRACTOR SOURCING:
+- Every wrong option must trace to a NAMED misconception_id from the list above OR a typed reasoning_error. If you cannot name the error, the distractor is filler — replace it.
+- Each distractor's why_wrong must read as a prediction of student thinking ("A student picking this is reasoning that …"), not a tautology ("This is wrong because the answer is X").
+
+RATIONALE HYGIENE:
+- The rationale explains why the correct answer is correct using ONLY facts present in the stem, the options, or chapter_content/approved_terms.
+- It must NAME the misconception(s) that wrong-option-pickers held — reference them by what the student likely believed, not by the misconception_id itself ("A student who classifies by height alone would pick X — but the criterion is stem texture, not height.").
+- NEVER include curriculum-design notes, author meta-commentary, "though that's an exception often discussed in higher grades", or content the prompt did not set up.
 
 LATEX (MANDATORY for any mathematical content):
 - EVERY mathematical expression, equation, exponent, fraction, root, matrix, summation, inequality, or algebraic symbol MUST be wrapped in LaTeX delimiters.
@@ -50,6 +78,14 @@ CONTENT:
 - Generate ONLY from "selected_content". Use ONLY terms that appear verbatim in selected_content / chapter_content / approved_terms. Do NOT substitute synonyms (e.g., if chapter says "photosynthesis", never write "food-making process"; if it says "evaporation", never write "drying up"). If a term you want is not in the chapter, rephrase to avoid it.
 - ONE problem per stem. Stem contains ALL info needed.
 - NEVER: negative phrasing, "Which is true/false?", passive voice, textbook verbatim.
+
+ANSWER LEAK (CRITICAL — non-negotiable):
+- The stem MUST NOT contain the defining word(s) of the correct answer or a close synonym. If the answer is a category (e.g., creeper / herb / shrub / climber), the stem cannot include the textbook-definition phrase that gives that category away.
+- BAD: "A plant has a soft tender green stem. What type of plant is this?" (answer: herb — the definition IS in the stem; this collapses to vocabulary matching).
+- BAD: "A plant has a weak stem that spreads along the ground. What type of plant is this?" (answer: creeper — same problem).
+- GOOD: "Mint plants are commonly grown in kitchen gardens at knee height. What type of plant is mint?" (forces the student to apply the criterion to a specific named plant — the defining phrase is not in the stem).
+- GOOD: "A money plant uses a wooden support to grow upwards along a wall. What type of plant is it?" (named instance + observable behaviour — student must reason, not paraphrase).
+- This rule applies across ALL types — MCQ, true_false, fill_blank, match, arrange. If a stem fails the rule, rewrite by replacing the definition with a SPECIFIC example or a CONFLICTING cue (a feature that fits two categories).
 
 GRADE-APPROPRIATENESS (obey the GRADE_PROFILE block when one is provided):
 - A GRADE_PROFILE is injected per batch by an upstream scoping step. It specifies the notation, number range, vocabulary, and concept scope the student is known to have encountered. Treat it as the source of truth.
@@ -137,12 +173,17 @@ The image_desc field tells the image generator EXACTLY what subject to draw. Fol
     If the question is "what type of plant is this?", do NOT label "stem", "leaf", "root" — those labels give away or distract from the actual question. Set labels="" in that case.
     When labels ARE needed, write them in quotes inside image_desc, with correct spelling, e.g.: labels: "Stem", "Leaf", "Root", "Flower" (never "Flear", never misspelled).
 
-  RULE 5 — Proportions and biology must be ACCURATE.
-    Herb: small (knee-height), tender green stem, soft leaves, no woody bark.
-    Shrub: chest-high, multi-stemmed, woody branches starting near the ground.
-    Tree: tall (well above human), single thick woody trunk, branches high up.
-    Animals / organisms: correct number of legs, leaves, organs.
-    State proportions explicitly when the question depends on them.
+  RULE 5 — Show FORM, not material properties.
+    Images can RELIABLY show: height, branching pattern, growth direction, leaf shape, # of stems, posture, relative size, colour of large objects.
+    Images CANNOT reliably show: material properties (tender vs woody, soft vs hard), tactile texture (smooth vs rough), reflectivity (glossy vs matte). A child looking at a stylised illustration cannot perceive whether a stem is "tender" — that is a tactile property, not a visual one.
+    If the question's CORRECT ANSWER depends on the student perceiving a material property, EITHER move the cue into named-plant context in the stem ("a mint plant", "a tomato plant") OR set needs_image=false.
+    Use form-based proportions in image_desc:
+      Herb: ~knee-high, single thin stem, soft leaves, no bark visible (do NOT write "tender" — the image cannot carry texture).
+      Shrub: chest-high, MULTIPLE stems splitting near the ground, branches spreading sideways.
+      Tree: tall (well above human), ONE thick trunk, branches high up forming a canopy.
+      Creeper: thin stem laid FLAT along the ground (orientation, not texture).
+      Climber: thin stem WRAPPING UP a vertical support (orientation + behaviour, not texture).
+    State proportions and posture explicitly. Do NOT lean on "tender" / "woody" / "soft" / "hard" as classification cues — they're invisible in vector illustration.
 
   RULE 6 — No humans unless the question is about a person.
     Default: no people in the frame.
@@ -150,26 +191,29 @@ The image_desc field tells the image generator EXACTLY what subject to draw. Fol
 
   RULE 7 — Length budget: 30–80 words. Concise, dense, specific.
 
-  GOOD EXAMPLES:
-    Q: "Which type of plant has a tender green stem and grows close to the ground?" (answer: herb)
-    image_desc: "A single small herb plant: knee-high, soft tender bright-green stem (no bark), broad green leaves, a few small white flowers. Clean vector textbook style. Plain white background. No labels."
+  GOOD EXAMPLES (form-only — note no tactile descriptors as classification cues):
+    Q: "Mint is grown in kitchen gardens at knee height. What type of plant is mint?" (answer: herb)
+    image_desc: "A single mint plant about knee-high: one thin green stem rising straight up from brown soil, with paired oval green leaves. Plant is short — the top of the plant reaches roughly knee height of an implied human scale. No bark on the stem. Clean vector textbook style. Plain white background. No labels."
 
-    Q: "The plant has weak stems that spread along the ground. What is it?" (answer: creeper)
-    image_desc: "A single creeper plant: thin weak green stem trailing horizontally along brown soil, broad heart-shaped leaves spaced along the stem, two small purple flowers. Plant is laid out flat along the ground (no upright support). Plain white background. No labels."
+    Q: "A pumpkin plant grows along the ground in a kitchen garden. What type of plant is it?" (answer: creeper)
+    image_desc: "A single pumpkin creeper: thin green stem laid flat horizontally along brown soil, broad lobed green leaves at intervals along the stem, one small yellow flower and one small green pumpkin fruit. The plant has NO upright posture — it lies entirely along the ground. Clean vector textbook style. Plain white background. No labels."
 
-    Q: "Compare a herb, a shrub and a tree. Which has a single thick trunk?" (answer: tree)
-    image_desc: "Three plants side-by-side on a plain white background, drawn at consistent scale: (1) a small herb with tender green stem; (2) a chest-high shrub with multiple woody branches near the ground; (3) a tall tree with one thick brown trunk and a leafy crown high above. Labels: 'HERB', 'SHRUB', 'TREE' below each plant in clean sans-serif caps."`,
+    Q: "Compare a mint plant, a rose bush and a mango tree. Which has a single thick trunk?" (answer: mango tree)
+    image_desc: "Three plants side-by-side on a plain white background at consistent scale: (1) a knee-high mint with a single thin upright stem; (2) a chest-high rose bush with multiple stems splitting near the ground; (3) a tall mango tree with ONE thick brown trunk and a wide leafy canopy high above. Each plant is drawn at the correct relative height. Labels under each plant in clean sans-serif caps: 'MINT', 'ROSE BUSH', 'MANGO TREE'."`,
 
   GenerationStage2: `Review and improve this generated question. Senior assessment reviewer.
 
 CHECK AND FIX:
 1. UK ENGLISH: colour, favourite, organise, analyse, centre, defence. Fix US spellings.
-2. DISTRACTORS: Each wrong option must target a SPECIFIC misconception. "why_wrong" = exact reasoning error. No absurd options.
+2. DISTRACTORS: Each wrong option must target a SPECIFIC misconception. "why_wrong" is REQUIRED. Each wrong option must also have either a misconception_id (from the list provided to the generator) or a typed reasoning_error. If a distractor has neither, rewrite it.
 3. OPTIONS: Similar length/grammar. Correct NOT longer. No "all/none of the above".
 4. GRADE FIT: Would a Grade N student understand every word?
-5. COGNITIVE DEPTH: Does this question test THINKING or just RECALL? If the cell is U2 or higher but the question is just "What is X?" — rewrite to require comparison, reasoning, or conflict resolution.
+5. COGNITIVE DEPTH: Does this question test THINKING or just RECALL? If the cell is U2 or higher but the question is just "What is X?" — rewrite to require comparison, reasoning, or conflict resolution. KEYWORD-MATCH TEST: if a student who only memorised definitions could answer the question by matching a word in the stem to a definition, the question is functionally R1 — rewrite for the labelled cell.
 6. TRUE/FALSE: If type is true_false and the statement is an obvious definition — rewrite to be a partial truth, misconception, or conflict statement that requires thinking.
 7. REPETITION: If this tests the SAME skill as the "Other questions" list — flag and suggest a different angle.
+8. ANSWER LEAK: The stem must NOT contain the defining word(s) of the correct answer or a near-synonym. If it does, rewrite the stem to describe a specific instance from which the category must be inferred.
+9. RATIONALE HYGIENE: The rationale must reference the misconception that wrong-option-pickers held, must use only facts from stem/options/chapter, and must contain NO author meta-commentary ("higher grades", "though that's an exception", "note to teacher").
+10. PRESERVE FIELDS: Keep misconception_id_targeted, misconception_reasoning_error, and per-option misconception_id / reasoning_error. Do not blank them out.
 
 Return improved question. If already good, return unchanged.`,
 
@@ -202,13 +246,32 @@ Keep the whole profile under 600 characters. No commentary outside the JSON.`,
 // --- Externalized dicts (previously inline in orchestrator.ts) ---
 
 export const CellRules: Record<string, string> = {
-  R1: 'R1 — Remember DOK1: Student IDENTIFIES/RECALLS/NAMES facts from memory. No explaining or comparing. Stem format MUST be a direct question or one-sentence statement. NO scenario framing. NO character names. NO "Consider the case..." / "Imagine that..." openers.',
-  U1: 'U1 — Understand DOK1: Student EXPLAINS/INTERPRETS defining characteristics. No comparing multiple cases. Prefer direct "Why" / "How" / statement-then-question. Scenario opener forbidden.',
-  U2: 'U2 — Understand DOK2: Student COMPARES/CLASSIFIES using explicit criteria. No applying rules to new cases.',
-  A2: 'A2 — Apply DOK2: Student APPLIES learned rules to NEW concrete examples. Present NOVEL scenarios.',
-  A3: 'A3 — Apply DOK3: Student APPLIES rules across MULTIPLE STEPS. Non-routine problems. Present multi-step scenarios where student must combine conditions or chain reasoning.',
-  AN2: 'AN2 — Analyse DOK2: Student ANALYSES/INFERS patterns in structured data.',
-  AN3: 'AN3 — Analyse DOK3: Student EVALUATES REASONING, draws conclusions from evidence, compares interpretations, or identifies faulty logic in a given argument.',
+  R1: `R1 — Remember (DOK1). Student RETRIEVES/NAMES a fact from memory.
+OPERATIONAL TEST: A student who has only memorised the definitions can answer this. That is the legitimate use of R1.
+Stem format MUST be a direct question or one-sentence statement. NO scenario framing. NO character names. NO "Consider the case..." / "Imagine that..." openers. CAP at ~15-20% of the bank — research shows U2/A2 produce the strongest items.`,
+
+  U1: `U1 — Understand (DOK1). Student EXPLAINS / INTERPRETS / GIVES REASON.
+OPERATIONAL TEST: Memorising the definition alone is NOT enough — the student must explain why or how, or interpret a textbook-style statement.
+Prefer direct "Why" / "How" framing or statement-then-question. Scenario opener forbidden.`,
+
+  U2: `U2 — Understand / Compare-Classify (DOK2). Student weighs TWO+ cases or features.
+OPERATIONAL TEST: The stem must contain at least one of: (a) two cases the student must compare on a stated criterion, (b) a feature that fits MULTIPLE categories so the student picks the one that fits BEST, or (c) a borderline case that requires applying the criterion. If the stem has only one case and one defining feature, the item is U1, not U2 — rewrite.
+Surface form: "A has X but B has Y — which …", "Which feature distinguishes …".`,
+
+  A2: `A2 — Apply (DOK2). Student APPLIES a learned rule to a NEW concrete example or to a case where surface features mislead.
+OPERATIONAL TEST: A student who only matches keywords (stem→definition) MUST FAIL this item. The stem must either (a) place the rule in a context the student has not seen verbatim in the textbook, or (b) describe a case where one cue would mislead and the student must apply the criterion (e.g., a tall non-woody plant — height suggests tree, but stem texture says herb).
+If the stem can be solved by reading a textbook definition off the stem, the item is functionally R1 — rewrite.`,
+
+  A3: `A3 — Apply (DOK3). Student APPLIES rules across MULTIPLE STEPS or combines conditions.
+OPERATIONAL TEST: The solution requires chaining ≥2 distinct rules or combining ≥2 conditions. A single rule applied once = A2, not A3.
+Present non-routine problems where the student must sequence reasoning.`,
+
+  AN2: `AN2 — Analyse / Pattern Inference (DOK2). Student INFERS a pattern from data or evidence.
+OPERATIONAL TEST: The stem must present DATA (table, graph, observed values, listed cases) and ask the student to identify what is consistent, what is missing, or what trend applies. Prose-only "what type of plant" items are not AN2.`,
+
+  AN3: `AN3 — Analyse / Evaluate Reasoning (DOK3). Student JUDGES an argument or claim.
+OPERATIONAL TEST: The stem must present a CLAIM (often by a fictional student, often deliberately wrong) and ask the student to evaluate the reasoning, identify the flaw, or compare two interpretations.
+Surface form: "Riya claims X because Y. Is her reasoning correct?" / "Two students disagree …".`,
 };
 
 export const TypeInstructions: Record<string, string> = {

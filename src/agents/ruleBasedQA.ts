@@ -8,7 +8,12 @@
 
 export interface QAFlag {
   rule: string;
-  category: 'formatting' | 'content' | 'quality' | 'distractor' | 'localization' | 'alignment';
+  category: 'formatting' | 'content' | 'quality' | 'distractor' | 'localization' | 'alignment'
+    | 'distractor_source'      // Stage F1: every wrong option must trace to a misconception_id or typed reasoning_error
+    | 'misconception_coverage' // Stage F1: question must claim a misconception_id_targeted
+    | 'rationale_hygiene'      // Stage F1: rationale only uses facts from stem/options/chapter; references the misconception
+    | 'answer_leak'            // Stage F2: stem must not contain defining word(s) of the correct answer
+    | 'image_material';        // Stage F5: image cannot carry tactile/material-property classification weight
   severity: 'critical' | 'major' | 'minor';
   message: string;
   field: string;
@@ -253,6 +258,157 @@ function checkAlignment(stem: string, lo: string, options?: any[]): QAFlag[] {
   return flags;
 }
 
+// === STAGE F1 — DISTRACTOR SOURCING ===
+// Every wrong option must trace to a misconception_id (from the approved list)
+// or a typed reasoning_error. Filler distractors fail this check.
+function checkDistractorSource(options: any[]): QAFlag[] {
+  const flags: QAFlag[] = [];
+  if (!Array.isArray(options) || options.length === 0) return flags;
+  options.forEach((opt: any, i: number) => {
+    if (typeof opt === 'string' || !opt) return;
+    if (opt.correct) return;
+    const hasMisconceptionId = typeof opt.misconception_id === 'string' && opt.misconception_id.trim().length > 0;
+    const hasReasoningError = typeof opt.reasoning_error === 'string' && opt.reasoning_error.trim().length > 0;
+    const hasWhyWrong = typeof opt.why_wrong === 'string' && opt.why_wrong.trim().length > 0;
+    if (!hasWhyWrong) {
+      flags.push({ rule: 'missing_why_wrong', category: 'distractor_source', severity: 'major',
+        message: 'Wrong option has no why_wrong — distractor cannot be diagnostic without one.',
+        field: `option_${String.fromCharCode(65 + i)}` });
+    }
+    if (!hasMisconceptionId && !hasReasoningError) {
+      flags.push({ rule: 'untraced_distractor', category: 'distractor_source', severity: 'major',
+        message: 'Distractor traces to no misconception_id and no typed reasoning_error — likely filler.',
+        field: `option_${String.fromCharCode(65 + i)}` });
+    }
+  });
+  return flags;
+}
+
+// === STAGE F1 — MISCONCEPTION COVERAGE (per question) ===
+// Question must claim a misconception_id_targeted OR set it to "" with a
+// non-empty reasoning_error. Empty both → flag.
+function checkMisconceptionCoverage(q: any): QAFlag[] {
+  const flags: QAFlag[] = [];
+  const id = typeof q.misconception_id_targeted === 'string' ? q.misconception_id_targeted.trim() : '';
+  const err = typeof q.misconception_reasoning_error === 'string' ? q.misconception_reasoning_error.trim() : '';
+  if (!id && !err) {
+    flags.push({ rule: 'no_misconception_claim', category: 'misconception_coverage', severity: 'major',
+      message: 'Question does not declare a misconception_id_targeted or a reasoning_error — cannot verify what student error it probes.',
+      field: 'misconception_id_targeted' });
+  }
+  return flags;
+}
+
+// === STAGE F1 — RATIONALE HYGIENE ===
+// Rationale must (a) reference an idea present in stem/options/chapter,
+// and (b) acknowledge the misconception the wrong-option-picker held.
+// Heuristic: rationale should overlap with stem/options OR mention the
+// misconception_reasoning_error / misconception_id_targeted text. It must NOT
+// contain author meta-commentary phrases.
+function checkRationaleHygiene(q: any): QAFlag[] {
+  const flags: QAFlag[] = [];
+  const rationale = typeof q.rationale === 'string' ? q.rationale : '';
+  if (!rationale) return flags;
+  const lower = rationale.toLowerCase();
+
+  // Author meta-commentary leaks
+  const metaPhrases = [
+    'higher grades', 'higher class', 'beyond this grade', 'beyond the syllabus',
+    'curriculum-design', 'as a curriculum', 'though that\'s an exception',
+    'note to teacher', 'pedagogically speaking',
+  ];
+  for (const p of metaPhrases) {
+    if (lower.includes(p)) {
+      flags.push({ rule: 'author_meta_in_rationale', category: 'rationale_hygiene', severity: 'major',
+        message: `Rationale contains author meta-commentary ("${p}") — student-facing only.`, field: 'rationale' });
+      break;
+    }
+  }
+
+  // No misconception reference
+  const err = typeof q.misconception_reasoning_error === 'string' ? q.misconception_reasoning_error.toLowerCase() : '';
+  const id = typeof q.misconception_id_targeted === 'string' ? q.misconception_id_targeted.toLowerCase() : '';
+  const refsMisconception = (err && err.length > 5 && lower.includes(err.split(/\s+/).slice(0, 3).join(' ')))
+    || (id && lower.includes(id));
+  // OR: rationale touches one of the why_wrong reasonings
+  const options = Array.isArray(q.options) ? q.options : [];
+  const refsWhyWrong = options.some((opt: any) => {
+    if (!opt || opt.correct) return false;
+    const ww = typeof opt.why_wrong === 'string' ? opt.why_wrong.toLowerCase() : '';
+    if (!ww || ww.length < 8) return false;
+    const firstSig = ww.split(/[\s,.]/).filter((w: string) => w.length > 4).slice(0, 2).join(' ');
+    return firstSig && lower.includes(firstSig);
+  });
+  if (rationale.length > 30 && !refsMisconception && !refsWhyWrong && options.some((o: any) => o && !o.correct && o.why_wrong)) {
+    flags.push({ rule: 'rationale_no_misconception', category: 'rationale_hygiene', severity: 'minor',
+      message: 'Rationale does not reference the misconception held by wrong-option-pickers.', field: 'rationale' });
+  }
+
+  return flags;
+}
+
+// === STAGE F2 — ANSWER LEAK ===
+// The stem must not contain the defining word(s) of the correct answer or a
+// near-synonym. We approximate "defining word" with the answer text itself
+// plus, when present, the correct option's text and any why_wrong contrast.
+// If ≥60% of significant tokens of the answer appear in the stem, flag.
+function checkAnswerLeak(q: any): QAFlag[] {
+  const flags: QAFlag[] = [];
+  const stem = typeof q.stem === 'string' ? q.stem.toLowerCase() : '';
+  if (!stem) return flags;
+
+  const candidates: string[] = [];
+  if (typeof q.answer === 'string' && q.answer.trim()) candidates.push(q.answer);
+  const options = Array.isArray(q.options) ? q.options : [];
+  const correct = options.find((o: any) => o && o.correct);
+  if (correct && typeof correct.text === 'string' && correct.text.trim()) candidates.push(correct.text);
+
+  const stop = new Set(['the','a','an','of','to','in','is','are','it','this','that','and','or','for','on','with','as','by','be','was','were','at','from','one','two','three']);
+  const tokenise = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 3 && !stop.has(w));
+  const stemTokens = new Set(tokenise(stem));
+
+  for (const c of candidates) {
+    const ansTokens = tokenise(c);
+    if (ansTokens.length < 1) continue;
+    // Single-word answer that appears verbatim → near-certain leak.
+    if (ansTokens.length === 1 && stemTokens.has(ansTokens[0])) {
+      flags.push({ rule: 'answer_in_stem', category: 'answer_leak', severity: 'major',
+        message: `Stem contains the answer word "${ansTokens[0]}" — student can answer by reading the stem.`,
+        field: 'stem' });
+      break;
+    }
+    if (ansTokens.length >= 2) {
+      const hits = ansTokens.filter((t: string) => stemTokens.has(t)).length;
+      if (hits / ansTokens.length >= 0.6) {
+        flags.push({ rule: 'answer_phrase_in_stem', category: 'answer_leak', severity: 'major',
+          message: `Stem reproduces ${hits}/${ansTokens.length} significant tokens of the correct answer — likely paraphrase test, not comprehension.`,
+          field: 'stem' });
+        break;
+      }
+    }
+  }
+
+  return flags;
+}
+
+// === STAGE F5 — IMAGE MATERIAL-PROPERTY DEPENDENCY ===
+// If needs_image=true AND the stem hinges on a tactile/material-property
+// keyword (tender/woody/soft/hard/etc.), the image cannot reliably carry the
+// classification cue. Move the cue into text or unset needs_image.
+function checkImageMaterial(q: any): QAFlag[] {
+  const flags: QAFlag[] = [];
+  if (!q.needs_image) return flags;
+  const stem = typeof q.stem === 'string' ? q.stem.toLowerCase() : '';
+  if (!stem) return flags;
+  const tactile = /\b(tender|woody|soft|hard|flexible|brittle|smooth|rough|shiny|matte|glossy|tough|spongy|brittle)\b/i;
+  if (tactile.test(stem)) {
+    flags.push({ rule: 'image_material_dependency', category: 'image_material', severity: 'minor',
+      message: 'Stem uses a tactile/material-property keyword (e.g., tender/woody/soft) while needs_image=true — images cannot reliably show material properties; move the cue into named-plant context or unset needs_image.',
+      field: 'stem' });
+  }
+  return flags;
+}
+
 // === MAIN RUNNER ===
 export function runRuleBasedQA(questions: any[], lo: string, profile: 'cbse' | 'state' = 'cbse'): RuleQAResult[] {
   const results: RuleQAResult[] = [];
@@ -268,6 +424,11 @@ export function runRuleBasedQA(questions: any[], lo: string, profile: 'cbse' | '
     flags.push(...checkContent(stem));
     flags.push(...checkQuality(stem, options, profile));
     flags.push(...checkDistractors(options));
+    flags.push(...checkDistractorSource(options));
+    flags.push(...checkMisconceptionCoverage(q));
+    flags.push(...checkRationaleHygiene(q));
+    flags.push(...checkAnswerLeak(q));
+    flags.push(...checkImageMaterial(q));
     flags.push(...checkLocalization(stem, options));
     flags.push(...checkAlignment(stem, lo, options));
 
