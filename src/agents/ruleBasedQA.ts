@@ -371,7 +371,7 @@ function checkAnswerLeak(q: any): QAFlag[] {
 
   // Drop trailing English suffixes to expose the root. Order matters — strip
   // longest suffixes first so "vegetative" → "vegetativ" not "vegetativ" → "vegetat".
-  const SUFFIXES = ['ation','ition','ative','ition','tions','ities','ical','ically','ing','ied','ies','ied','ied','tion','sion','ment','ness','ness','ful','est','er','ed','en','es','ly','al','y','s'];
+  const SUFFIXES = ['ically','ation','ition','ative','tions','ities','ical','ment','ness','ful','ing','ied','ies','tion','sion','est','ed','en','es','er','ly','al','y','s'];
   const root = (w: string): string => {
     const lw = w.toLowerCase();
     for (const suf of SUFFIXES) {
@@ -406,10 +406,16 @@ function checkAnswerLeak(q: any): QAFlag[] {
       break;
     }
 
-    // (b) Multi-token answer phrase coverage.
+    // (b) Multi-token answer phrase coverage. Threshold lowered to 0.5
+    // (was 0.6) after the Grade-7 plant-reproduction batch — items like U2-4
+    // ("This process is known as fragmentation. How does this method differ
+    // from spore formation?") had a partial-token overlap that sat just
+    // under the 60% bar but is plainly a leak. 50% = "majority of significant
+    // tokens reproduced" is the right call: still doesn't fire on legitimate
+    // comparison stems, fires on paraphrase tests.
     if (ansTokens.length >= 2) {
       const hits = ansTokens.filter((t: string) => stemTokens.has(t)).length;
-      if (hits / ansTokens.length >= 0.6) {
+      if (hits / ansTokens.length >= 0.5) {
         flags.push({ rule: 'answer_phrase_in_stem', category: 'answer_leak', severity: 'major',
           message: `Stem reproduces ${hits}/${ansTokens.length} significant tokens of the correct answer — likely paraphrase test, not comprehension.`,
           field: 'stem' });
