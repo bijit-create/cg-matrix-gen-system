@@ -79,19 +79,38 @@ Question: "${question}"`,
 // --- Full pipeline: question → classify → render with the right tool ---
 //
 // `force` overrides the classifier's "skip" verdict — used when the upstream
-// generator has already decided needs_image=true. Without this flag the
-// classifier was second-guessing the generator and producing skips like
-// "No visual aid is necessary..." for questions explicitly flagged for an
-// image, leaving the SME with empty image-required cards.
+// generator has already decided needs_image=true.
+//
+// `imageDesc` (when provided) is the AUTHORITATIVE description of what to
+// draw. It comes from the question's image_desc field, which the generator
+// produced specifically to depict the answer subject (not the question text).
+// When imageDesc is set, we skip the classifier entirely for raster images and
+// build the prompt directly from it via buildImagePrompt.
 export async function generateQuestionImage(
   question: string,
-  opts?: { force?: boolean; subject?: string },
+  opts?: { force?: boolean; subject?: string; imageDesc?: string },
 ): Promise<{
   status: 'generated' | 'skipped' | 'failed';
   dataUrl?: string;
   sizeKb?: number;
   reason?: string;
 }> {
+  // Fast path: if the question already has a concrete image_desc, skip the
+  // classifier and go straight to the OpenAI image generator with the desc as
+  // SUBJECT. This is the primary path now — generator-decided desc is far more
+  // accurate than re-classifying from the stem.
+  if (opts?.imageDesc && opts.imageDesc.trim().length > 20) {
+    try {
+      const { buildImagePrompt } = await import('./prompts');
+      const enriched = buildImagePrompt(opts.imageDesc.trim(), opts?.subject || '', '');
+      const rawDataUrl = await generateImageContent(enriched);
+      const { dataUrl, sizeKb } = await normalizeToCanvas(rawDataUrl);
+      return { status: 'generated', dataUrl, sizeKb };
+    } catch (e: any) {
+      // Fall through to classifier path on failure.
+    }
+  }
+
   const intent = await analyzeVisualIntent(question);
   let { status: intentStatus, prompt: intentPrompt, reason: intentReason } = intent;
 

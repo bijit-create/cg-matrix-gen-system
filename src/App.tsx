@@ -712,7 +712,7 @@ const PipelineRunnerView = () => {
         await Promise.allSettled(imageNeedQs.map(async (q: any) => {
           const qId = q.id || q.question_id;
           try {
-            const result = await generateQuestionImage(q.stem, { force: true, subject: parsedMetadata?.subjectCode });
+            const result = await generateQuestionImage(q.stem, { force: true, subject: parsedMetadata?.subjectCode, imageDesc: q.image_desc });
             if (result.status === 'generated' && result.dataUrl) {
               finalImages[qId] = result.dataUrl;
               setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: image ✓ (${result.sizeKb}KB)`, time: new Date().toLocaleTimeString() }]);
@@ -857,7 +857,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
       } else {
         // Analyze question and generate
         const { generateQuestionImage } = await import('./agents/imageGen');
-        const result = await generateQuestionImage(q.stem);
+        const result = await generateQuestionImage(q.stem, { subject: parsedMetadata?.subjectCode, imageDesc: q.image_desc });
         if (result.status === 'generated' && result.dataUrl) {
           setQuestionImages(prev => ({ ...prev, [qId]: result.dataUrl! }));
           setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: ${result.sizeKb}KB (800x600 PNG)`, time: new Date().toLocaleTimeString() }]);
@@ -2749,7 +2749,7 @@ If MCQ, options may also reference the image. For primary grades especially, pre
         await Promise.allSettled(imageNeedQs.map(async (q: any) => {
           try {
             // force=true so the classifier can't veto a needs_image=true decision.
-            const result = await generateQuestionImage(q.stem, { force: true, subject: metadata?.subjectCode });
+            const result = await generateQuestionImage(q.stem, { force: true, subject: metadata?.subjectCode, imageDesc: q.image_desc });
             if (result.status === 'generated' && result.dataUrl) {
               finalImages[q.id] = result.dataUrl;
               log(`${q.id}: image ✓ (${result.sizeKb}KB)`);
@@ -2907,7 +2907,7 @@ ${q.stem}`;
     setGeneratingImageId(q.id);
     try {
       const { generateQuestionImage } = await import('./agents/imageGen');
-      const result = await generateQuestionImage(q.stem);
+      const result = await generateQuestionImage(q.stem, { force: true, subject: metadata?.subjectCode, imageDesc: q.image_desc });
       if (result.status === 'generated' && result.dataUrl) {
         setQuestionImages(prev => ({ ...prev, [q.id]: result.dataUrl! }));
         log(`${q.id}: image refreshed (${result.sizeKb}KB)`);
@@ -3207,7 +3207,7 @@ ${q.stem}`;
                                 setGeneratingImageId(q.id);
                                 try {
                                   const { generateQuestionImage } = await import('./agents/imageGen');
-                                  const result = await generateQuestionImage(q.stem);
+                                  const result = await generateQuestionImage(q.stem, { force: true, subject: metadata?.subjectCode, imageDesc: q.image_desc });
                                   if (result.status === 'generated' && result.dataUrl) {
                                     setQuestionImages(prev => ({ ...prev, [q.id]: result.dataUrl! }));
                                     log(`${q.id}: image generated (${result.sizeKb}KB)`);
@@ -3494,6 +3494,7 @@ const BankRoute = () => {
       const result = await generateQuestionImage(q.stem, {
         force: true,
         subject: bank.metadata?.subjectCode,
+        imageDesc: q.image_desc,
       });
       if (result.status === 'generated' && result.dataUrl) {
         bankStore.set({

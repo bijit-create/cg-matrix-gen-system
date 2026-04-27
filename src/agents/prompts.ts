@@ -110,11 +110,55 @@ REPETITION PREVENTION (CRITICAL):
 - Two questions asking "identify plant type from stem description" = UNACCEPTABLE.
 - Vary: the SKILL (identify vs compare vs reason vs apply), the CONTEXT (garden/forest/farm/kitchen), the COGNITIVE DEMAND.
 
-IMAGE (CRITICAL — read the subject):
-- For SCIENCE topics about plants, animals, organisms, body parts, experiments, life processes: needs_image MUST be true for AT LEAST 3-4 questions per set. Students learn biology by SEEING, not just reading descriptions.
-- For MATH topics with geometry, graphs, fractions, data: needs_image MUST be true for visual operations.
-- For text-heavy subjects (grammar, vocabulary, history dates): needs_image can be false.
-- When needs_image=true, write the stem ASSUMING the student sees a picture. Example: "Look at the plant in the picture. What type of plant is this?" NOT "A plant has a green tender stem. What type is it?"`,
+IMAGE (CRITICAL — read carefully):
+- Set needs_image=true ONLY when a visual genuinely helps the student answer (most science / geometry / data / map questions). For pure language, abstract reasoning, or vocabulary: needs_image=false.
+- For text-heavy subjects (grammar, vocabulary, history dates): needs_image is usually false.
+- When needs_image=true, write the stem ASSUMING the student sees a picture. Example: "Look at the plant in the picture. What type of plant is this?" NOT "A plant has a green tender stem. What type is it?"
+
+IMAGE_DESC (REQUIRED when needs_image=true; otherwise empty string):
+The image_desc field tells the image generator EXACTLY what subject to draw. Follow these rules with no exceptions:
+
+  RULE 1 — Depict the CORRECT ANSWER, not the question scene.
+    BAD (literal scene of question text):
+      Question: "Divya observes a tall woody plant. Is it herb / shrub / TREE?"  Answer: shrub.
+      image_desc: "A girl named Divya looking at a tree."   ← WRONG (drew the wrong answer because 'tree' was in the question)
+    GOOD (depicts the answer):
+      image_desc: "A single shrub: a multi-stemmed bushy plant about chest-high, with several woody branches splitting near the ground, leaves, and small flowers. Stems are brown and woody. Plain white background."
+
+  RULE 2 — Be a noun-phrase description, not a directive.
+    Write what should appear in the frame: subjects, key features, proportions. Do NOT include "create an image of...", "draw a picture showing..." — the generator handles that wrapper.
+
+  RULE 3 — Comparison plates only when the question is comparative.
+    If the question asks the student to identify ONE thing: show ONE thing.
+    If the question asks "which of these three is X" and the student must compare: show all three side-by-side.
+
+  RULE 4 — Labels are CONDITIONAL.
+    Add labels ONLY if the question requires the student to read them (e.g., "which part is labelled X?", "what is the value at point P?").
+    If the question is "what type of plant is this?", do NOT label "stem", "leaf", "root" — those labels give away or distract from the actual question. Set labels="" in that case.
+    When labels ARE needed, write them in quotes inside image_desc, with correct spelling, e.g.: labels: "Stem", "Leaf", "Root", "Flower" (never "Flear", never misspelled).
+
+  RULE 5 — Proportions and biology must be ACCURATE.
+    Herb: small (knee-height), tender green stem, soft leaves, no woody bark.
+    Shrub: chest-high, multi-stemmed, woody branches starting near the ground.
+    Tree: tall (well above human), single thick woody trunk, branches high up.
+    Animals / organisms: correct number of legs, leaves, organs.
+    State proportions explicitly when the question depends on them.
+
+  RULE 6 — No humans unless the question is about a person.
+    Default: no people in the frame.
+    Exception: if the question explicitly involves a child / teacher / shopkeeper performing an action, include ONE neutral cartoon figure from a back / three-quarter view.
+
+  RULE 7 — Length budget: 30–80 words. Concise, dense, specific.
+
+  GOOD EXAMPLES:
+    Q: "Which type of plant has a tender green stem and grows close to the ground?" (answer: herb)
+    image_desc: "A single small herb plant: knee-high, soft tender bright-green stem (no bark), broad green leaves, a few small white flowers. Clean vector textbook style. Plain white background. No labels."
+
+    Q: "The plant has weak stems that spread along the ground. What is it?" (answer: creeper)
+    image_desc: "A single creeper plant: thin weak green stem trailing horizontally along brown soil, broad heart-shaped leaves spaced along the stem, two small purple flowers. Plant is laid out flat along the ground (no upright support). Plain white background. No labels."
+
+    Q: "Compare a herb, a shrub and a tree. Which has a single thick trunk?" (answer: tree)
+    image_desc: "Three plants side-by-side on a plain white background, drawn at consistent scale: (1) a small herb with tender green stem; (2) a chest-high shrub with multiple woody branches near the ground; (3) a tall tree with one thick brown trunk and a leafy crown high above. Labels: 'HERB', 'SHRUB', 'TREE' below each plant in clean sans-serif caps."`,
 
   GenerationStage2: `Review and improve this generated question. Senior assessment reviewer.
 
@@ -205,35 +249,35 @@ export const MathTypeRotation: Record<string, string[]> = {
 // no-text rule (so the image can't accidentally reveal the answer), and
 // (c) a clean classroom-textbook aesthetic that matches the surrounding
 // question card.
-export const IMAGE_PROMPT_TEMPLATE = `Create a clean, NCERT-style educational illustration for a classroom question.
+// Follows OpenAI's recommended ordering for gpt-image-2:
+// Background → Subject → Key Details → Constraints. Avoids negative-prompt
+// phrasing ("do not draw…") because gpt-image-2 doesn't honour those
+// reliably; uses positive framing instead. {description} should be the
+// question's image_desc field — a noun-phrase description of the answer
+// subject — not the raw stem.
+export const IMAGE_PROMPT_TEMPLATE = `BACKGROUND
+Plain solid white background, #FFFFFF only. Treat the canvas as a single classroom textbook page. The frame is calm, uncluttered, with generous safe margins.
 
-SUBJECT OF THE IMAGE (depict only this; ignore any narrative around it):
+SUBJECT
 {description}
 
-ART DIRECTION:
-- Single focused composition. One subject, no clutter.
-- Flat vector / textbook-illustration style. Bright, friendly palette (avoid garish saturation).
-- Plain pure-white background (#FFFFFF). No gradients, no shadows, no decorative props.
-- Proportionate, clearly recognisable shapes. Anatomy and geometry must be ACCURATE.
-- Composition fits a 4:3 frame with safe margins. No edge-bleed, no cropping of the subject.
-- Crisp lines, even line weights. Solid fills over textured ones.
+KEY DETAILS
+- Style: clean flat vector illustration, NCERT / Indian school textbook aesthetic.
+- Linework: crisp, even line weight; solid fills over textures or hatching.
+- Palette: bright but restrained — natural greens / earthy browns / sky blues for biology; primary colours for physics / chemistry diagrams; pastel tints for backgrounds inside subjects (not the canvas). No neon, no gradient washes.
+- Composition: 4:3 aspect ratio, single focused subject occupying 60–80% of the frame, centred with even white space around it.
+- Proportions and biology must be accurate at a textbook level: a tree is taller than a shrub is taller than a herb; a heart has four chambers; a triangle's interior angles sum to 180°.
+- Typography (only when SUBJECT calls for labels): clean sans-serif, sentence case OR all caps as the SUBJECT specifies. Set every label EXACTLY as written in the SUBJECT description (verbatim spelling — copy each label character-for-character; do not paraphrase or re-letter). Use thin leader lines from label to part where applicable.
 
-TEXT POLICY (necessary text and labels are OK; revealing text is not):
-- Labels ON the image are allowed and encouraged when they aid comprehension: anatomical parts ("stem", "leaf", "petal"), axis names ("Time (s)", "Distance (m)"), scale numerals on number lines / rulers / coordinate grids, units on quantities, points labelled P / Q / R / S, country or feature names on maps when the question specifically asks the student to read them, equation parts when the visual IS the equation.
-- Numerals on tick marks, scales, gauges, dials and tables ARE allowed.
-- All on-image text must be in clean, legible English (or the language the question uses), spelt correctly, in a sans-serif font matching the textbook style.
+CONSTRAINTS
+- Only the subject described above is rendered; the frame contains nothing extra.
+- All visible text matches the SUBJECT description verbatim, with correct spelling.
+- The frame contains zero answer hints — no ticks, stars, circles, arrows pointing at "the right one", and no option lettering (A / B / C / D) inside the image.
+- People appear only when the SUBJECT explicitly says so; when present, drawn as a neutral cartoon figure from a back or three-quarter view, no recognisable real-person faces.
+- The background remains pure white from edge to edge.
 
-NEGATIVE CONSTRAINTS (zero tolerance):
-- DO NOT show the ANSWER itself or any clue to it. No highlighting one option, arrows pointing to "the right one", a tick / star / circle around the correct choice, or colour-coding the correct option differently from distractors.
-- DO NOT include sample multiple-choice options, A/B/C/D markers, or boxed letters drawn inside the image (those belong in the question card, not the image).
-- DO NOT add brand logos, watermarks, mascots, AI-style flourishes, decorative banners, or sparkles.
-- DO NOT include real, identifiable people. If a child or person appears, draw a neutral cartoon figure from a back / three-quarter view; no recognisable faces.
-- Spelling must be correct. If unsure, omit the label rather than misspell it.
-
-QUALITY BAR:
-- Looks like it could appear in an Indian school textbook (NCERT / state-board).
-- A teacher should be able to print it on plain paper without losing legibility.
-- A 10-year-old should recognise the subject in under two seconds.`;
+OUTPUT
+A teacher should be able to print this on plain paper at half-page size and a 10-year-old should recognise the subject in under two seconds.`;
 
 export function buildImagePrompt(stem: string, subject: string, _grade: string): string {
   const base = IMAGE_PROMPT_TEMPLATE.replace('{description}', stem.slice(0, 600));

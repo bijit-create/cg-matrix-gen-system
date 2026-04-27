@@ -122,6 +122,10 @@ export const GenerationSchema: Schema = {
         answer: { type: Type.STRING },
         rationale: { type: Type.STRING },
         needs_image: { type: Type.BOOLEAN },
+        // Required when needs_image=true. Describes what the image should
+        // DEPICT (the answer subject), not what the question text says.
+        // Used by the image-gen step to build the final gpt-image-2 prompt.
+        image_desc: { type: Type.STRING },
         // MCQ: 4 options
         options: { type: Type.ARRAY, items: {
             type: Type.OBJECT,
