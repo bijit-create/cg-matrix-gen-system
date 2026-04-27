@@ -714,6 +714,10 @@ const PipelineRunnerView = () => {
       audit: null,
     });
 
+    // Take the SME to the Bank — audit, regen, and export are there now.
+    setLogs(prev => [...prev, { agent: 'System', action: 'Approved set sent to Bank → opening audit surface.', time: new Date().toLocaleTimeString() }]);
+    window.dispatchEvent(new CustomEvent('app:navigate', { detail: 'bank' }));
+
     setStatus('running');
     if (currentStep < PIPELINE_STATES.length - 1) {
       setCurrentStep(prev => prev + 1);
@@ -2689,6 +2693,11 @@ If MCQ, options may also reference the image. For primary grades especially, pre
 
       setProgress('');
       setStatus('done');
+
+      // Move the user to Bank — that's where the audit, regen, and export
+      // actions live now. Quick view stops being the post-generation surface.
+      log('Moving to Bank for audit & review →');
+      window.dispatchEvent(new CustomEvent('app:navigate', { detail: 'bank' }));
     } catch (e: any) {
       log(`Error: ${e.message}`);
       setStatus('done');
@@ -3485,6 +3494,20 @@ export default function App() {
     // Auto-login if token already in session
     return !!sessionStorage.getItem('appAccessToken');
   });
+
+  // Cross-view navigation: any view can dispatch
+  // window.dispatchEvent(new CustomEvent('app:navigate', { detail: 'bank' }))
+  // to switch tabs without prop-drilling setActiveTab everywhere.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const tab = (e as CustomEvent).detail as Tab | undefined;
+      if (tab === 'dashboard' || tab === 'generate' || tab === 'bank') {
+        setActiveTab(tab);
+      }
+    };
+    window.addEventListener('app:navigate', handler);
+    return () => window.removeEventListener('app:navigate', handler);
+  }, []);
 
   if (!authenticated) {
     return <LoginGate onLogin={() => setAuthenticated(true)} />;
