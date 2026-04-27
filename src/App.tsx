@@ -2248,6 +2248,9 @@ Simple English, Indian names, short stems.`;
       }
 
       setQuestions(refinedQs);
+      // Keep the bank store in sync so the audit / Move-to-Bank flow sees the
+      // refined batch.
+      if (bankStore.get().mode === 'quick') bankStore.setQuestions(refinedQs);
       setFeedback('');
       log(`Refinement complete. ${refinedQs.length} questions updated.`);
       // Refresh images for every refined question (clears stale, regenerates if still needed).
@@ -2750,10 +2753,11 @@ If MCQ, options may also reference the image. For primary grades especially, pre
       setProgress('');
       setStatus('done');
 
-      // Move the user to Bank — that's where the audit, regen, and export
-      // actions live now. Quick view stops being the post-generation surface.
-      log('Moving to Bank for audit & review →');
-      window.dispatchEvent(new CustomEvent('app:navigate', { detail: 'bank' }));
+      // Stay in the Workspace view so the SME can iterate per-question
+      // (Simplify / Harder / Regen / Edit). Bank navigation is now triggered
+      // explicitly by the "Move to Bank · Audit & Export" button in the
+      // results header.
+      log('Ready for review. Tweak in place, then move to Bank when satisfied.');
     } catch (e: any) {
       log(`Error: ${e.message}`);
       setStatus('done');
@@ -2847,7 +2851,11 @@ ${q.stem}`;
   const saveEdit = () => {
     if (!editDraft) return;
     const prev = questions.find(x => x.id === editDraft.id);
-    setQuestions(questions.map(x => x.id === editDraft.id ? editDraft : x));
+    const next = questions.map(x => x.id === editDraft.id ? editDraft : x);
+    setQuestions(next);
+    // Keep the bank store in sync if this batch is already banked, so when
+    // the SME clicks "Move to Bank" the latest edits show up.
+    if (bankStore.get().mode === 'quick') bankStore.setQuestions(next);
     log(`${editDraft.id}: edited ✓`);
     // If the stem changed, refresh the image (clear + regenerate if still needed)
     if (prev && prev.stem !== editDraft.stem) refreshImageForQuestion(editDraft);
@@ -3092,18 +3100,25 @@ ${q.stem}`;
           {questions.length > 0 && (
             <div className="flex flex-col gap-4">
               <TriageBar total={questions.length} approved={questions.length} />
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-mono text-[var(--ink-muted)]">{questions.length} questions generated</span>
+              <div className="flex justify-between items-center gap-3">
+                <div>
+                  <div style={{ fontSize: 13, color: 'var(--swiftee-deep)', fontWeight: 600 }}>
+                    {questions.length} question{questions.length === 1 ? '' : 's'} generated
+                  </div>
+                  {status === 'done' && (
+                    <div style={{ fontSize: 11, color: 'var(--fg-secondary)', marginTop: 2 }}>
+                      Tweak each one with Regen / Simplify / Harder / Edit, or move on to audit + export.
+                    </div>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
                   {status === 'done' && (
                     <button
-                      onClick={async () => {
-                        const { exportToExcelAndZip } = await import('./utils/exporter');
-                        await exportToExcelAndZip({ questions, questionImages: {}, metadata: { lo, skill, count: parseInt(count), construct: skill, grade: metadata?.gradeCode, subject: metadata?.subjectCode, skillCode: metadata?.skillCode }, qaResults: [] });
-                      }}
-                      className="px-4 py-1.5 bg-[#1B5E20] text-white text-xs font-bold uppercase flex items-center gap-1 hover:bg-[#2E7D32]"
+                      onClick={() => window.dispatchEvent(new CustomEvent('app:navigate', { detail: 'bank' }))}
+                      className="sw-btn sw-btn-primary sw-btn-sm"
+                      title="Send this batch to the Bank to run audit, fix flagged questions, and export."
                     >
-                      <FileDown size={12} /> Export ZIP
+                      <Activity size={12} /> Move to Bank · Audit & Export
                     </button>
                   )}
                 </div>
