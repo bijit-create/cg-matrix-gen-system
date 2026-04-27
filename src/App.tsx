@@ -3446,8 +3446,10 @@ const GenerateView = () => {
           {mode === 'quick' ? 'One-click generation, no gates.' : 'Multi-stage with agent approvals.'}
         </span>
       </div>
-      {/* Active mode body */}
-      <div className="flex-1 min-h-0 overflow-hidden">
+      {/* Active mode body — overflow-y-auto so the long intake form scrolls;
+          runtime views (Pipeline gates, Quick generation panels) handle their
+          own internal overflow so they're unaffected. */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <AnimatePresence mode="wait">
           {mode === 'quick' && <QuickGenerateView key="quick" />}
           {mode === 'pipeline' && <PipelineRunnerView key="pipeline" />}
