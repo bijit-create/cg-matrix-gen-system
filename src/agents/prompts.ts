@@ -80,12 +80,33 @@ CONTENT:
 - NEVER: negative phrasing, "Which is true/false?", passive voice, textbook verbatim.
 
 ANSWER LEAK (CRITICAL — non-negotiable):
-- The stem MUST NOT contain the defining word(s) of the correct answer or a close synonym. If the answer is a category (e.g., creeper / herb / shrub / climber), the stem cannot include the textbook-definition phrase that gives that category away.
-- BAD: "A plant has a soft tender green stem. What type of plant is this?" (answer: herb — the definition IS in the stem; this collapses to vocabulary matching).
-- BAD: "A plant has a weak stem that spreads along the ground. What type of plant is this?" (answer: creeper — same problem).
-- GOOD: "Mint plants are commonly grown in kitchen gardens at knee height. What type of plant is mint?" (forces the student to apply the criterion to a specific named plant — the defining phrase is not in the stem).
-- GOOD: "A money plant uses a wooden support to grow upwards along a wall. What type of plant is it?" (named instance + observable behaviour — student must reason, not paraphrase).
-- This rule applies across ALL types — MCQ, true_false, fill_blank, match, arrange. If a stem fails the rule, rewrite by replacing the definition with a SPECIFIC example or a CONFLICTING cue (a feature that fits two categories).
+- The stem MUST NOT contain the defining word(s) of the correct answer, a morphological variant, OR the textbook DEFINITION-PHRASE of the correct answer.
+
+THREE FORMS OF LEAK TO AVOID:
+
+  (1) WORD LEAK — the answer word or its root appears in the stem.
+    BAD: "...where a small outgrowth, or **bud**, develops..." answer: "**Budding**" (root "bud" is in the stem).
+    BAD: "What is the **vegetative** part used for **propagation**?" answer: "Vegetative propagation".
+    FIX: pick a different framing that doesn't name the root — describe the organism's behaviour or use a specific named example.
+
+  (2) DEFINITION-PHRASE LEAK — the stem reproduces the textbook-style definition of the answer.
+    BAD: "A plant has a soft tender green stem. What type of plant is this?" answer: herb (the definition IS the stem).
+    BAD: "A plant has a weak stem that spreads along the ground. What type is it?" answer: creeper.
+    BAD: "A scientist places a single-celled organism in a sugar solution; small bulb-like outgrowths develop and detach. Which method does this represent?" answer: budding (this IS the budding definition).
+    FIX: replace the definition with a SPECIFIC named instance (mint, money plant, watermelon) the student must classify. Or use a CONFLICTING cue (a feature that fits TWO categories) so the student must apply the criterion.
+
+  (3) WRONG-CATEGORY-SWAP DISTRACTORS — if every wrong option is just "the other category" with no misconception encoded, the item is a vocabulary recogniser. Wrong options must trace to a NAMED student misconception (e.g., "spores = seeds confusion", "size-based classification", "teleological framing") not just "the wrong label".
+
+THE "COVER-THE-STEM" SELF-CHECK:
+- After drafting, mentally cover the stem and read just the four options. If the correct answer is identifiable from option content alone, the stem isn't doing work — rewrite it.
+- After drafting, ask: "Could a student who only memorised the textbook definitions answer this without reading the stem carefully?" If yes, the item is functionally R1 — rewrite to require reasoning from a specific instance.
+
+GOOD examples that pass all three checks:
+- "Mint plants are commonly grown in kitchen gardens at knee height. What type of plant is mint?" (specific named plant; student must classify via the criterion).
+- "A money plant uses a wooden support to grow upwards along a wall. What type of plant is it?" (observable behaviour; student must reason).
+- "Sameer keeps bread in damp conditions for a week. White cottony patches grow, and a fresh slice placed nearby develops the same patches a few days later. Which mode of asexual reproduction explains how the new patches appeared?" (scenario-based; student must INFER the mechanism — note: this stem does NOT name "spore", "release", or "dispersal").
+
+This rule applies across ALL types — MCQ, true_false, fill_blank, match, arrange.
 
 GRADE-APPROPRIATENESS (obey the GRADE_PROFILE block when one is provided):
 - A GRADE_PROFILE is injected per batch by an upstream scoping step. It specifies the notation, number range, vocabulary, and concept scope the student is known to have encountered. Treat it as the source of truth.
@@ -211,7 +232,11 @@ CHECK AND FIX:
 5. COGNITIVE DEPTH: Does this question test THINKING or just RECALL? If the cell is U2 or higher but the question is just "What is X?" — rewrite to require comparison, reasoning, or conflict resolution. KEYWORD-MATCH TEST: if a student who only memorised definitions could answer the question by matching a word in the stem to a definition, the question is functionally R1 — rewrite for the labelled cell.
 6. TRUE/FALSE: If type is true_false and the statement is an obvious definition — rewrite to be a partial truth, misconception, or conflict statement that requires thinking.
 7. REPETITION: If this tests the SAME skill as the "Other questions" list — flag and suggest a different angle.
-8. ANSWER LEAK: The stem must NOT contain the defining word(s) of the correct answer or a near-synonym. If it does, rewrite the stem to describe a specific instance from which the category must be inferred.
+8. ANSWER LEAK (three forms):
+   (a) WORD/ROOT LEAK — does the stem contain the answer or a morphological variant (e.g., "bud" in stem when answer is "Budding")? If yes, rewrite.
+   (b) DEFINITION-PHRASE LEAK — does the stem reproduce the textbook definition of the answer (e.g., "small outgrowth detaches and grows" when answer is "Budding")? If yes, replace the definition with a specific named instance or scenario.
+   (c) WRONG-CATEGORY-SWAP DISTRACTORS — is every wrong option just "the other category" with no misconception encoded? If yes, rewrite each distractor to trace to a NAMED student error.
+   COVER-THE-STEM TEST: cover the stem; can the answer be identified from option text alone? If yes, the stem is decorative.
 9. RATIONALE HYGIENE: The rationale must reference the misconception that wrong-option-pickers held, must use only facts from stem/options/chapter, and must contain NO author meta-commentary ("higher grades", "though that's an exception", "note to teacher").
 10. PRESERVE FIELDS: Keep misconception_id_targeted, misconception_reasoning_error, and per-option misconception_id / reasoning_error. Do not blank them out.
 

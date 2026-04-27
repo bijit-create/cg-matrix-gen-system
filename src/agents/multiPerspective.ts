@@ -147,8 +147,12 @@ Return: pass (true if no factual errors), score (0-100), issues (list of factual
       prompt: `You are a curriculum and assessment specialist. Check this question for PEDAGOGICAL quality ONLY.
 - Does the question test the intended cognitive level (${question.cell || 'unknown'})?
 - KEYWORD-MATCH SOLVABILITY (CRITICAL): If a student who only memorised the textbook definitions could answer this by matching a word in the stem to a definition (with no real reasoning), the item is functionally R1 — regardless of its label. For U2/A2/A3 cells: flag this as a critical pedagogical failure ("functionally R1 despite ${question.cell || 'higher'} label"). For R1 cells, this is acceptable.
-- ANSWER LEAK: Does the stem already contain the defining word(s) of the correct answer or a near-synonym? (e.g., answer "creeper" with stem "weak stem along the ground" — the definition IS the stem; collapses to vocabulary matching). Flag as critical if so.
-- DISTRACTOR SOURCING: Each wrong option must trace to a specific student misconception or named reasoning error — generic "the other categories" foils are filler. Look at why_wrong / misconception_id / reasoning_error fields. Flag any wrong option whose error cannot be named.
+- ANSWER LEAK (three forms — flag any):
+    (a) WORD/ROOT leak — stem contains the answer word or its root (e.g., "bud" in stem when answer is "Budding").
+    (b) DEFINITION-PHRASE leak — stem reproduces the textbook definition of the answer (e.g., "small outgrowth detaches and grows" when answer is "Budding"; "weak stem along the ground" when answer is "creeper"). The student needn't know the answer's name — they map description to label.
+    (c) Run the COVER-THE-STEM test mentally: cover the stem and read just the four options. If the correct answer is identifiable from option content alone, the stem is decorative. Flag as critical.
+- DISTRACTOR SOURCING: Each wrong option must trace to a specific NAMED student misconception (e.g., "spores=seeds confusion", "size-based classification", "teleological framing") or a named reasoning error — NOT just "the other category". A "wrong-category-swap" distractor (option B is "fragmentation" because the answer is "budding", with no specific student error encoded) is filler. Look at why_wrong / misconception_id / reasoning_error fields. Flag any wrong option whose error cannot be named.
+- DECORATIVE SCAFFOLDING: If the stem introduces multiple entities (organisms P, Q, R; plants A, B, C) but the question only asks about ONE, the unused entities are scaffolding the student doesn't need. Flag and suggest stripping them or asking about all.
 - Is the question diagnostic — does a wrong answer reveal a specific gap?
 - Is the stem clear and unambiguous?
 - Does the question avoid: negative phrasing, "all of the above", verbatim textbook copying?

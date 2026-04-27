@@ -304,6 +304,12 @@ export async function runFullAudit(
   // misconception_id. Cross-cell duplicates are allowed because they probe
   // different cognitive levels of the same misconception.
   const perCellMisconceptions = new Map<string, Map<string, string[]>>();
+  // Stage F+: also track total occurrences across the whole bank. The
+  // plant-reproduction Grade-7 audit surfaced three items (A2-9, A2-11, AN3-15)
+  // probing the same "asexual → genetic uniformity → disease vulnerability"
+  // chain across three cells. Even with different cognitive labels, a 15-item
+  // bank shouldn't burn three slots on one misconception. Warn at ≥3.
+  const overallMisconceptions = new Map<string, string[]>();
   for (const q of questions) {
     const cell = q.cell || q.cg_cell;
     const id = typeof q.misconception_id_targeted === 'string' ? q.misconception_id_targeted.trim() : '';
@@ -312,6 +318,8 @@ export async function runFullAudit(
     const cellMap = perCellMisconceptions.get(cell)!;
     if (!cellMap.has(id)) cellMap.set(id, []);
     cellMap.get(id)!.push(q.id || q.question_id);
+    if (!overallMisconceptions.has(id)) overallMisconceptions.set(id, []);
+    overallMisconceptions.get(id)!.push(q.id || q.question_id);
   }
   perCellMisconceptions.forEach((idMap, cell) => {
     idMap.forEach((qIds, id) => {
@@ -324,6 +332,16 @@ export async function runFullAudit(
         });
       }
     });
+  });
+  overallMisconceptions.forEach((qIds, id) => {
+    if (qIds.length >= 3) {
+      setFlags.push({
+        category: 'misconception_coverage',
+        severity: 'warn',
+        message: `${qIds.length} questions across the bank target the same misconception "${id}" (${qIds.join(', ')}). Even at different cognitive levels, ≥3 probes on one misconception is wasteful for a 15-item bank.`,
+        fix: 'Regenerate the surplus questions to target different misconceptions from the approved list — broaden coverage instead of deepening the same probe.',
+      });
+    }
   });
 
   // F4 (set-level): edge-case coverage. Warn if fewer than 20% of items

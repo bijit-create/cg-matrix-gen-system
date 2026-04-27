@@ -349,9 +349,15 @@ function checkRationaleHygiene(q: any): QAFlag[] {
 
 // === STAGE F2 — ANSWER LEAK ===
 // The stem must not contain the defining word(s) of the correct answer or a
-// near-synonym. We approximate "defining word" with the answer text itself
-// plus, when present, the correct option's text and any why_wrong contrast.
-// If ≥60% of significant tokens of the answer appear in the stem, flag.
+// morphological variant. Two checks:
+//   (a) ROOT-WORD MATCH — strip common English suffixes from the answer ("Budding"
+//       → "bud") and look for the root as a whole-word substring in the stem
+//       (case-insensitive). This catches morphological leaks the previous
+//       token-set check missed (e.g., stem says "or bud, develops" while the
+//       answer is "Budding" — tokeniser dropped "bud" because length ≤3).
+//   (b) MULTI-TOKEN PHRASE COVERAGE — for multi-word answers, flag when ≥60% of
+//       significant answer tokens appear in the stem (catches "weak stem along
+//       the ground" → "creeper"-style paraphrase tests).
 function checkAnswerLeak(q: any): QAFlag[] {
   const flags: QAFlag[] = [];
   const stem = typeof q.stem === 'string' ? q.stem.toLowerCase() : '';
@@ -363,6 +369,17 @@ function checkAnswerLeak(q: any): QAFlag[] {
   const correct = options.find((o: any) => o && o.correct);
   if (correct && typeof correct.text === 'string' && correct.text.trim()) candidates.push(correct.text);
 
+  // Drop trailing English suffixes to expose the root. Order matters — strip
+  // longest suffixes first so "vegetative" → "vegetativ" not "vegetativ" → "vegetat".
+  const SUFFIXES = ['ation','ition','ative','ition','tions','ities','ical','ically','ing','ied','ies','ied','ied','tion','sion','ment','ness','ness','ful','est','er','ed','en','es','ly','al','y','s'];
+  const root = (w: string): string => {
+    const lw = w.toLowerCase();
+    for (const suf of SUFFIXES) {
+      if (lw.length - suf.length >= 3 && lw.endsWith(suf)) return lw.slice(0, lw.length - suf.length);
+    }
+    return lw;
+  };
+
   const stop = new Set(['the','a','an','of','to','in','is','are','it','this','that','and','or','for','on','with','as','by','be','was','were','at','from','one','two','three']);
   const tokenise = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 3 && !stop.has(w));
   const stemTokens = new Set(tokenise(stem));
@@ -370,13 +387,26 @@ function checkAnswerLeak(q: any): QAFlag[] {
   for (const c of candidates) {
     const ansTokens = tokenise(c);
     if (ansTokens.length < 1) continue;
-    // Single-word answer that appears verbatim → near-certain leak.
-    if (ansTokens.length === 1 && stemTokens.has(ansTokens[0])) {
-      flags.push({ rule: 'answer_in_stem', category: 'answer_leak', severity: 'major',
-        message: `Stem contains the answer word "${ansTokens[0]}" — student can answer by reading the stem.`,
+
+    // (a) Root-word substring match — catches morphological leaks. We test
+    // every significant answer token (not just single-word answers) so that
+    // "Vegetative propagation" → roots ["vegetativ", "propagat"] both probed.
+    let rootLeak: { word: string; root: string } | null = null;
+    for (const t of ansTokens) {
+      const r = root(t);
+      if (r.length < 3) continue;
+      // Whole-word boundary match so "bud" doesn't false-match "budget".
+      const re = new RegExp(`\\b${r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\w*\\b`, 'i');
+      if (re.test(stem)) { rootLeak = { word: t, root: r }; break; }
+    }
+    if (rootLeak) {
+      flags.push({ rule: 'answer_root_in_stem', category: 'answer_leak', severity: 'major',
+        message: `Stem contains a morphological variant of the answer "${rootLeak.word}" (root "${rootLeak.root}") — student can solve by matching the stem word to the option.`,
         field: 'stem' });
       break;
     }
+
+    // (b) Multi-token answer phrase coverage.
     if (ansTokens.length >= 2) {
       const hits = ansTokens.filter((t: string) => stemTokens.has(t)).length;
       if (hits / ansTokens.length >= 0.6) {

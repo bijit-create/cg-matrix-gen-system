@@ -78,11 +78,15 @@ Implemented in [`src/agents/ruleBasedQA.ts`](src/agents/ruleBasedQA.ts). Runs ag
 - **Misconception reference** — rationale should mention either the misconception text/id OR overlap with one of the wrong options' `why_wrong` reasonings. Missing → flag (minor)
 
 #### `category: answer_leak` (Stage F2)
-`checkAnswerLeak()` — tokenises the correct answer (and the correct option text when present) and compares against stem tokens, dropping stop-words and short tokens:
-- Single-word answer that appears verbatim in the stem → flag (major)
-- Multi-token answer where ≥60% of significant tokens appear in the stem → flag (major)
+`checkAnswerLeak()` runs two complementary probes against the lowered stem:
 
-This catches both literal leaks ("creeper" in stem when answer is creeper) and definition-paraphrase leaks ("weak stem along the ground" when answer is creeper).
+1. **Root-word substring match** — strips common English suffixes from each significant answer token (e.g., "Budding" → "bud", "Vegetative" → "vegetativ", "Propagation" → "propagat") and tests for a whole-word match of the root in the stem. Catches morphological leaks that a token-set check misses — e.g., the Grade-7 plant-reproduction batch had R1-1 with stem "*...where a small outgrowth, or **bud**, develops...*" and answer "**Budding**"; the original tokeniser dropped "bud" because length ≤3 and the new root-match catches it. Flag (major).
+2. **Multi-token phrase coverage** — for multi-word answers, flag when ≥60% of significant answer tokens appear in the stem. Catches definition-paraphrase leaks like stem "*weak stem along the ground*" when the answer is "creeper" or stem "*small outgrowth detaches and grows*" when the answer is "Budding".
+
+The Stage F1 prompt + the Stage 2 review prompt + the Pedagogical SME lens all explicitly call out three forms of leak so the model itself can reject leaky drafts:
+- **Word/root leak** — stem contains the answer word or its root.
+- **Definition-phrase leak** — stem reproduces the textbook definition. Student maps description to label without needing the word.
+- **Cover-the-stem test** — mentally cover the stem; can the answer be identified from option content alone? If yes, the stem is decorative.
 
 #### `category: image_material` (Stage F5)
 `checkImageMaterial()` — when `needs_image=true`, scans the stem for tactile / material-property keywords (`tender|woody|soft|hard|flexible|brittle|smooth|rough|shiny|matte|glossy|tough|spongy`). Match → flag (minor): images can show form (height, branching, posture) but not material properties; the question's correctness can't depend on the student perceiving texture from a vector illustration.
@@ -99,11 +103,15 @@ Implemented in [`src/agents/multiPerspective.ts`](src/agents/multiPerspective.ts
 - Missing or incorrect units (math/science)?
 - Could more than one option be considered correct?
 
-### Lens 2: Pedagogical (`category: pedagogical`) — extended in Stage F3
+### Lens 2: Pedagogical (`category: pedagogical`) — extended in Stage F3 + Grade-7-batch revision
 - Does the question test the intended cognitive level (its CG cell)?
-- **Keyword-match-solvability test (Stage F3, CRITICAL):** if a student who only memorised textbook definitions could answer by matching a stem word to a definition (with no real reasoning), the item is functionally R1 — regardless of label. For U2/A2/A3 cells, flag as critical pedagogical failure.
-- **Answer-leak check:** does the stem already contain the defining word(s) of the correct answer or a near-synonym?
-- **Distractor sourcing:** each wrong option must trace to a specific student misconception or named reasoning error. Generic "the other categories" foils flagged.
+- **Keyword-match-solvability test (CRITICAL):** if a student who only memorised textbook definitions could answer by matching a stem word to a definition (with no real reasoning), the item is functionally R1 — regardless of label. For U2/A2/A3 cells, flag as critical pedagogical failure.
+- **Answer-leak check (three forms):**
+    (a) Word/root leak — stem contains the answer or its root (e.g., "bud" when answer is "Budding").
+    (b) Definition-phrase leak — stem reproduces the textbook definition (e.g., "small outgrowth detaches and grows" when answer is "Budding").
+    (c) Cover-the-stem test — mentally cover the stem; can the answer be identified from option content alone? If yes, the stem is decorative. Flag as critical.
+- **Distractor sourcing — wrong-category-swap detection:** each wrong option must trace to a NAMED student misconception (e.g., "spores=seeds confusion", "size-based classification", "teleological framing") — not just "the other category" with no specific student error encoded. A "wrong-category-swap" distractor is filler.
+- **Decorative scaffolding:** if the stem introduces multiple entities (organisms P, Q, R) but the question only asks about ONE, the unused entities are scaffolding the student doesn't need. Flag and suggest stripping or asking about all.
 - Is the question diagnostic — does a wrong answer reveal a specific gap?
 - Is the stem clear and unambiguous?
 - Avoids: negative phrasing, "all of the above", verbatim textbook copying
@@ -145,9 +153,12 @@ Run once over the whole bank in `runFullAudit`. Surface as `setFlags` (separate 
 - Below floor → warn; suggests regenerating some text-only items with `needs_image=true`
 
 ### `category: misconception_coverage` (Stage F1, set-level)
-- Builds a per-cell map of `misconception_id_targeted` → list of question IDs
-- If any cell has >1 question targeting the same misconception → warn ("Cell A2 has 2 questions targeting `MISC_HEIGHT_CLASSIFICATION`")
-- Cross-cell duplicates allowed (different cognitive levels of the same misconception)
+Two checks at the set level:
+
+1. **Per-cell duplicates** — if any cell has >1 question targeting the same misconception → warn ("Cell A2 has 2 questions targeting `MISC_HEIGHT_CLASSIFICATION`"). One probe per misconception per cell.
+2. **Cross-cell overuse** — if any single misconception_id appears ≥3 times across the whole bank → warn. Even at different cognitive levels, three slots on one misconception is wasteful for a 15-item bank. Surfaced after the Grade-7 plant-reproduction batch that probed the asexual→genetic-uniformity→disease-vulnerability chain three separate times (A2-9, A2-11, AN3-15). Coverage breadth beats depth on the same probe.
+
+Cross-cell duplicates of 2 are allowed (different cognitive levels of the same misconception); ≥3 triggers the warn.
 
 ### `category: edge_case_coverage` (Stage F4, set-level)
 - Counts questions with `edge_case_flag=true` (set by orchestrator at generation time)
