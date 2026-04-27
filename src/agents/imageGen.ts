@@ -77,28 +77,48 @@ Question: "${question}"`,
 }
 
 // --- Full pipeline: question → classify → render with the right tool ---
-export async function generateQuestionImage(question: string): Promise<{
+//
+// `force` overrides the classifier's "skip" verdict — used when the upstream
+// generator has already decided needs_image=true. Without this flag the
+// classifier was second-guessing the generator and producing skips like
+// "No visual aid is necessary..." for questions explicitly flagged for an
+// image, leaving the SME with empty image-required cards.
+export async function generateQuestionImage(
+  question: string,
+  opts?: { force?: boolean; subject?: string },
+): Promise<{
   status: 'generated' | 'skipped' | 'failed';
   dataUrl?: string;
   sizeKb?: number;
   reason?: string;
 }> {
   const intent = await analyzeVisualIntent(question);
-  if (intent.status === 'skip' || !intent.prompt) {
-    return { status: 'skipped', reason: intent.reason };
+  let { status: intentStatus, prompt: intentPrompt, reason: intentReason } = intent;
+
+  if (opts?.force && (intentStatus === 'skip' || !intentPrompt)) {
+    // Generator says we need an image; respect that. Use the question itself as
+    // the prompt seed (buildImagePrompt below adds NCERT + subject style).
+    intentStatus = 'generate_image';
+    intentPrompt = question;
+    intentReason = 'forced (needs_image=true)';
+  }
+
+  if (intentStatus === 'skip' || !intentPrompt) {
+    return { status: 'skipped', reason: intentReason };
   }
 
   try {
     let rawDataUrl: string;
+    const promptText: string = intentPrompt as string;
 
-    switch (intent.status) {
+    switch (intentStatus) {
       case 'render_math': {
         const { renderMathToSvg } = await import('../utils/preciseRenderer');
-        rawDataUrl = renderMathToSvg(intent.prompt);
+        rawDataUrl = renderMathToSvg(promptText);
         break;
       }
       case 'render_chart': {
-        const parsed = JSON.parse(intent.prompt);
+        const parsed = JSON.parse(promptText);
         const { renderBarChart, renderPieChart } = await import('../utils/preciseRenderer');
         rawDataUrl = parsed.type === 'pie'
           ? renderPieChart(parsed.data, parsed.title)
@@ -106,29 +126,33 @@ export async function generateQuestionImage(question: string): Promise<{
         break;
       }
       case 'render_table': {
-        const parsed = JSON.parse(intent.prompt);
+        const parsed = JSON.parse(promptText);
         const { renderTable } = await import('../utils/preciseRenderer');
         rawDataUrl = renderTable(parsed.headers, parsed.rows, parsed.title);
         break;
       }
       case 'render_numberline': {
-        const parsed = JSON.parse(intent.prompt);
+        const parsed = JSON.parse(promptText);
         const { renderNumberLine } = await import('../utils/preciseRenderer');
         rawDataUrl = renderNumberLine(parsed.min, parsed.max, parsed.marks, parsed.title);
         break;
       }
       case 'render_line_graph': {
-        const parsed = JSON.parse(intent.prompt);
+        const parsed = JSON.parse(promptText);
         const { renderLineGraph } = await import('../utils/preciseRenderer');
         rawDataUrl = renderLineGraph(parsed);
         break;
       }
       case 'generate_svg': {
-        rawDataUrl = await generateSvgContent(intent.prompt);
+        rawDataUrl = await generateSvgContent(promptText);
         break;
       }
       default: {
-        rawDataUrl = await generateImageContent(intent.prompt);
+        // Wrap the question/prompt with NCERT style + subject hint before
+        // sending to OpenAI. buildImagePrompt is in prompts.ts.
+        const { buildImagePrompt } = await import('./prompts');
+        const enriched = buildImagePrompt(promptText, opts?.subject || '', '');
+        rawDataUrl = await generateImageContent(enriched);
         break;
       }
     }

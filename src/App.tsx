@@ -706,13 +706,13 @@ const PipelineRunnerView = () => {
     const imageNeedQs = questions.filter((q: any) => q.needs_image && !questionImages[q.id || q.question_id]);
     const finalImages: Record<string, string> = { ...questionImages };
     if (imageNeedQs.length > 0) {
-      setLogs(prev => [...prev, { agent: 'Image Agent', action: `Auto-generating ${imageNeedQs.length} image(s) before sending to Bank…`, time: new Date().toLocaleTimeString() }]);
+      setLogs(prev => [...prev, { agent: 'Image Agent', action: `Auto-generating ${imageNeedQs.length} image(s) via gpt-image-2 before sending to Bank…`, time: new Date().toLocaleTimeString() }]);
       try {
         const { generateQuestionImage } = await import('./agents/imageGen');
         await Promise.allSettled(imageNeedQs.map(async (q: any) => {
           const qId = q.id || q.question_id;
           try {
-            const result = await generateQuestionImage(q.stem);
+            const result = await generateQuestionImage(q.stem, { force: true, subject: parsedMetadata?.subjectCode });
             if (result.status === 'generated' && result.dataUrl) {
               finalImages[qId] = result.dataUrl;
               setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: image ✓ (${result.sizeKb}KB)`, time: new Date().toLocaleTimeString() }]);
@@ -2732,13 +2732,14 @@ If MCQ, options may also reference the image. For primary grades especially, pre
       const imageNeedQs = allQs.filter((q: any) => q.needs_image && !questionImages[q.id]);
       const finalImages: Record<string, string> = { ...questionImages };
       if (imageNeedQs.length > 0) {
-        log(`Auto-generating ${imageNeedQs.length} image(s)…`);
+        log(`Auto-generating ${imageNeedQs.length} image(s) via gpt-image-2…`);
         setProgress(`Generating images (0/${imageNeedQs.length})…`);
         const { generateQuestionImage } = await import('./agents/imageGen');
         let imgDone = 0;
         await Promise.allSettled(imageNeedQs.map(async (q: any) => {
           try {
-            const result = await generateQuestionImage(q.stem);
+            // force=true so the classifier can't veto a needs_image=true decision.
+            const result = await generateQuestionImage(q.stem, { force: true, subject: metadata?.subjectCode });
             if (result.status === 'generated' && result.dataUrl) {
               finalImages[q.id] = result.dataUrl;
               log(`${q.id}: image ✓ (${result.sizeKb}KB)`);
@@ -3464,7 +3465,33 @@ const GenerateView = () => {
 const BankRoute = () => {
   const bank = useBank();
   const [busyQuestionId, setBusyQuestionId] = useState<string | null>(null);
+  const [imageBusyQuestionId, setImageBusyQuestionId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+
+  /** Generate (or regenerate) an image for a single banked question.
+   *  Uses force=true so the visual classifier can't veto when needs_image
+   *  is already set by the generator. Writes the resulting data URL into
+   *  bankStore.questionImages so the card re-renders with the new image. */
+  const generateImageForQuestion = async (q: any) => {
+    const qId = q.id || q.question_id;
+    setImageBusyQuestionId(qId);
+    try {
+      const { generateQuestionImage } = await import('./agents/imageGen');
+      const result = await generateQuestionImage(q.stem, {
+        force: true,
+        subject: bank.metadata?.subjectCode,
+      });
+      if (result.status === 'generated' && result.dataUrl) {
+        bankStore.set({
+          questionImages: { ...bank.questionImages, [qId]: result.dataUrl },
+        });
+      }
+    } catch {
+      // best-effort; the card stays as-is and the user can retry
+    } finally {
+      setImageBusyQuestionId(null);
+    }
+  };
 
   const onExport = async () => {
     if (bank.questions.length === 0) return;
@@ -3598,7 +3625,9 @@ ${q.stem}`;
       onExport={onExport}
       onRegenerateWithFeedback={regenerateOne}
       onBulkRegen={bulkRegen}
+      onGenerateImage={generateImageForQuestion}
       busyQuestionId={busyQuestionId}
+      imageBusyQuestionId={imageBusyQuestionId}
       bulkBusy={bulkBusy}
     />
   );

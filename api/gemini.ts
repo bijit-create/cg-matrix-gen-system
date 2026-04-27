@@ -104,6 +104,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       return res.status(500).json({ error: 'Edit failed' });
 
+    } else if (action === 'generateImageOpenAI') {
+      // Primary image-gen path. Uses gpt-image-2 by default (overridable via
+      // OPENAI_IMAGE_MODEL env). Falls through to the caller's fallback chain
+      // on any failure so the client can retry via Gemini.
+      const openaiKey = process.env.OPENAI_API_KEY;
+      if (!openaiKey) {
+        return res.status(500).json({ error: 'OPENAI_API_KEY not configured on server.' });
+      }
+      const model = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2';
+      const size = (req.body.size as string) || '1024x1024';
+      const quality = (req.body.quality as string) || 'standard';
+      const oa = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${openaiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          prompt: userPayload || '',
+          size,
+          quality,
+          n: 1,
+        }),
+      });
+      if (!oa.ok) {
+        const text = await oa.text();
+        const is429 = oa.status === 429;
+        return res.status(is429 ? 429 : oa.status).json({
+          error: `OpenAI image gen failed (${oa.status}): ${text.slice(0, 200)}`,
+          retryable: is429,
+        });
+      }
+      const data: any = await oa.json();
+      const item = data?.data?.[0];
+      if (item?.b64_json) {
+        return res.status(200).json({ image: `data:image/png;base64,${item.b64_json}` });
+      }
+      if (item?.url) {
+        // Fetch and convert to base64 so the client gets the same shape.
+        const imgResp = await fetch(item.url);
+        const buf = Buffer.from(await imgResp.arrayBuffer());
+        const mime = imgResp.headers.get('content-type') || 'image/png';
+        return res.status(200).json({ image: `data:${mime};base64,${buf.toString('base64')}` });
+      }
+      return res.status(500).json({ error: 'OpenAI returned no image data.' });
+
     } else {
       return res.status(400).json({ error: `Unknown action: ${action}` });
     }

@@ -199,36 +199,66 @@ export const MathTypeRotation: Record<string, string[]> = {
   AN3: ['mcq', 'fill_blank', 'mcq', 'mcq'],
 };
 
-// --- Image Prompt Template (NCERT-style, from VidyaGen research) ---
-export const IMAGE_PROMPT_TEMPLATE = `Create a simple NCERT-style educational image.
+// --- Image Prompt Template (NCERT-style, optimised for OpenAI gpt-image-2) ---
+// gpt-image-2 follows instructions tightly and respects negative constraints
+// well. The template focuses on (a) one clear visual subject, (b) a hard
+// no-text rule (so the image can't accidentally reveal the answer), and
+// (c) a clean classroom-textbook aesthetic that matches the surrounding
+// question card.
+export const IMAGE_PROMPT_TEMPLATE = `Create a clean, NCERT-style educational illustration for a classroom question.
 
-VISUAL: {description}
+SUBJECT OF THE IMAGE (depict only this; ignore any narrative around it):
+{description}
 
-STYLE:
-- Clean flat design, cartoon/vector style
-- Bright, child-friendly colours
-- Plain white background
-- Proper alignment and spacing
-- 4:3 aspect ratio, minimum 800px wide
+ART DIRECTION:
+- Single focused composition. One subject, no clutter.
+- Flat vector / textbook-illustration style. Bright, friendly palette (avoid garish saturation).
+- Plain pure-white background (#FFFFFF). No gradients, no shadows, no decorative props.
+- Proportionate, clearly recognisable shapes. Anatomy and geometry must be ACCURATE.
+- Composition fits a 4:3 frame with safe margins. No edge-bleed, no cropping of the subject.
+- Crisp lines, even line weights. Solid fills over textured ones.
 
-STRICT RULES:
-- ABSOLUTELY NO text, labels, numbers, letters, words, or captions inside the image
-- NO answers or solutions shown
-- NO decorative elements, shadows, or background objects
-- NO characters unless specifically requested
-- Objects must be clearly visible and properly placed
-- Keep the design minimal and focused on learning`;
+TEXT POLICY (necessary text and labels are OK; revealing text is not):
+- Labels ON the image are allowed and encouraged when they aid comprehension: anatomical parts ("stem", "leaf", "petal"), axis names ("Time (s)", "Distance (m)"), scale numerals on number lines / rulers / coordinate grids, units on quantities, points labelled P / Q / R / S, country or feature names on maps when the question specifically asks the student to read them, equation parts when the visual IS the equation.
+- Numerals on tick marks, scales, gauges, dials and tables ARE allowed.
+- All on-image text must be in clean, legible English (or the language the question uses), spelt correctly, in a sans-serif font matching the textbook style.
 
-export function buildImagePrompt(stem: string, subject: string, grade: string): string {
-  const base = IMAGE_PROMPT_TEMPLATE.replace('{description}', stem.slice(0, 200));
-  const subLower = subject.toLowerCase();
+NEGATIVE CONSTRAINTS (zero tolerance):
+- DO NOT show the ANSWER itself or any clue to it. No highlighting one option, arrows pointing to "the right one", a tick / star / circle around the correct choice, or colour-coding the correct option differently from distractors.
+- DO NOT include sample multiple-choice options, A/B/C/D markers, or boxed letters drawn inside the image (those belong in the question card, not the image).
+- DO NOT add brand logos, watermarks, mascots, AI-style flourishes, decorative banners, or sparkles.
+- DO NOT include real, identifiable people. If a child or person appears, draw a neutral cartoon figure from a back / three-quarter view; no recognisable faces.
+- Spelling must be correct. If unsure, omit the label rather than misspell it.
+
+QUALITY BAR:
+- Looks like it could appear in an Indian school textbook (NCERT / state-board).
+- A teacher should be able to print it on plain paper without losing legibility.
+- A 10-year-old should recognise the subject in under two seconds.`;
+
+export function buildImagePrompt(stem: string, subject: string, _grade: string): string {
+  const base = IMAGE_PROMPT_TEMPLATE.replace('{description}', stem.slice(0, 600));
+  const subLower = (subject || '').toLowerCase();
   let hint = '';
   if (subLower.includes('math')) {
-    hint = '\nMATH: Show the concept visually — diagrams, flowcharts, shapes, number lines, grouped objects. For operations, show visual layout. For geometry, precise shapes with dimensions.';
-  } else if (subLower.includes('sci')) {
-    hint = '\nSCIENCE: Show organisms, body parts, experiments, food webs, processes. Match NCERT textbook diagram style.';
+    hint = `
+
+MATH-SPECIFIC: Show the concept visually — geometric shapes with EXACT proportions, number lines with numeric tick marks, fraction bars / circles, grouped objects for counting, place-value blocks, coordinate grids with axis labels (x / y) and tick numerals. Label vertices (A, B, C), sides (a, b, c), and angles where the question requires the student to refer to them. Show given quantities (lengths, angles, weights) but NEVER the unknown / the answer.`;
+  } else if (subLower.includes('phys')) {
+    hint = `
+
+PHYSICS-SPECIFIC: Clean schematic style — vector arrows for forces / velocity / fields with text labels (e.g., "F", "v", "g") next to each arrow. Circuit diagrams use standard symbols with component labels (R, V, A). Free-body diagrams show labelled blocks with directional force arrows. Ray diagrams label the object, image, lens / mirror, and focal points (F, 2F).`;
+  } else if (subLower.includes('chem')) {
+    hint = `
+
+CHEMISTRY-SPECIFIC: Ball-and-stick or skeletal molecular illustrations with atom symbols on coloured spheres (C / H / O / N). Lab apparatus drawn cleanly: beakers, flasks, test tubes, retort stands, with content labels where useful. Reactions can show before/after states or colour change. Show formulas only when the question is ABOUT the formula.`;
+  } else if (subLower.includes('bio') || subLower.includes('sci')) {
+    hint = `
+
+BIOLOGY / SCIENCE-SPECIFIC: NCERT textbook diagram style. Show organisms, body parts, cells, food webs, life-cycle stages, experimental setups. Label anatomical parts with thin leader lines and clean sans-serif text ("nucleus", "chloroplast", "petal", "stamen") UNLESS the question is asking the student to identify those exact parts — in that case omit the labels for the parts being tested. Anatomy must be biologically accurate at a textbook level.`;
   } else if (subLower.includes('social') || subLower.includes('geo') || subLower.includes('hist')) {
-    hint = '\nSOCIAL STUDIES: Show maps, timelines, historical scenes, geographical features. NCERT style.';
+    hint = `
+
+SOCIAL STUDIES-SPECIFIC: Maps include country / state / feature names where the question expects the student to read them, omitted where the student is asked to identify them. Compass roses and scale bars when relevant. Historical scenes use neutral period-appropriate clothing and props; no recognisable specific individuals. Timelines have horizontal axes with date labels at clean intervals.`;
   }
   return base + hint;
 }

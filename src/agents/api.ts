@@ -120,10 +120,23 @@ export const generateWithGroundedSearch = async (
   );
 };
 
-// Image generation
+// Image generation. Primary: OpenAI gpt-image-2 (server uses OPENAI_API_KEY +
+// OPENAI_IMAGE_MODEL env vars). Falls back to Gemini if OpenAI errors so a
+// quota hit / outage on one provider doesn't break the run.
 export const generateImageContent = async (prompt: string): Promise<string> => {
   return requestQueue.enqueue(
     async () => {
+      // Try OpenAI first.
+      try {
+        const response = await callProxy({
+          action: 'generateImageOpenAI',
+          userPayload: prompt,
+        });
+        if (response.image) return response.image;
+      } catch {
+        // fall through to Gemini
+      }
+      // Gemini fallback.
       const response = await callProxy({
         action: 'generateImage',
         userPayload: prompt,

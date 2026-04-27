@@ -17,15 +17,17 @@ export interface AuditViewProps {
   onRegenerateWithFeedback?: (q: any, report: AuditReport) => void | Promise<void>;
   onBulkRegen?: (sev: 'fail' | 'warn') => void | Promise<void>;
   onEdit?: (q: any) => void;
+  onGenerateImage?: (q: any) => void | Promise<void>;
   /** id of the question currently being regenerated (for spinner); null if none */
   busyQuestionId?: string | null;
+  imageBusyQuestionId?: string | null;
   bulkBusy?: boolean;
 }
 
 export const AuditView: React.FC<AuditViewProps> = ({
   questions, audit, questionImages, Latex,
-  onRegenerateWithFeedback, onBulkRegen, onEdit,
-  busyQuestionId, bulkBusy,
+  onRegenerateWithFeedback, onBulkRegen, onEdit, onGenerateImage,
+  busyQuestionId, imageBusyQuestionId, bulkBusy,
 }) => {
   const [filter, setFilter] = useState<SevFilter>('all');
 
@@ -78,6 +80,8 @@ export const AuditView: React.FC<AuditViewProps> = ({
               Latex={Latex}
               onRegenerateWithFeedback={onRegenerateWithFeedback}
               onEdit={onEdit}
+              onGenerateImage={onGenerateImage}
+              imageBusy={imageBusyQuestionId === qId}
               busy={busyQuestionId === qId}
             />
           );

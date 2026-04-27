@@ -18,13 +18,17 @@ export interface BankViewProps {
   onRegenerateWithFeedback?: (q: any, report: AuditReport) => void | Promise<void>;
   /** Optional — wired in Stage E4. Serially regenerates all fails or all warns. */
   onBulkRegen?: (sev: 'fail' | 'warn') => void | Promise<void>;
+  /** Generate (or regenerate) the image for a single question. */
+  onGenerateImage?: (q: any) => void | Promise<void>;
   /** Optional — id of the question currently being regenerated. */
   busyQuestionId?: string | null;
+  imageBusyQuestionId?: string | null;
   bulkBusy?: boolean;
 }
 
 export const BankView: React.FC<BankViewProps> = ({
-  Latex, onExport, onRegenerateWithFeedback, onBulkRegen, busyQuestionId, bulkBusy,
+  Latex, onExport, onRegenerateWithFeedback, onBulkRegen, onGenerateImage,
+  busyQuestionId, imageBusyQuestionId, bulkBusy,
 }) => {
   const bank = useBank();
   const [auditing, setAuditing] = useState(false);
@@ -138,7 +142,9 @@ export const BankView: React.FC<BankViewProps> = ({
           Latex={Latex}
           onRegenerateWithFeedback={onRegenerateWithFeedback}
           onBulkRegen={onBulkRegen}
+          onGenerateImage={onGenerateImage}
           busyQuestionId={busyQuestionId}
+          imageBusyQuestionId={imageBusyQuestionId}
           bulkBusy={bulkBusy}
         />
       ) : (
@@ -166,6 +172,18 @@ export const BankView: React.FC<BankViewProps> = ({
                   <span className="sw-chip sw-chip-purple sw-chip-sm">{q.cell || q.cg_cell}</span>
                   <span className="sw-chip sw-chip-outline sw-chip-sm">{String(q.type || 'mcq').toUpperCase().replace('_', ' ')}</span>
                   <div style={{ flex: 1 }} />
+                  {q.needs_image && onGenerateImage && (
+                    <button
+                      onClick={() => onGenerateImage(q)}
+                      disabled={imageBusyQuestionId === qId}
+                      className="sw-btn sw-btn-ghost sw-btn-sm"
+                      style={{ padding: '4px 8px' }}
+                      title={bank.questionImages[qId] ? 'Replace this image with a fresh one' : 'Generate the image this question needs'}
+                    >
+                      <Icon name={bank.questionImages[qId] ? 'refresh' : 'image'} size="sm" />
+                      {imageBusyQuestionId === qId ? 'Working…' : bank.questionImages[qId] ? 'Refresh image' : 'Generate image'}
+                    </button>
+                  )}
                   <span style={{ fontSize: 10, color: 'var(--fg-muted)', fontFamily: 'ui-monospace, Menlo, monospace' }}>{qId}</span>
                 </div>
                 <QuestionBody

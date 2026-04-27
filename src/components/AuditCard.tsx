@@ -25,15 +25,20 @@ export interface AuditCardProps {
   Latex: React.FC<{ text: any; className?: string; block?: boolean }>;
   onRegenerateWithFeedback?: (q: any, report: AuditReport) => void | Promise<void>;
   onEdit?: (q: any) => void;
+  /** Generate (or regenerate) the image for this question. */
+  onGenerateImage?: (q: any) => void | Promise<void>;
+  /** True while the image is being generated for this specific question. */
+  imageBusy?: boolean;
   busy?: boolean;
 }
 
 export const AuditCard: React.FC<AuditCardProps> = ({
-  q, report, image, Latex, onRegenerateWithFeedback, onEdit, busy,
+  q, report, image, Latex, onRegenerateWithFeedback, onEdit, onGenerateImage, imageBusy, busy,
 }) => {
   const sev = report?.severity;
   const qId = q.id || q.question_id;
   const flags = report?.flags || [];
+  const needsImage = !!q?.needs_image;
   // Fails/warns start expanded, passes collapsed.
   const [flagsOpen, setFlagsOpen] = useState(sev !== 'pass');
 
@@ -62,6 +67,18 @@ export const AuditCard: React.FC<AuditCardProps> = ({
           </span>
         )}
         <div style={{ flex: 1 }} />
+        {needsImage && onGenerateImage && (
+          <button
+            onClick={() => onGenerateImage(q)}
+            disabled={!!imageBusy}
+            className="sw-btn sw-btn-ghost sw-btn-sm"
+            title={image ? 'Replace this image with a fresh one' : 'Generate the image this question needs'}
+            style={{ padding: '4px 8px' }}
+          >
+            <Icon name={image ? 'refresh' : 'image'} size="sm" />
+            {imageBusy ? 'Working…' : image ? 'Refresh image' : 'Generate image'}
+          </button>
+        )}
         <span style={{ fontSize: 10, color: 'var(--fg-muted)', fontFamily: 'ui-monospace, Menlo, monospace' }}>{qId}</span>
       </div>
 
