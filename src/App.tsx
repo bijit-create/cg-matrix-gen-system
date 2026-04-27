@@ -206,11 +206,32 @@ const PIPELINE_STATES = [
 const PipelineRunnerView = () => {
   const [lo, setLo] = useState('');
   const [skill, setSkill] = useState('');
+  const [grade, setGrade] = useState('');
+  const [subject, setSubject] = useState('');
   const [count, setCount] = useState('15');
   const [chapterContent, setChapterContent] = useState('');
   const [isParsingFile, setIsParsingFile] = useState(false);
   const [tsvInput, setTsvInput] = useState('');
   const [parsedMetadata, setParsedMetadata] = useState<any>(null);
+
+  // Tier derivation matches QuickGenerate so prompts get the same grade context.
+  const pipelineGradeNum = parseInt(String(grade || parsedMetadata?.gradeCode || '').match(/\d+/)?.[0] || '0', 10);
+  const pipelineGradeTier: 'primary' | 'upper-primary' | 'high' | 'unknown' =
+    pipelineGradeNum >= 1 && pipelineGradeNum <= 5 ? 'primary'
+    : pipelineGradeNum >= 6 && pipelineGradeNum <= 8 ? 'upper-primary'
+    : pipelineGradeNum >= 9 && pipelineGradeNum <= 12 ? 'high'
+    : 'unknown';
+
+  // Sync manual Grade/Subject edits back into parsedMetadata so downstream
+  // orchestration code (which reads parsedMetadata?.gradeCode) sees the latest.
+  useEffect(() => {
+    if (!grade && !subject) return;
+    setParsedMetadata((prev: any) => ({
+      ...(prev || {}),
+      gradeCode: grade || prev?.gradeCode || '',
+      subjectCode: subject || prev?.subjectCode || '',
+    }));
+  }, [grade, subject]);
 
   // --- Content Sources (primary material for question generation) ---
   const [contentSources, setContentSources] = useState<{
@@ -432,7 +453,9 @@ const PipelineRunnerView = () => {
           
           if (skillDesc) setSkill(skillDesc);
           if (loDesc) setLo(loDesc);
-          
+          if (dataRow[1]) setGrade(dataRow[1]);
+          if (dataRow[0]) setSubject(dataRow[0]);
+
           setParsedMetadata({
             subjectCode: dataRow[0],
             gradeCode: dataRow[1],
@@ -897,38 +920,39 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
 
   if (status === 'idle') {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-8 max-w-3xl mx-auto">
-        <header className="mb-6">
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 700, color: 'var(--swiftee-deep)', lineHeight: 1.15, marginBottom: 4 }}>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-6 max-w-3xl mx-auto">
+        <header className="mb-4">
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--swiftee-deep)', lineHeight: 1.15, marginBottom: 2 }}>
             New generation task
           </h2>
-          <p style={{ fontSize: 13, color: 'var(--fg-secondary)' }}>
+          <p style={{ fontSize: 12, color: 'var(--fg-secondary)' }}>
             Initialize the multi-agent pipeline. Paste a TSV row, or fill each field manually.
           </p>
         </header>
 
-        <form onSubmit={handleStart} className="sw-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <form onSubmit={handleStart} className="sw-card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <label className="sw-field-label">Quick paste (TSV row)</label>
             <textarea
               value={tsvInput}
               onChange={handlePasteTSV}
               className="sw-textarea"
-              style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11, minHeight: 56, background: '#FAFAFC' }}
+              style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11, minHeight: 44, background: '#FAFAFC' }}
               placeholder="Paste Excel/Sheets row here to auto-fill…"
-              rows={2}
+              rows={1}
             />
           </div>
 
-          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 18 }}>
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
             <label className="sw-field-label">Learning objective (LO)</label>
             <textarea
               required
               value={lo}
               onChange={(e) => setLo(e.target.value)}
               className="sw-textarea"
+              style={{ minHeight: 48 }}
               placeholder="e.g., Understand and apply the Pythagorean theorem…"
-              rows={3}
+              rows={2}
             />
           </div>
           <div>
@@ -942,19 +966,47 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
               placeholder="e.g., Calculate hypotenuse"
             />
           </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="sw-field-label">
+                Grade <span style={{ color: '#C8573B' }}>*</span>
+              </label>
+              <input
+                required
+                type="text"
+                value={grade}
+                onChange={(e) => setGrade(e.target.value)}
+                className="sw-input"
+                placeholder="e.g., 8 or G8"
+              />
+              {pipelineGradeTier !== 'unknown' && (
+                <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginTop: 3 }}>
+                  {pipelineGradeTier === 'primary' ? 'Primary (1–5)' : pipelineGradeTier === 'upper-primary' ? 'Upper primary (6–8)' : 'High (9–12)'}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="sw-field-label">Subject</label>
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                className="sw-input"
+                placeholder="e.g., MATH, SCI, ENG"
+              />
+            </div>
+          </div>
           {/* Content Sources — PRIMARY material for question generation */}
-          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 18 }}>
-            <div className="flex justify-between items-center mb-3">
-              <div>
-                <label className="sw-field-label">Content sources (primary material)</label>
-                <p style={{ fontSize: 11, color: 'var(--fg-secondary)', marginTop: 2 }}>
-                  Questions will be generated from these sources first. Add chapter PDFs, YouTube explainers, or website links.
-                </p>
-              </div>
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
+            <div className="mb-2">
+              <label className="sw-field-label">Content sources (primary material)</label>
+              <p style={{ fontSize: 11, color: 'var(--fg-secondary)', marginTop: 1 }}>
+                Questions will be generated from these sources first. Add chapter PDFs, YouTube explainers, or website links.
+              </p>
             </div>
 
             {/* Add URL input */}
-            <div className="flex gap-2 mb-3">
+            <div className="flex gap-2 mb-2">
               <input
                 type="text"
                 value={newUrl}
@@ -1044,8 +1096,9 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
               value={chapterContent}
               onChange={(e) => setChapterContent(e.target.value)}
               className="sw-textarea"
+              style={{ minHeight: 56 }}
               placeholder="Or paste chapter text / syllabus content directly here…"
-              rows={3}
+              rows={2}
             />
             {contentSources.filter(s => s.status === 'ready').length > 0 && (
               <div style={{
@@ -1068,9 +1121,18 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
               className="sw-input"
             />
           </div>
-          <button type="submit" className="sw-btn sw-btn-primary" style={{ padding: '12px 16px', marginTop: 4 }}>
+          <button
+            type="submit"
+            className="sw-btn sw-btn-primary"
+            disabled={!grade}
+            title={!grade ? 'Grade is required for grade-appropriate generation.' : undefined}
+            style={{ padding: '10px 14px', marginTop: 2 }}
+          >
             Initialize pipeline
           </button>
+          {!grade && (lo || skill) && (
+            <p style={{ fontSize: 10, color: '#C8573B', marginTop: -6 }}>Grade is required before initialization.</p>
+          )}
         </form>
       </motion.div>
     );
