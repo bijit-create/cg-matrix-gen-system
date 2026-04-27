@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import { QuestionBody } from './QuestionBody';
 import { Icon } from './swiftee/atoms';
 import type { AuditReport, AuditFlag } from '../agents/audit';
+import { AUDIT_CATEGORY_LABELS } from '../agents/audit';
 
 const sevBorder = (s: 'pass' | 'warn' | 'fail' | undefined) =>
   s === 'fail' ? '#C8573B'
@@ -106,7 +107,7 @@ export const AuditCard: React.FC<AuditCardProps> = ({
             </span>
             {!flagsOpen && (
               <span style={{ color: 'var(--fg-muted)', marginLeft: 4 }}>
-                {flags.slice(0, 2).map(f => f.category).join(', ')}{flags.length > 2 ? '…' : ''}
+                {flags.slice(0, 2).map(f => AUDIT_CATEGORY_LABELS[f.category] || f.category).join(', ')}{flags.length > 2 ? '…' : ''}
               </span>
             )}
           </button>
@@ -137,7 +138,7 @@ export const AuditCard: React.FC<AuditCardProps> = ({
                           fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em',
                           fontWeight: 800, color: sevDot(f.severity),
                           fontFamily: 'var(--font-display)', marginRight: 8,
-                        }}>{f.category}</span>
+                        }}>{AUDIT_CATEGORY_LABELS[f.category] || f.category}</span>
                         <span style={{ color: 'var(--swiftee-deep)' }}>{f.message}</span>
                       </div>
                       {f.fix && (

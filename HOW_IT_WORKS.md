@@ -2,15 +2,17 @@
 
 ## The Core Idea
 
-The more control you give the system, the better questions you get. The more content you feed it, the more precise and curriculum-aligned the questions become.
+The more control you give the system, the better questions you get. The more content you feed it, the more precise and curriculum-aligned the questions become. **Generation is misconception-driven, not topic-driven** — every question must claim what student error it probes, and every wrong option must trace to a named misconception.
 
 ---
 
 ## Two Modes
 
-**⚡ Quick Generate** — Fast. You give the skill and LO, optionally upload content, click Generate. You get questions in 2-3 minutes. No approvals, no gates. Good for first drafts and practice worksheets.
+**Quick Generate** — Fast. Skill + LO, optionally upload content, click Generate. You get questions in 2–3 minutes. No approvals, no gates. Good for first drafts and practice worksheets. The output lands in the **Bank** the moment it completes.
 
-**🔬 Full Pipeline** — You control every step. You review what the system extracts, approve what goes in, adjust the distribution, and check every question before export. Takes 10-15 minutes. Built for production-quality question banks.
+**Full Pipeline** — You control every step. You review what the system extracts, approve what goes in, adjust the distribution, and check every question before it lands in the Bank. Takes 10–15 minutes. Built for production-quality question banks.
+
+Both flows end the same way: questions land in the Bank → you click **Run Audit** → color-coded findings appear → you regenerate failing items with the audit feedback fed back into the prompt → export.
 
 ---
 
@@ -18,66 +20,106 @@ The more control you give the system, the better questions you get. The more con
 
 ### Step 1: Subskills
 
-The system breaks your skill into 3-6 smaller testable actions.
+The system breaks your skill into 3–6 smaller testable actions.
 
-**Example:**
-- Skill: "Classify food items as plant-based or animal-based"
-- Subskills generated:
-  1. Identify common plant-based food items
-  2. Identify common animal-based food items
-  3. Classify a given food item by its origin
-  4. Compare plant-based and animal-based food sources
-  5. Analyse a meal to identify its components
-
-**Why you review this:** You might want only 3 of these. You might want to add one the system missed. You decide what gets tested.
-
----
+**Why you review this:** You decide which subskills get tested.
 
 ### Step 2: Content Scope (Knowledge Points)
 
-The system reads your uploaded chapter/PDF and extracts every fact that could become a question.
+The system reads your uploaded chapter/PDF and extracts every fact that could become a question. Each knowledge point is tagged `core`, `supporting`, `advanced`, or `edge-case`.
 
-**Example (from an uploaded food chapter):**
-- "Wheat is a cereal from plants" — core
-- "Milk comes from cows and buffaloes" — core
-- "Honey is produced by bees" — core
-- "Proteins are made of amino acids" — advanced (flagged)
+**Edge cases** are documented boundary cases that resist clean classification — banana / sugarcane / bamboo for plant taxonomy; zero / improper / mixed / negative for fractions; equilibrium / balanced-but-moving for forces. The system identifies these from chapter content + domain knowledge of common student boundary confusions. **At least 20% of generated items consume edge-case content** so the bank doesn't only test canonical examples.
 
-**Why you review this:** The uploaded chapter may contain content that is too advanced or out of scope for this grade. You deselect those. Only approved points can become questions. This is what prevents Grade 6 students getting questions about "vascular bundle arrangement in dicot stems" just because the PDF happened to mention it.
+**Why you review this:** Deselect anything out of grade scope. Only approved points become questions. **More material = more precise questions.**
 
-**This is where content matters most.** If you upload a 20-page chapter PDF, the system extracts 40-60 testable knowledge points from it. If you upload nothing, the system has to guess — and guesses are generic. The more material you provide, the more specific and curriculum-aligned your questions will be.
+### Step 3: Hess (CG) Matrix
+
+Grid that decides how many questions go at each cognitive level, with operational definitions:
+
+- **R1 — Recall:** A student who only memorised definitions can answer. Capped at ~15-20% of the bank.
+- **U1 — Understand:** Definition alone is insufficient — must explain WHY/HOW.
+- **U2 — Compare/Classify:** Stem must contain ≥2 cases, a feature that fits multiple categories, or a borderline case.
+- **A2 — Apply:** Stem places the rule in a NOVEL context OR contains a misleading cue (height suggests tree but texture says herb). **Must fail the keyword-match-solvability test.**
+- **A3 — Multi-step apply:** Solution chains ≥2 distinct rules.
+- **AN2 — Pattern inference:** Stem presents data; student infers a pattern.
+- **AN3 — Evaluate reasoning:** Stem presents a (often deliberately wrong) student claim; learner judges the reasoning.
+
+### Step 4: Misconception Sourcing
+
+The system pulls misconceptions from `student_misconceptions_catalog.json` matched against your topic + content. When the catalog is thin, it grounds a search seeded with **subject-tiered authoritative sources**:
+
+- **Indian-context (highest priority for CBSE / ICSE / state boards):** HBCSE / TIFR (Ramadas, Chunawala, Haydock, Deshmukh, Subramaniam, Vijapurkar), epiSTEME conference proceedings, Eklavya HSTP, NCERT exemplars, Azim Premji *At Right Angles*.
+- **Physics:** PhysPort.org (FCI, FMCE, TUG-K, BEMA, CSEM), MOSART (Sadler/Harvard), AAAS Project 2061 Energy Assessment.
+- **Chemistry:** Taber *Chemical Misconceptions* (RSC), AAAS Project 2061, Mulford & Robinson Chemical Concepts Inventory, Treagust two-tier methodology.
+- **Biology:** CINS (Anderson 2002), CANS, GCA, Driver et al. *Making Sense of Secondary Science*, Deshmukh (2012), Haydock evolution work.
+- **Earth/Space:** MOSART, Vosniadou & Brewer mental-models, Padalkar & Ramadas indigenous astronomy.
+- **Mathematics:** CSMS / Hart (1981) *Children's Understanding of Mathematics: 11–16*, Eedi NeurIPS 2020 dataset, Stacey & Steinle Decimal Comparison Test, van Hiele levels, Subramaniam HBCSE primary math.
+- **CS:** SCS1, BDSI, MG-CSCI.
+- **Economics:** Test of Economic Literacy (Walstad).
+- **Cross-cutting:** Pfundt & Duit STCSE bibliography, DIAGNOSER (Minstrell facets).
+
+Each catalog entry is a record with `misconception_id`, `misconception_text`, `incorrect_reasoning`, and `related_subskills`.
+
+### Step 5: Question Generation (Cell by Cell)
+
+Questions are generated one cell at a time. Each slot in a cell is **pre-assigned a target `misconception_id`** by round-robin from the approved list, so parallel generation produces coverage without sequential gating. Per slot the generator must:
+
+1. **Claim a `misconception_id_targeted`** — pick from the numbered list provided OR set `""` and pick a typed reasoning_error from the fixed list (`over-generalisation`, `over-specification`, `size-based-classification`, `culinary-vs-botanical-confusion`, `feature-conflation`, `category-overlap-misjudged`, `rule-application-error`, `unit-or-notation-error`, `sign-or-direction-error`, `procedural-skip`, `definition-recall-only`). **Inventing new misconceptions is forbidden.**
+2. **Source every distractor.** Each wrong option carries `why_wrong` (required), plus `misconception_id` from the approved list OR a typed `reasoning_error`. Filler distractors (no source) fail the audit.
+3. **Avoid answer leak.** The stem must not contain the defining word(s) of the correct answer or a near-synonym. If the answer is "creeper" (defined as "weak stem along the ground"), the stem can't say "weak stem along the ground" — it must describe a specific named plant or a behaviour from which the category must be inferred.
+4. **Write a clean rationale.** Rationale references the misconception that wrong-option-pickers held; uses only facts from stem/options/chapter; contains no author meta-commentary ("higher grades", "though that's an exception").
+
+Each question goes through Stage 1 (creative, temp 0.4) and Stage 2 (evaluative review, temp 0.1). Stage 2 explicitly preserves the misconception fields and re-runs the answer-leak / rationale-hygiene / Bloom-honesty checks.
+
+### Step 6: Move to Bank
+
+Approved questions land in the Bank. Auto-image-gen fires for any item with `needs_image=true` so the audit screen has the visuals to inspect.
 
 ---
 
-### Step 3: Hess Matrix (CG Matrix)
+## The Bank: Audit and Regenerate
 
-The system builds a grid that decides how many questions go at each cognitive level.
+### Run Audit
 
-| | DOK 1 (Recall) | DOK 2 (Skill) | DOK 3 (Reasoning) |
-|---|---|---|---|
-| **Remember** | R1: 3 | — | — |
-| **Understand** | U1: 2 | U2: 4 | — |
-| **Apply** | — | A2: 4 | A3: 0 |
-| **Analyse** | — | AN2: 2 | AN3: 0 |
+One click runs every check across the set. Each question gets a severity (`pass | warn | fail`) which is the worst of its flag severities; the AuditView renders color-coded cards (green/gold/red left border) and a summary with per-category pass-rate bars.
 
-Each cell has a specific definition for YOUR content:
-- R1: "Recall the name of a food item and whether it is plant or animal based"
-- A2: "Apply classification rules to a new food item the student hasn't seen in the textbook"
-- AN2: "Analyse a set of food items to find the pattern or the incorrectly classified item"
+### Audit categories
 
-**Why you review this:** You can increase AN2 if you want harder questions. You can reduce R1 if you don't want too many easy recall questions. You control the difficulty distribution.
+Every flag is tagged with one of these (single source of truth in [`src/agents/audit.ts`](src/agents/audit.ts)):
 
----
+| Category | What it checks |
+|---|---|
+| `rule` | Formatting, content, distractor hygiene, quality (Haladyna-Downing-Rodriguez rules) |
+| `factual` | SME factual lens — answer correctness, units, multiple-correct |
+| `pedagogical` | SME pedagogical lens — Bloom honesty, keyword-match-solvability, distractor diagnosticity |
+| `language` | UK English, vocabulary appropriate to grade, no bias |
+| `terminology` | Chapter-aligned terms (no NCERT-substitute synonyms) |
+| `grade` | Out-of-scope concept names; concrete-lock for concrete skills |
+| `scenario` | R1/U1 stems must be direct (no scenario opener); set-level scenario ratio ≤40% |
+| `diversity` | Numerical-diversity Jaccard across stems |
+| `image` | Set-level image-ratio floor by grade |
+| `alignment` | LO keyword overlap; exact-duplicate stems |
+| `distractor_source` | **F1.** Every wrong option must have `why_wrong` AND either a `misconception_id` or a typed `reasoning_error` |
+| `misconception_coverage` | **F1.** Every question must claim a `misconception_id_targeted`; no two questions in the same cell may target the same id |
+| `rationale_hygiene` | **F1.** Rationale references the misconception held by wrong-option-pickers; no author meta-commentary |
+| `answer_leak` | **F2.** ≥60% of significant tokens of the correct answer appear in the stem (paraphrase test, not comprehension) |
+| `image_material` | **F5.** `needs_image=true` AND stem hinges on a tactile/material keyword (tender/woody/soft/hard/etc.) — images can't carry tactile properties |
+| `edge_case_coverage` | **F4.** Set-level — fewer than 20% of items hit an edge/boundary case (skipped when no edge-case content surfaced) |
 
-### Step 4: Question Generation (Cell by Cell)
+### Regenerate with audit feedback
 
-Questions are generated one cell at a time. You review each cell's questions before moving to the next. You can reject, switch types (MCQ → Error Analysis → Match), or approve and continue.
+Click **Regenerate with feedback** on any audited card. The audit's flags get synthesized into a concise EXTRA-CONSTRAINT block that's appended to the regen prompt:
 
----
+```
+AUDIT FINDINGS — fix ALL of these in the regenerated question:
+- answer_leak: Stem reproduces 4/5 significant tokens of the correct answer
+- distractor_source: Distractor B has no misconception_id or reasoning_error
+- pedagogical: Functionally R1 despite A2 label — student can solve by keyword match
+```
 
-### Step 5: Final Review & Export
+The model regenerates with these constraints baked in. After regen, that single question is re-audited and the card colour updates live.
 
-All questions shown together. You can still reject or refine. Then export as Excel with all metadata.
+**Bulk:** "Regenerate all fails" / "Regenerate all warns" iterate the same loop serially.
 
 ---
 
@@ -85,15 +127,16 @@ All questions shown together. You can still reject or refine. Then export as Exc
 
 | | Quick Generate | Full Pipeline |
 |---|---|---|
-| **Input** | Skill + LO + optional content | Same |
-| **Subskill decomposition** | Automatic, no review | You select which subskills to test |
-| **Content scoping** | Skipped — uses raw content | You approve each knowledge point |
-| **Hess Matrix** | Auto-allocated | You adjust per-cell counts and review definitions |
-| **Misconception sourcing** | Skipped | Searched from research catalog + internet |
-| **Question review** | All at once, no per-cell control | Cell by cell with reject/switch/approve |
-| **QA check** | None | Rule-based + AI semantic review |
-| **Time** | 2-3 minutes | 10-15 minutes |
-| **Best for** | Drafts, practice, exploration | Production question banks, assessments |
+| Input | Skill + LO + optional content | Same |
+| Subskill decomposition | Automatic, no review | You select |
+| Content scoping | Skipped — uses raw content | You approve each knowledge point + edge-case flag |
+| Hess Matrix | Auto-allocated | You adjust per-cell counts |
+| Misconception sourcing | Catalog + grounded search | Same, with subject-tiered seed list |
+| Question review | All at once | Cell by cell with reject/switch/approve |
+| Lands in Bank | Yes | Yes (after Gate 4) |
+| Audit + regen-with-feedback | Yes | Yes |
+| Time | 2–3 minutes | 10–15 minutes |
+| Best for | Drafts, practice | Production banks, assessments |
 
 ---
 
@@ -101,127 +144,29 @@ All questions shown together. You can still reject or refine. Then export as Exc
 
 | What You Provide | What You Get |
 |---|---|
-| **Just skill + LO** | Generic questions based on general knowledge. May not match your textbook. |
-| **Skill + LO + chapter PDF** | Questions grounded in YOUR textbook content. Uses exact terminology, examples, and data from the chapter. |
-| **Skill + LO + chapter PDF + YouTube link + worksheet** | Highly specific questions covering multiple perspectives. Content scope shows you exactly what was extracted from each source. |
+| Just skill + LO | Generic questions; may not match your textbook |
+| Skill + LO + chapter PDF | Questions grounded in YOUR textbook content; uses exact terminology, examples, data |
+| Skill + LO + chapter + worksheet + YouTube | Highly specific questions; content scope shows exactly what was extracted from each source |
 
-The system cannot invent what it doesn't have. If you give it a chapter on "Food and Nutrition" from your specific textbook, questions will use the exact examples, definitions, and classification rules from that chapter — not generic internet knowledge.
+**More material = more edge cases identified = more precise questions = stronger misconception coverage.**
 
-**More material = more precise questions = less manual editing afterward.**
-
----
-
-## Content in the System
-
-### What Content Can You Provide
-
-| Format | Accepted | What Gets Extracted |
-|---|---|---|
-| **PDF** (.pdf) | ✅ | Full text from all pages — paragraphs, headings, data, examples |
-| **Word** (.docx) | ✅ | All paragraph text |
-| **Excel** (.xlsx, .xls) | ✅ | All sheets, all rows — tables, data, structured content |
-| **Pasted text** | ✅ | Whatever you paste — chapter excerpts, syllabus notes, lesson plans |
-| **YouTube links** | ✅ (React app) | Video topic, key concepts, terminology, learning points extracted via AI |
-| **Website URLs** | ✅ (React app) | Educational content extracted from the page via AI |
-| **TSV row** | ✅ | Metadata — Subject, Grade, Skill Code, LO Code, Skill Description, LO Description |
+The system cannot invent what it doesn't have. It generates **FROM your content, not ABOUT your topic.**
 
 ---
 
-### Where You Can Add Content
+## Image Discipline
 
-#### In Quick Generate
+Images can show **form**: height, branching pattern, growth direction, leaf shape, # of stems, posture, relative size.
+Images **cannot** reliably show **material properties**: tender vs woody, soft vs hard, smooth vs rough, glossy vs matte. A child looking at a stylised illustration cannot perceive whether a stem is "tender" — that is a tactile property, not a visual one.
 
-| Input Point | What to Add | Why |
-|---|---|---|
-| **TSV Paste** | Copy-paste one row from your skill mapping Excel sheet | Auto-fills Grade, Subject, Skill, LO, Skill Code — saves typing |
-| **Learning Objective** | The LO description from your curriculum | Tells the system WHAT the student should learn |
-| **Skill Description** | The specific skill being assessed | Tells the system WHAT the student should be able to DO |
-| **Upload** (PDF/DOCX/Excel) | Chapter from textbook, worksheet, reference material | Gives the system the ACTUAL content to generate questions from |
-| **Paste text** | Copy-paste chapter text, syllabus extract, lesson notes | Same as upload but for quick snippets |
-
-#### In Full Pipeline (same as above, plus)
-
-| Input Point | What to Add | Why |
-|---|---|---|
-| **Resource Search** | Search for PDFs, YouTube, websites during Gate 1 | Find additional reference material online |
-| **Content Sources** | Add YouTube links, website URLs, multiple file uploads | Build a rich content base from multiple sources |
+If a question's correct answer depends on the student perceiving a material property, the system either moves the cue into named-plant context (mint, pumpkin, mango tree) or sets `needs_image=false`. The audit's `image_material` check enforces this.
 
 ---
 
-### Why Content Is Parsed — What It Does at Each Stage
+## Authoritative reference
 
-#### Stage 1: Intake Agent
+The full sourcing roadmap with primary citations, theoretical-framework taxonomy, and Indian-context cross-references lives in:
 
-**Content used:** First 3,000 characters of your uploaded/pasted content.
-
-**Why:** The Intake Agent reads your content to understand the topic, detect the grade level, identify the subject area, and normalise terminology. If you upload a Grade 7 Science chapter, the Intake Agent detects "Grade 7, Science, Life Sciences" even if you didn't specify it.
-
-**Without content:** The Intake Agent only has the skill and LO text — a single sentence. It guesses the context.
-
----
-
-#### Stage 2: Content Scoping (Full Pipeline only)
-
-**Content used:** Full uploaded content, split per subskill. Each subskill gets the paragraphs from your content that are relevant to it (keyword-matched).
-
-**Why:** This is the most important use of content. The Content Scoping Agent reads your chapter and extracts every single testable fact — "Wheat is a cereal," "Milk comes from cows," "Herbivores eat only plants." These become the knowledge points you approve. Only approved points can become questions.
-
-**Without content:** The agent has nothing to extract from. It falls back to the skill description and generates generic knowledge points from its training data — not from your textbook.
-
-**This is why uploading a chapter PDF changes everything.** With it, you get 40-60 specific, curriculum-aligned knowledge points. Without it, you get 8-10 generic ones.
-
----
-
-#### Stage 3: Hess Matrix
-
-**Content used:** The approved knowledge points (not raw content).
-
-**Why:** The Hess Matrix agent looks at your approved knowledge points and decides which cognitive levels they support. If your content has lots of classification rules, it allocates more A2 (Apply) questions. If your content has definitions and terminology, it allocates more R1 (Recall) questions. The matrix adapts to YOUR content.
-
-**Without content:** The matrix is generic — a standard distribution that may not match what your chapter actually covers.
-
----
-
-#### Stage 4: Question Generation
-
-**Content used:** Per-cell selected knowledge points (3-8 points per cell) + exemplar questions from internet search.
-
-**Why:** Each question is generated from a SPECIFIC knowledge point from your approved content. The question stem, correct answer, and wrong options all come from facts in your textbook.
-
-**Without content:** Questions are based on general knowledge. They may be factually correct but won't match your textbook's examples, terminology, or scope. A question might use "femur" when your textbook only uses "thigh bone."
-
----
-
-### The Difference Content Makes — Same Skill, With vs Without
-
-**Skill:** "Identify different joints, bones, and muscles"
-
-#### Without content (just skill + LO):
-
-```
-Q: Which is the longest bone in the human body?
-A. Femur  B. Tibia  C. Humerus  D. Rib
-```
-Generic. Could come from any textbook. May use terminology your students haven't learned.
-
-#### With content (chapter PDF uploaded):
-
-```
-Q: Aarav is reading Chapter 8 of his science book. He learns that
-the bone in his thigh helps him stand and walk. What is this bone called?
-A. Thigh bone (femur)  B. Shin bone  C. Upper arm bone  D. Rib bone
-```
-Uses the chapter's terminology. References the chapter. Uses the same examples the student has seen in class. The wrong options come from other bones mentioned in the same chapter.
-
----
-
-### Summary
-
-| What You Upload | What Changes |
-|---|---|
-| **Nothing** | Generic questions from AI's general knowledge. May not match your textbook. |
-| **Chapter PDF** | Questions use YOUR textbook's facts, examples, terminology. Content scope shows exactly what was extracted. |
-| **Chapter + worksheet** | Even more knowledge points. Questions cover perspectives from both sources. |
-| **Chapter + YouTube + website** | Rich content base. Questions draw from multiple reference materials. System notes which source each knowledge point came from. |
-
-**The system generates questions FROM your content, not ABOUT your topic.** The more you give it, the more precise and curriculum-aligned the output.
+- [ASSESSMENT_DESIGN_RESEARCH.md](ASSESSMENT_DESIGN_RESEARCH.md) — the seven Stage F rules + research basis
+- [QA_RESEARCH.md](QA_RESEARCH.md) — Layer 1 rule-based + Layer 2 SME multi-perspective + Layer 3 misconception/answer-leak/Bloom checks
+- [BENCHMARK_RESEARCH.md](BENCHMARK_RESEARCH.md) — convergent benchmark bank from NCERT / CBSE / TIMSS / PISA / NAEP

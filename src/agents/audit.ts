@@ -35,6 +35,29 @@ export type AuditCategory =
   | 'image_material'        // F5: image-driven question hinges on a tactile/material property
   | 'edge_case_coverage';   // F4: set-level — too few items hit edge/boundary cases
 
+/** Display labels for every AuditCategory. Single source of truth used by
+ *  AuditSummary's category-bar and set-flag chips and by AuditCard's per-flag
+ *  pill so that adding a new category here automatically surfaces a clean
+ *  label everywhere. The Record<...> type ensures we can't forget one. */
+export const AUDIT_CATEGORY_LABELS: Record<AuditCategory, string> = {
+  rule: 'Rule-based',
+  factual: 'Factual',
+  pedagogical: 'Pedagogical',
+  language: 'Language',
+  terminology: 'Terminology',
+  grade: 'Grade profile',
+  scenario: 'Scenario',
+  diversity: 'Diversity',
+  image: 'Visual ratio',
+  alignment: 'Alignment',
+  distractor_source: 'Distractor source',
+  misconception_coverage: 'Misconception',
+  rationale_hygiene: 'Rationale',
+  answer_leak: 'Answer leak',
+  image_material: 'Image cue',
+  edge_case_coverage: 'Edge cases',
+};
+
 export interface AuditFlag {
   category: AuditCategory;
   severity: AuditSeverity;

@@ -2,19 +2,13 @@
 
 import React from 'react';
 import type { AuditResult, AuditFlag, AuditCategory } from '../agents/audit';
+import { AUDIT_CATEGORY_LABELS } from '../agents/audit';
 
-const CATEGORY_LABELS: Record<AuditCategory, string> = {
-  rule: 'Rule-based',
-  factual: 'Factual',
-  pedagogical: 'Pedagogical',
-  language: 'Language',
-  terminology: 'Terminology',
-  grade: 'Grade profile',
-  scenario: 'Scenario',
-  diversity: 'Diversity',
-  image: 'Visual ratio',
-  alignment: 'Alignment',
-};
+// Single source of truth lives in agents/audit.ts so every new category gets
+// a clean label without per-component churn (Stage F categories: distractor
+// source, misconception coverage, rationale hygiene, answer leak, image cue,
+// edge cases — all flow through automatically).
+const CATEGORY_LABELS = AUDIT_CATEGORY_LABELS;
 
 /** Each category: { touched, flagged } across all questions. */
 function summarizeByCategory(audit: AuditResult): Array<{
