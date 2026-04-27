@@ -739,9 +739,10 @@ const PipelineRunnerView = () => {
       audit: null,
     });
 
-    // Take the SME to the Bank — audit, regen, and export are there now.
-    setLogs(prev => [...prev, { agent: 'System', action: 'Approved set sent to Bank → opening audit surface.', time: new Date().toLocaleTimeString() }]);
-    window.dispatchEvent(new CustomEvent('app:navigate', { detail: 'bank' }));
+    // The approved set is now in the bank. Don't auto-navigate; let the SME
+    // continue iterating in Pipeline view if they want, then click the
+    // explicit "Move to Bank · Audit & Export" CTA on the completion card.
+    setLogs(prev => [...prev, { agent: 'System', action: 'Approved set ready in Bank. Open the audit surface when satisfied with the batch.', time: new Date().toLocaleTimeString() }]);
 
     setStatus('running');
     if (currentStep < PIPELINE_STATES.length - 1) {
@@ -2113,7 +2114,9 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                 </div>
               )}
 
-              {/* D6 · Completion — Swiftee ExportHero */}
+              {/* D6 · Completion — Swiftee ExportHero. Primary CTA moves the SME
+                  to the Bank for audit + export (parity with Quick mode); the
+                  raw Download ZIP is now a secondary action. */}
               {status === 'completed' && (
                 <ExportHero
                   itemCount={questions.length}
@@ -2129,7 +2132,11 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                     { label: 'Cells', v: new Set(questions.map((q: any) => q.cell)).size, sub: 'Hess matrix coverage' },
                   ]}
                   primary={{
-                    label: 'Download ZIP',
+                    label: 'Move to Bank · Audit & Export',
+                    onClick: () => window.dispatchEvent(new CustomEvent('app:navigate', { detail: 'bank' })),
+                  }}
+                  secondary={{
+                    label: 'Download ZIP now',
                     onClick: async () => {
                       const { exportToExcelAndZip } = await import('./utils/exporter');
                       await exportToExcelAndZip({
