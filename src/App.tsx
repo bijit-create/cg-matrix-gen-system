@@ -2357,6 +2357,14 @@ const QuickGenerateView = () => {
   const [questionImages, setQuestionImages] = useState<Record<string, string>>({});
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+
+  // Ref mirrors `questions` so async handlers (handleQuickAction, saveEdit,
+  // scenario auto-regen, etc.) can read the LATEST state rather than the
+  // closure-captured value at click time. Without this, the scenario regen
+  // step at the end of a batch was reading questions=[] from handleGenerate's
+  // initial render and overwriting the display with [].
+  const questionsRef = useRef<any[]>(questions);
+  questionsRef.current = questions;
   // Content-driven grade-appropriateness profile (inferred once per batch;
   // cached here so Regen/Simplify/Harder reuse it without extra calls).
   const [gradeScopeProfile, setGradeScopeProfile] = useState<any>(null);
@@ -2724,12 +2732,14 @@ If MCQ, options may also reference the image. For primary grades especially, pre
 
       log(`Done! ${allQs.length} questions generated.`);
 
+      // Read the latest snapshot — scenario auto-regen above may have replaced
+      // some entries via handleQuickAction, which only updates React state.
+      const latestQs: any[] = questionsRef.current.length === allQs.length ? questionsRef.current : allQs;
+
       // Auto-generate images for every question flagged needs_image=true that
       // doesn't already have one. The requestQueue throttles concurrency so
-      // we can fire all in parallel without blowing the rate limit. Bank
-      // navigation only happens AFTER this step, so the SME never lands on a
-      // "Look at the image" question with no image.
-      const imageNeedQs = allQs.filter((q: any) => q.needs_image && !questionImages[q.id]);
+      // we can fire all in parallel without blowing the rate limit.
+      const imageNeedQs = latestQs.filter((q: any) => q.needs_image && !questionImages[q.id]);
       const finalImages: Record<string, string> = { ...questionImages };
       if (imageNeedQs.length > 0) {
         log(`Auto-generating ${imageNeedQs.length} image(s) via gpt-image-2…`);
@@ -2757,9 +2767,10 @@ If MCQ, options may also reference the image. For primary grades especially, pre
       }
 
       // Land this batch in the Bank so the user can audit / regen / export.
+      // Use questionsRef so any scenario regen edits are included.
       bankStore.set({
         mode: 'quick',
-        questions: allQs,
+        questions: questionsRef.current.length > 0 ? questionsRef.current : allQs,
         metadata,
         lo,
         skill,
@@ -2848,7 +2859,10 @@ ${q.stem}`;
         GenerationSchema);
 
       const updated = { ...refined, cell: q.cell, type: q.type, id: q.id };
-      const nextQuestions = questions.map(x => x.id === q.id ? updated : x);
+      // Read from questionsRef.current (always latest) instead of the closure-
+      // captured `questions` to avoid clobbering newly generated questions
+      // when this handler runs from inside handleGenerate's scenario auto-regen.
+      const nextQuestions = questionsRef.current.map(x => x.id === q.id ? updated : x);
       setQuestions(nextQuestions);
       // Mirror the change into the bank if this batch is already banked (so the
       // Bank tab and its audit stay in sync with Quick's edits).
@@ -2870,8 +2884,8 @@ ${q.stem}`;
   const cancelEdit = () => { setEditingId(null); setEditDraft(null); };
   const saveEdit = () => {
     if (!editDraft) return;
-    const prev = questions.find(x => x.id === editDraft.id);
-    const next = questions.map(x => x.id === editDraft.id ? editDraft : x);
+    const prev = questionsRef.current.find(x => x.id === editDraft.id);
+    const next = questionsRef.current.map(x => x.id === editDraft.id ? editDraft : x);
     setQuestions(next);
     // Keep the bank store in sync if this batch is already banked, so when
     // the SME clicks "Move to Bank" the latest edits show up.
