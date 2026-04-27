@@ -967,9 +967,15 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
               value={tsvInput}
               onChange={handlePasteTSV}
               className="sw-textarea"
-              style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11, minHeight: 44, background: '#FAFAFC' }}
+              style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11, minHeight: tsvInput ? 84 : 44, background: '#FAFAFC' }}
               placeholder="Paste Excel/Sheets row here to auto-fill…"
-              rows={1}
+              rows={tsvInput ? 4 : 1}
+              spellCheck={false}
+              autoComplete="off"
+              data-form-type="other"
+              data-gramm="false"
+              data-lpignore="true"
+              data-1p-ignore=""
             />
           </div>
 
@@ -987,13 +993,14 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
           </div>
           <div>
             <label className="sw-field-label">Target skill</label>
-            <input
+            <textarea
               required
-              type="text"
               value={skill}
               onChange={(e) => setSkill(e.target.value)}
-              className="sw-input"
+              className="sw-textarea"
+              style={{ minHeight: 48 }}
               placeholder="e.g., Calculate hypotenuse"
+              rows={2}
             />
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -1126,10 +1133,15 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
               value={chapterContent}
               onChange={(e) => setChapterContent(e.target.value)}
               className="sw-textarea"
-              style={{ minHeight: 56 }}
+              style={{ minHeight: chapterContent ? 160 : 56, fontSize: 12, lineHeight: 1.5 }}
               placeholder="Or paste chapter text / syllabus content directly here…"
-              rows={2}
+              rows={chapterContent ? 8 : 2}
             />
+            {chapterContent && chapterContent.length > 200 && (
+              <div style={{ fontSize: 11, color: 'var(--fg-secondary)', marginTop: 4 }}>
+                {chapterContent.length.toLocaleString()} characters loaded · scroll the box to review
+              </div>
+            )}
             {contentSources.filter(s => s.status === 'ready').length > 0 && (
               <div style={{
                 marginTop: 8, fontSize: 11, color: 'var(--green-400)',
@@ -2907,7 +2919,19 @@ ${q.stem}`;
           <div className="tech-border bg-[var(--surface)] p-4 flex flex-col gap-3">
             <div>
               <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Quick Paste (TSV)</label>
-              <textarea value={tsvInput} onChange={e => handlePasteTSV(e.target.value)} className="w-full tech-border bg-[#0a0a0a] text-[#e5e5e5] p-2 font-mono text-xs" placeholder="Paste row..." rows={2} />
+              <textarea
+                value={tsvInput}
+                onChange={e => handlePasteTSV(e.target.value)}
+                className="w-full tech-border bg-[#0a0a0a] text-[#e5e5e5] p-2 font-mono text-xs"
+                placeholder="Paste row…"
+                rows={tsvInput ? 4 : 2}
+                spellCheck={false}
+                autoComplete="off"
+                data-form-type="other"
+                data-gramm="false"
+                data-lpignore="true"
+                data-1p-ignore=""
+              />
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase text-[var(--ink-muted)] mb-1 block">Learning Objective</label>
@@ -2959,7 +2983,19 @@ ${q.stem}`;
                   </button>
                 </div>
               </div>
-              <textarea value={content} onChange={e => setContent(e.target.value)} className="w-full tech-border bg-[var(--bg)] p-2 text-sm" placeholder="Paste chapter text..." rows={3} />
+              <textarea
+                value={content}
+                onChange={e => setContent(e.target.value)}
+                className="w-full tech-border bg-[var(--bg)] p-2 text-sm"
+                placeholder="Paste chapter text…"
+                rows={content ? 8 : 3}
+                style={{ minHeight: content ? 160 : 'auto', fontSize: 12, lineHeight: 1.45 }}
+              />
+              {content && content.length > 200 && (
+                <div style={{ fontSize: 10, color: 'var(--ink-muted)', marginTop: 4 }}>
+                  {content.length.toLocaleString()} chars · scroll to review
+                </div>
+              )}
             </div>
             <button
               onClick={handleGenerate}
