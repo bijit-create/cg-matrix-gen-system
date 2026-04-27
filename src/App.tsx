@@ -700,7 +700,32 @@ const PipelineRunnerView = () => {
     }
 
     // Gate 4+ (step 9+): proceed with post-generation steps.
-    // Also land the approved set in the Bank so the user can audit / regen / export.
+    // Auto-generate any missing images for the approved set BEFORE landing in
+    // the bank — same reasoning as Quick: SME shouldn't see image-required
+    // questions with no image attached when the audit surface opens.
+    const imageNeedQs = questions.filter((q: any) => q.needs_image && !questionImages[q.id || q.question_id]);
+    const finalImages: Record<string, string> = { ...questionImages };
+    if (imageNeedQs.length > 0) {
+      setLogs(prev => [...prev, { agent: 'Image Agent', action: `Auto-generating ${imageNeedQs.length} image(s) before sending to Bank…`, time: new Date().toLocaleTimeString() }]);
+      try {
+        const { generateQuestionImage } = await import('./agents/imageGen');
+        await Promise.allSettled(imageNeedQs.map(async (q: any) => {
+          const qId = q.id || q.question_id;
+          try {
+            const result = await generateQuestionImage(q.stem);
+            if (result.status === 'generated' && result.dataUrl) {
+              finalImages[qId] = result.dataUrl;
+              setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: image ✓ (${result.sizeKb}KB)`, time: new Date().toLocaleTimeString() }]);
+            }
+          } catch (e: any) {
+            setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: image failed — ${e.message?.slice(0, 40)}`, time: new Date().toLocaleTimeString() }]);
+          }
+        }));
+        setQuestionImages(finalImages);
+      } catch { /* fall through with whatever images we have */ }
+    }
+
+    // Land the approved set in the Bank so the user can audit / regen / export.
     bankStore.set({
       mode: 'pipeline',
       questions,
@@ -710,7 +735,7 @@ const PipelineRunnerView = () => {
       boardProfile: 'cbse',
       gradeScopeProfile: null,
       chapterContent,
-      questionImages,
+      questionImages: finalImages,
       audit: null,
     });
 
@@ -2677,6 +2702,37 @@ If MCQ, options may also reference the image. For primary grades especially, pre
 
       log(`Done! ${allQs.length} questions generated.`);
 
+      // Auto-generate images for every question flagged needs_image=true that
+      // doesn't already have one. The requestQueue throttles concurrency so
+      // we can fire all in parallel without blowing the rate limit. Bank
+      // navigation only happens AFTER this step, so the SME never lands on a
+      // "Look at the image" question with no image.
+      const imageNeedQs = allQs.filter((q: any) => q.needs_image && !questionImages[q.id]);
+      const finalImages: Record<string, string> = { ...questionImages };
+      if (imageNeedQs.length > 0) {
+        log(`Auto-generating ${imageNeedQs.length} image(s)…`);
+        setProgress(`Generating images (0/${imageNeedQs.length})…`);
+        const { generateQuestionImage } = await import('./agents/imageGen');
+        let imgDone = 0;
+        await Promise.allSettled(imageNeedQs.map(async (q: any) => {
+          try {
+            const result = await generateQuestionImage(q.stem);
+            if (result.status === 'generated' && result.dataUrl) {
+              finalImages[q.id] = result.dataUrl;
+              log(`${q.id}: image ✓ (${result.sizeKb}KB)`);
+            } else {
+              log(`${q.id}: image skipped — ${result.reason || 'no visual'}`);
+            }
+          } catch (e: any) {
+            log(`${q.id}: image failed — ${e.message?.slice(0, 40)}`);
+          } finally {
+            imgDone++;
+            setProgress(`Generating images (${imgDone}/${imageNeedQs.length})…`);
+          }
+        }));
+        setQuestionImages(finalImages);
+      }
+
       // Land this batch in the Bank so the user can audit / regen / export.
       bankStore.set({
         mode: 'quick',
@@ -2687,7 +2743,7 @@ If MCQ, options may also reference the image. For primary grades especially, pre
         boardProfile,
         gradeScopeProfile,
         chapterContent: content,
-        questionImages,
+        questionImages: finalImages,
         audit: null,
       });
 
