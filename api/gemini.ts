@@ -125,8 +125,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
       const openaiModel = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2';
-      const size = (req.body.size as string) || '1024x1024';
-      const quality = (req.body.quality as string) || 'standard';
+      // Native 4:3 size — matches the post-process 800x600 normalize target,
+      // avoids wasted pixels from cropping a square render.
+      const size = (req.body.size as string) || '1024x768';
+      // 'high' is OpenAI's recommended quality for diagrams with small text /
+      // multiple labels / dense information panels (cookbook: image-gen
+      // prompting guide). Worth the latency for our use case.
+      const quality = (req.body.quality as string) || 'high';
       const oa = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
         headers: {

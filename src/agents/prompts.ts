@@ -350,67 +350,243 @@ export const MathTypeRotation: Record<string, string[]> = {
 };
 
 // --- Image Prompt Template (NCERT-style, optimised for OpenAI gpt-image-2) ---
-// gpt-image-2 follows instructions tightly and respects negative constraints
-// well. The template focuses on (a) one clear visual subject, (b) a hard
-// no-text rule (so the image can't accidentally reveal the answer), and
-// (c) a clean classroom-textbook aesthetic that matches the surrounding
-// question card.
-// Follows OpenAI's recommended ordering for gpt-image-2:
-// Background → Subject → Key Details → Constraints. Avoids negative-prompt
-// phrasing ("do not draw…") because gpt-image-2 doesn't honour those
-// reliably; uses positive framing instead. {description} should be the
-// question's image_desc field — a noun-phrase description of the answer
-// subject — not the raw stem.
+// Structure follows the OpenAI cookbook's recommended ordering for gpt-image-2:
+// BACKGROUND → SUBJECT → KEY DETAILS → CONSTRAINTS → OUTPUT. Treat the prompt
+// as a specification rather than a suggestion: gpt-image-2 follows tightly-
+// scoped instructions but penalises ambiguity. {description} = the question's
+// image_desc field (a noun-phrase description of the answer subject), already
+// derived during generation — not the raw stem.
+//
+// Two key practices baked in (per cookbook + fal.ai prompt guide):
+//  - Literal copy goes inside double-quotes AND ALL CAPS so gpt-image-2
+//    renders it verbatim. Difficult / non-common words can be spelled
+//    letter-by-letter inside the quote ("E-S-O-P-H-A-G-U-S").
+//  - Quality 'high' on the API call (set in api/gemini.ts) — recommended
+//    for diagrams with small text, multiple labels, or dense panels.
 export const IMAGE_PROMPT_TEMPLATE = `BACKGROUND
-Plain solid white background, #FFFFFF only. Treat the canvas as a single classroom textbook page. The frame is calm, uncluttered, with generous safe margins.
+Plain solid white background, #FFFFFF only. Treat the canvas as a single classroom textbook page. The frame is calm, uncluttered, with generous safe margins on all four sides.
 
 SUBJECT
 {description}
 
 KEY DETAILS
-- Style: clean flat vector illustration, NCERT / Indian school textbook aesthetic.
-- Linework: crisp, even line weight; solid fills over textures or hatching.
-- Palette: bright but restrained — natural greens / earthy browns / sky blues for biology; primary colours for physics / chemistry diagrams; pastel tints for backgrounds inside subjects (not the canvas). No neon, no gradient washes.
-- Composition: 4:3 aspect ratio, single focused subject occupying 60–80% of the frame, centred with even white space around it.
-- Proportions and biology must be accurate at a textbook level: a tree is taller than a shrub is taller than a herb; a heart has four chambers; a triangle's interior angles sum to 180°.
-- Typography (only when SUBJECT calls for labels): clean sans-serif, sentence case OR all caps as the SUBJECT specifies. Set every label EXACTLY as written in the SUBJECT description (verbatim spelling — copy each label character-for-character; do not paraphrase or re-letter). Use thin leader lines from label to part where applicable.
+- Intended use: an educational item in a printed worksheet / digital assessment for an Indian school student. Treat the image as a "VISUAL QUESTION" — it visually depicts the PROBLEM the student must solve, not the answer.
+- Style: clean flat vector illustration, NCERT / Indian school textbook aesthetic. No photorealism, no 3-D rendering, no shading gradients, no painterly textures.
+- Linework: crisp, even-weight black or dark-grey outlines. Solid fills, not gradients or hatching.
+- Palette: bright but restrained — natural greens / earthy browns / sky blues for biology; primary colours for physics / chemistry diagrams; muted pastels inside elements only (the canvas itself stays pure white). No neon, no gradient washes, no glow effects.
+- Composition: 4:3 aspect ratio, single focused subject occupying 60–80% of the frame, centred with even white space around it. Generous negative space — never cram labels.
+- Proportions and biology must be accurate at a textbook level: a tree is taller than a shrub is taller than a herb; a human heart has four chambers; a triangle's interior angles sum to 180°.
+- Typography (only when SUBJECT calls for labels): clean sans-serif (Arial / Helvetica equivalent), uniform weight per role. Render EVERY label EXACTLY as quoted in the SUBJECT block — copy each character verbatim, including capitalisation. Treat each label as a distinct typographic element with its own placement, never overlapping the subject or another label. Use thin black leader lines (1–1.5 px) from the label box to the part it points at, no arrowhead.
+- Unknown / placeholder: when the SUBJECT names a quantity the student must find, render it as a clear hollow box "□" or a bold question mark "?", positioned where the answer would go. The "?" / "□" tells the viewer "you solve this" — do NOT fill it in.
 
 CONSTRAINTS
 - Only the subject described above is rendered; the frame contains nothing extra.
-- All visible text matches the SUBJECT description verbatim, with correct spelling.
-- The frame contains zero answer hints — no ticks, stars, circles, arrows pointing at "the right one", and no option lettering (A / B / C / D) inside the image.
-- People appear only when the SUBJECT explicitly says so; when present, drawn as a neutral cartoon figure from a back or three-quarter view, no recognisable real-person faces.
+- All visible text matches the SUBJECT description verbatim. If the SUBJECT spells a label letter-by-letter (e.g., "E-S-O-P-H-A-G-U-S"), render it as the joined word ("ESOPHAGUS") with no hyphens.
+- The frame contains zero answer hints — no ticks, stars, circles, arrows-pointing-at-the-right-one, no option lettering (A / B / C / D) inside the image, no green / red highlights on any element.
+- People appear only when the SUBJECT explicitly says so. When present, drawn as a neutral cartoon figure from a back or three-quarter view; no recognisable real-person faces.
 - The background remains pure white from edge to edge.
 
 OUTPUT
-A teacher should be able to print this on plain paper at half-page size and a 10-year-old should recognise the subject in under two seconds.`;
+A teacher should be able to print this at half-page size on plain paper and a Grade-${'{grade}'} student should recognise the subject AND understand which quantity they're being asked to find in under two seconds.`;
 
-export function buildImagePrompt(stem: string, subject: string, _grade: string): string {
-  const base = IMAGE_PROMPT_TEMPLATE.replace('{description}', stem.slice(0, 600));
+// --- IMAGE_PATTERNS — question-type-specific composition templates ---
+// gpt-image-2 produces meaningfully better diagrams when the prompt names the
+// LAYOUT pattern explicitly (flowchart vs. equation-with-blank vs. labelled
+// anatomy vs. comparison plate). These patterns are pure additions to the
+// SUBJECT block — they specify HOW to compose the visual question, not WHAT
+// the answer is. They reflect the "Visual Question" framing: the image
+// depicts the PROBLEM the student must solve, with a "?" or "□" where the
+// unknown sits.
+//
+// Detection happens in buildImagePrompt(): the stem and subject are scanned
+// for cues; the matched pattern's text is appended to the SUBJECT block.
+// At most one pattern fires per render. Patterns can chain with the
+// subject-specific style hints (math / physics / etc.) below.
+export const IMAGE_PATTERNS = {
+  /** Single-step arithmetic word problem expressible as a flowchart. */
+  word_problem_flowchart: `
+LAYOUT (word-problem flowchart):
+- Render the problem as a top-to-bottom (or left-to-right) flowchart of 3 boxes connected by arrows.
+- Box 1: the starting quantity in plain language with the number — e.g., "PENS IN STORE: 364".
+- Box 2: the operation — e.g., a downward arrow labelled "SOLD: 162" or a bold "−" symbol with the number.
+- Box 3: the unknown — labelled "PENS LEFT: ?" with the question mark inside a hollow box "□" or as a bold "?".
+- All box labels in clean sans-serif ALL CAPS, exactly as written above.`,
+
+  /** Equation-shaped fill-in-the-blank visual (e.g., "x × ? = x"). */
+  equation_with_blank: `
+LAYOUT (equation with blank):
+- Render the equation as a single horizontal line of large bold sans-serif characters: numerator / denominator stacked for fractions, "×" / "÷" / "+" / "−" between operands, "=" before the result.
+- The unknown is a hollow box "□" or a question mark "?" of the same size as the surrounding numbers, positioned exactly where the answer goes.
+- No solution shown. No worked steps. No additional decoration.
+- Example structure: " 7/12  ×  □  =  7/12 "`,
+
+  /** Geometry — labelled shape with given measurements + unknown. */
+  geometry_diagram: `
+LAYOUT (geometry diagram):
+- Render the shape with crisp black outlines on white. Vertices labelled with capital letters ("A", "B", "C") in sans-serif at each corner.
+- Given measurements appear next to the relevant side / angle in sans-serif ("5 cm", "60°"). Right angles get a small square marker at the vertex.
+- The UNKNOWN side / angle / area is marked with a "?" placed next to it where a measurement would normally go.
+- For coordinate-plane items: include x and y axes with arrowheads, tick marks every unit, axis labels "x" and "y", origin marked "O".`,
+
+  /** Labelled anatomy / body-system / cell diagram. */
+  labelled_anatomy: `
+LAYOUT (labelled anatomy):
+- Render the organ / system / cell as a single centred figure in NCERT-textbook flat-vector style.
+- Each labelled part gets ONE thin black leader line (no arrowhead) from a label box on the outside of the figure to the exact part it identifies. Label text in sans-serif sentence case OR ALL CAPS as specified in the SUBJECT.
+- Render every label EXACTLY as quoted in the SUBJECT block. Spell anatomy terms verbatim — for difficult terms the SUBJECT may break them down letter-by-letter (e.g., "E-S-O-P-H-A-G-U-S"); render the joined word ("ESOPHAGUS") with no hyphens.
+- Labels never overlap each other, the figure, or the page edge. Rotate or reposition leader lines as needed for legibility.
+- The part the student must identify is marked with a CIRCLED "X" or a bold "?" instead of a label. (Other parts keep their labels.)`,
+
+  /** Physics — circuit, free-body, ray-diagram, wave. */
+  physics_schematic: `
+LAYOUT (physics schematic):
+- Use standard physics symbols: resistors as zig-zag rectangles, batteries as long-short parallel lines, capacitors as parallel plates, ammeter "(A)", voltmeter "(V)" with the letter inside a circle.
+- Forces / velocity / field directions as arrows of proportional length, each next to a label ("F", "v", "g", "F_friction") in italic sans-serif.
+- Free-body diagrams: a single labelled rectangular block at the centre with all force arrows originating from its centre or face.
+- Ray diagrams: object as a vertical arrow, image as a vertical arrow (dashed if virtual), lens / mirror as a vertical line, focal points "F" and "2F" marked on the principal axis.
+- Unknown quantity (force, current, distance) marked with a "?" next to where a value would go.`,
+
+  /** Chemistry — molecule / apparatus / reaction. */
+  chemistry_lab: `
+LAYOUT (chemistry):
+- For molecules: ball-and-stick representation. Each atom is a coloured sphere with the symbol ("C", "H", "O", "N") in white sans-serif inside it. Bonds are short black lines.
+- For lab apparatus: cleanly drawn beakers / flasks / test tubes / retort stands. Liquid contents tinted lightly. Apparatus labels positioned clearly above or beside each item.
+- For reactions: show reactants on the left, an arrow (→) in the middle, products on the right. Conditions written above the arrow ("heat", "catalyst").
+- Unknown product / reactant / coefficient marked with "?" of equivalent size.`,
+
+  /** Biology comparison — multiple subjects side-by-side. */
+  comparison_plate: `
+LAYOUT (comparison plate):
+- Render each subject side-by-side at consistent scale. Each subject sits in its own vertical column with equal width, separated by thin grey vertical lines or generous white gutters.
+- Each column has a label below the figure in sans-serif ALL CAPS ("HERB", "SHRUB", "TREE") — NOT inside the figure, only below.
+- All subjects drawn at the same horizontal eye-level so relative size is immediately readable.
+- If the question asks the student to identify ONE among the set, the others remain fully labelled — only the one being identified is marked with "?" instead of a name.`,
+
+  /** Data / chart — bar / pie / line chart for data interpretation. */
+  data_chart: `
+LAYOUT (data chart):
+- For bar charts: vertical or horizontal bars of solid fill, axis labels ("Days", "Number of Students"), category labels under each bar in sans-serif, numeric value labels on or next to each bar.
+- For pie charts: cleanly segmented circle, each segment a different muted colour, labels outside with thin leader lines giving category and percentage.
+- For line graphs: clean axes with arrowheads, labelled axes, tick marks at uniform intervals, data line in a single bright colour.
+- The quantity the student must find is marked with "?" — e.g., one bar of unknown height with "?" above it, or one pie segment with "?" instead of a percentage.`,
+
+  /** Map (geography / history). */
+  labelled_map: `
+LAYOUT (labelled map):
+- Outline the region with clean black borders. Internal divisions (states / districts / countries) with thinner grey lines.
+- Compass rose in one corner; scale bar in another (when relevant). North-up convention.
+- Place names rendered EXACTLY as quoted in the SUBJECT, in sans-serif sentence case.
+- Features (rivers, mountains, capitals) marked with simple iconography (river = blue line, capital = filled circle / star).
+- The location the student must identify is marked with a "?" or a bold dot WITHOUT a name (other locations remain fully labelled).`,
+} as const;
+
+/** Detect which IMAGE_PATTERN the stem maps to. Returns null if no pattern fits
+ *  cleanly — the renderer falls back to the generic SUBJECT block.
+ *  Detection is intentionally narrow: false-positives are worse than misses
+ *  because the wrong pattern produces stylistically off-key images. */
+export function detectImagePattern(
+  stem: string,
+  subject: string,
+  imageDesc?: string,
+): keyof typeof IMAGE_PATTERNS | null {
+  const t = `${stem || ''} ${imageDesc || ''}`.toLowerCase();
+  const sub = (subject || '').toLowerCase();
+
+  // Anatomy / body system — strongest cue: named system + diagram intent.
+  if (/\b(digestive|respiratory|circulatory|nervous|skeletal|excretory|endocrine|reproductive)\s+system\b/.test(t)
+      || /\b(label|name|identify) the (parts? of|structures? of)/.test(t)) {
+    return 'labelled_anatomy';
+  }
+
+  // Geometry — math + shape vocabulary.
+  if (sub.includes('math') && /\b(triangle|square|rectangle|circle|polygon|angle|coordinate|axis|vertices?|sides?|hypotenuse)\b/.test(t)) {
+    return 'geometry_diagram';
+  }
+
+  // Equation with blank — math + missing operand language.
+  if (sub.includes('math')
+      && /\b(missing|unknown|find the value|fill in|complete the equation|identity)\b/.test(t)
+      && /[×÷+\-=]|\\times|\\div|\\frac/.test(t)) {
+    return 'equation_with_blank';
+  }
+
+  // Word-problem flowchart — math + arithmetic word-problem cues.
+  if (sub.includes('math')
+      && /\b(had|has|sold|gave|bought|started with|ended with|total|altogether|in all|how many .* (left|remain))\b/.test(t)) {
+    return 'word_problem_flowchart';
+  }
+
+  // Physics schematic.
+  if (sub.includes('phys')
+      || /\b(circuit|resistor|battery|ammeter|voltmeter|free.body|ray diagram|lens|mirror|force|velocity)\b/.test(t)) {
+    return 'physics_schematic';
+  }
+
+  // Chemistry — molecule / apparatus / reaction.
+  if (sub.includes('chem')
+      || /\b(molecule|atom|beaker|flask|test tube|reaction|reactant|product|catalyst)\b/.test(t)) {
+    return 'chemistry_lab';
+  }
+
+  // Comparison plate — biology + multiple subjects to compare.
+  if ((sub.includes('bio') || sub.includes('sci'))
+      && /\b(compare|side by side|which (of|among) (these|the following)|which (of these|of the following))\b/.test(t)) {
+    return 'comparison_plate';
+  }
+
+  // Data chart — explicit bar / pie / graph reference.
+  if (/\b(bar (chart|graph)|pie chart|line graph|the (chart|graph) shows|from the (chart|graph))\b/.test(t)) {
+    return 'data_chart';
+  }
+
+  // Map — geography / history with map-cues.
+  if ((sub.includes('geo') || sub.includes('hist') || sub.includes('social'))
+      && /\b(map|state|district|country|region|capital|river|border)\b/.test(t)) {
+    return 'labelled_map';
+  }
+
+  return null;
+}
+
+export function buildImagePrompt(stem: string, subject: string, grade: string): string {
+  const description = (stem || '').slice(0, 600);
+  const base = IMAGE_PROMPT_TEMPLATE
+    .replace('{description}', description)
+    .replace('{grade}', grade || '7');
   const subLower = (subject || '').toLowerCase();
+
+  // Pick the best-fitting layout pattern (e.g., labelled anatomy vs. geometry
+  // diagram vs. word-problem flowchart). At most one fires.
+  const patternKey = detectImagePattern(stem, subject, description);
+  const layout = patternKey ? IMAGE_PATTERNS[patternKey] : '';
+
+  // Subject-specific style hint (palette, conventions, expected vocabulary).
+  // These remain additive to the layout pattern — the pattern dictates HOW to
+  // compose; the style hint dictates the visual register.
   let hint = '';
   if (subLower.includes('math')) {
     hint = `
 
-MATH-SPECIFIC: Show the concept visually — geometric shapes with EXACT proportions, number lines with numeric tick marks, fraction bars / circles, grouped objects for counting, place-value blocks, coordinate grids with axis labels (x / y) and tick numerals. Label vertices (A, B, C), sides (a, b, c), and angles where the question requires the student to refer to them. Show given quantities (lengths, angles, weights) but NEVER the unknown / the answer.`;
+MATH STYLE: Geometric shapes with EXACT proportions; number lines with uniform numeric tick marks; fraction bars / circles for parts; grouped objects for counting; place-value blocks; coordinate grids with axis labels "x" / "y" and tick numerals. Label vertices ("A", "B", "C"), sides ("a", "b", "c"), angles where the question expects the student to refer to them. Render given quantities (lengths, angles, weights) verbatim; render the unknown as "?" or hollow "□".`;
   } else if (subLower.includes('phys')) {
     hint = `
 
-PHYSICS-SPECIFIC: Clean schematic style — vector arrows for forces / velocity / fields with text labels (e.g., "F", "v", "g") next to each arrow. Circuit diagrams use standard symbols with component labels (R, V, A). Free-body diagrams show labelled blocks with directional force arrows. Ray diagrams label the object, image, lens / mirror, and focal points (F, 2F).`;
+PHYSICS STYLE: Schematic, not photoreal. Standard circuit symbols. Vector arrows of proportional length with italic-sans labels ("F", "v", "g") placed next to each arrow tail. Free-body diagrams use a single rectangular block. Ray diagrams use vertical-arrow objects / images and a vertical lens / mirror line.`;
   } else if (subLower.includes('chem')) {
     hint = `
 
-CHEMISTRY-SPECIFIC: Ball-and-stick or skeletal molecular illustrations with atom symbols on coloured spheres (C / H / O / N). Lab apparatus drawn cleanly: beakers, flasks, test tubes, retort stands, with content labels where useful. Reactions can show before/after states or colour change. Show formulas only when the question is ABOUT the formula.`;
+CHEMISTRY STYLE: Ball-and-stick / skeletal molecules with atom symbols on coloured spheres. Lab apparatus rendered cleanly with content labels where useful. Show reactants → products with a single horizontal arrow when depicting a reaction.`;
   } else if (subLower.includes('bio') || subLower.includes('sci')) {
     hint = `
 
-BIOLOGY / SCIENCE-SPECIFIC: NCERT textbook diagram style. Show organisms, body parts, cells, food webs, life-cycle stages, experimental setups. Label anatomical parts with thin leader lines and clean sans-serif text ("nucleus", "chloroplast", "petal", "stamen") UNLESS the question is asking the student to identify those exact parts — in that case omit the labels for the parts being tested. Anatomy must be biologically accurate at a textbook level.`;
+BIOLOGY / SCIENCE STYLE: NCERT textbook flat-vector. Anatomically / biologically accurate at a textbook level. Label anatomical parts with thin leader lines and verbatim-quoted sans-serif text — UNLESS the question asks the student to identify those parts, in which case the part being tested is marked "?" and the others stay labelled.`;
   } else if (subLower.includes('social') || subLower.includes('geo') || subLower.includes('hist')) {
     hint = `
 
-SOCIAL STUDIES-SPECIFIC: Maps include country / state / feature names where the question expects the student to read them, omitted where the student is asked to identify them. Compass roses and scale bars when relevant. Historical scenes use neutral period-appropriate clothing and props; no recognisable specific individuals. Timelines have horizontal axes with date labels at clean intervals.`;
+SOCIAL STUDIES STYLE: Maps with names where the question expects the student to read them; omitted where the student is asked to identify them. Compass roses and scale bars when relevant. Period-appropriate clothing and props for historical scenes; no recognisable specific individuals. Timelines with horizontal axes and clean date intervals.`;
   }
-  return base + hint;
+
+  return base + layout + hint;
 }
 
 // --- Subject-specific language hints (from NCERT/CBSE/PISA/TIMSS benchmark research) ---

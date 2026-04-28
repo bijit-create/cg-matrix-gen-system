@@ -56,8 +56,16 @@ GENERATE_IMAGE: Real-world objects, food, animals, plants, body parts, scenery. 
 SKIP: No visual needed.
 
 HARD RULES:
+- If the stem references AN UNSEEN EXISTING image / figure / diagram with phrasing like "as shown in the figure", "in the given image", "shown below", "the diagram on the right", "refer to the image" — and we have NO concrete description of what's in that image — pick SKIP. We cannot recreate an unseen reference image; guessing produces wrong content.
 - If the stem says "Observe the image / Look at the working / Look at the picture showing the weight of each item / which student has correctly…" DO NOT pick GENERATE_IMAGE. Pick RENDER_TABLE or RENDER_MATH instead — the reader needs exact values, not a stock photo.
 - If the question compares two students' worked solutions, pick RENDER_MATH and produce BOTH solutions stacked side-by-side with a separator.
+- If the question is a pure option-comparison ("which of the following …") with no visualisable subject in the stem, and the options are not provided in the text, pick SKIP — DO NOT hallucinate options into an image.
+
+VISUAL QUESTION FRAMING (when picking GENERATE_IMAGE):
+- The image must depict the PROBLEM the student must solve, not the answer. Include a "?" or hollow box "□" wherever the unknown sits.
+- Example: "200 mL + ___ = 1 Litre" → SUBJECT prompt should describe a 200mL beaker on the left, a "+" symbol, a hollow box marked "?", an "=" symbol, and a 1-litre jug on the right.
+- Example: "A store had 364 pens, sold 162. How many are left?" → describe a flowchart of three boxes: "PENS IN STORE: 364" → arrow labelled "SOLD: 162" → "PENS LEFT: ?".
+- Render any literal copy verbatim by quoting it inside the prompt (e.g., wrap labels in double-quotes and ALL CAPS). The image-prompt template downstream knows to copy these character-for-character.
 
 Question: "${question}"`,
       '{}',
