@@ -55,8 +55,19 @@ GENERATE_SVG: Precise geometry ONLY (angles, polygons, coordinate geometry figur
 GENERATE_IMAGE: Real-world objects, food, animals, plants, body parts, scenery. NEVER for graphs, charts, data, axes, coordinates, equations, tables, worked examples, students' handwriting, or anything a student is supposed to "observe and analyse".
 SKIP: No visual needed.
 
+OUTPUT FORMAT FOR RENDER_* (CRITICAL):
+- For RENDER_LINE_GRAPH, RENDER_CHART, RENDER_TABLE, RENDER_NUMBERLINE, the 'prompt' field MUST be a STRINGIFIED JSON OBJECT exactly matching the schema shown above for that status. NOT prose.
+- Wrong (will fail the renderer): "A line graph showing light intensity vs rate of photosynthesis with..."
+- Right (renderer can build): {"title":"Photosynthesis vs Light","xLabel":"Light intensity (lux)","yLabel":"Rate (mL O₂/min)","xMin":0,"xMax":1000,"yMin":0,"yMax":10,"series":[{"label":"Plant A","color":"#1565C0","points":[{"x":0,"y":0},{"x":250,"y":3},{"x":500,"y":6},{"x":750,"y":8},{"x":1000,"y":8.5}]}]}
+- For RENDER_MATH the 'prompt' field is a LaTeX string (also not prose).
+- If you can't infer concrete values for the JSON fields, prefer GENERATE_IMAGE with a clear prose description of the chart layout — DO NOT emit prose under a RENDER_* status.
+
+DISTINGUISH "stem describes the data" vs "stem references unseen figure":
+- If the stem PROVIDES the data values OR a clear directional pattern (e.g., "rate increased linearly until 600 lux, then plateaued"), the data is reproducible → pick RENDER_LINE_GRAPH (or appropriate RENDER_*) and emit the JSON. NOT skip.
+- If the stem references an unseen image with NO values and NO pattern hint (e.g., "Look at the photograph in your textbook"), pick SKIP — we cannot recreate.
+- "The graph shows X vs Y" alone is not enough to skip — first try to infer the data shape from the surrounding stem text. Only skip when there's truly nothing reproducible.
+
 HARD RULES:
-- If the stem references AN UNSEEN EXISTING image / figure / diagram with phrasing like "as shown in the figure", "in the given image", "shown below", "the diagram on the right", "refer to the image" — and we have NO concrete description of what's in that image — pick SKIP. We cannot recreate an unseen reference image; guessing produces wrong content.
 - If the stem says "Observe the image / Look at the working / Look at the picture showing the weight of each item / which student has correctly…" DO NOT pick GENERATE_IMAGE. Pick RENDER_TABLE or RENDER_MATH instead — the reader needs exact values, not a stock photo.
 - If the question compares two students' worked solutions, pick RENDER_MATH and produce BOTH solutions stacked side-by-side with a separator.
 - If the question is a pure option-comparison ("which of the following …") with no visualisable subject in the stem, and the options are not provided in the text, pick SKIP — DO NOT hallucinate options into an image.
@@ -172,6 +183,29 @@ export async function generateQuestionImage(
     return { status: 'skipped', reason: intentReason };
   }
 
+  // Helper: try to parse a `render_*` prompt as JSON. Some classifier
+  // responses come back as prose instead of the expected schema (e.g.,
+  // "A line graph showing..."). When that happens, fall back to a raster
+  // image render with the prose as description rather than dropping the
+  // image entirely.
+  const tryParse = <T,>(s: string): T | null => {
+    try { return JSON.parse(s) as T; } catch { return null; }
+  };
+
+  // Convenience: when a render_* path can't parse, route to the AI image
+  // generator with a SUBJECT line built from the prose. Tagged with a
+  // fallbackReason so the audit can see what happened.
+  const fallbackToRaster = async (prose: string, why: string) => {
+    const { buildImagePrompt } = await import('./prompts');
+    const enriched = buildImagePrompt(prose, opts?.subject || '', '');
+    const result = await generateImageContent(enriched);
+    return {
+      rawDataUrl: result.dataUrl,
+      provider: result.provider,
+      fallbackReason: `precise renderer skipped (${why}); used ${result.provider}` + (result.fallbackReason ? `: ${result.fallbackReason}` : ''),
+    };
+  };
+
   try {
     let rawDataUrl: string;
     let provider: 'openai' | 'gemini' | 'precise' = 'precise';
@@ -185,7 +219,12 @@ export async function generateQuestionImage(
         break;
       }
       case 'render_chart': {
-        const parsed = JSON.parse(promptText);
+        const parsed = tryParse<any>(promptText);
+        if (!parsed?.data) {
+          const fb = await fallbackToRaster(promptText, 'render_chart JSON parse');
+          rawDataUrl = fb.rawDataUrl; provider = fb.provider; fallbackReason = fb.fallbackReason;
+          break;
+        }
         const { renderBarChart, renderPieChart } = await import('../utils/preciseRenderer');
         rawDataUrl = parsed.type === 'pie'
           ? renderPieChart(parsed.data, parsed.title)
@@ -193,19 +232,38 @@ export async function generateQuestionImage(
         break;
       }
       case 'render_table': {
-        const parsed = JSON.parse(promptText);
+        const parsed = tryParse<any>(promptText);
+        if (!parsed?.headers || !parsed?.rows) {
+          const fb = await fallbackToRaster(promptText, 'render_table JSON parse');
+          rawDataUrl = fb.rawDataUrl; provider = fb.provider; fallbackReason = fb.fallbackReason;
+          break;
+        }
         const { renderTable } = await import('../utils/preciseRenderer');
         rawDataUrl = renderTable(parsed.headers, parsed.rows, parsed.title);
         break;
       }
       case 'render_numberline': {
-        const parsed = JSON.parse(promptText);
+        const parsed = tryParse<any>(promptText);
+        if (parsed === null || typeof parsed.min !== 'number' || typeof parsed.max !== 'number') {
+          const fb = await fallbackToRaster(promptText, 'render_numberline JSON parse');
+          rawDataUrl = fb.rawDataUrl; provider = fb.provider; fallbackReason = fb.fallbackReason;
+          break;
+        }
         const { renderNumberLine } = await import('../utils/preciseRenderer');
         rawDataUrl = renderNumberLine(parsed.min, parsed.max, parsed.marks, parsed.title);
         break;
       }
       case 'render_line_graph': {
-        const parsed = JSON.parse(promptText);
+        const parsed = tryParse<any>(promptText);
+        if (!parsed?.series) {
+          // Real failure mode hit during Grade-7 photosynthesis batch:
+          // classifier returned status='render_line_graph' with the prompt
+          // field as prose ("A line graph showing..."). Fall back to the
+          // AI image generator instead of skipping the image entirely.
+          const fb = await fallbackToRaster(promptText, 'render_line_graph JSON parse');
+          rawDataUrl = fb.rawDataUrl; provider = fb.provider; fallbackReason = fb.fallbackReason;
+          break;
+        }
         const { renderLineGraph } = await import('../utils/preciseRenderer');
         rawDataUrl = renderLineGraph(parsed);
         break;
