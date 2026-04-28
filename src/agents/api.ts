@@ -141,6 +141,7 @@ export const generateImageContent = async (prompt: string): Promise<ImageGenResu
     async () => {
       // Try OpenAI first.
       let fallbackReason: string | undefined;
+      let strictMode = false;
       try {
         const response = await callProxy({
           action: 'generateImageOpenAI',
@@ -154,12 +155,15 @@ export const generateImageContent = async (prompt: string): Promise<ImageGenResu
       } catch (e: any) {
         // Capture the reason so the UI / audit can surface why we fell back.
         fallbackReason = e?.message?.slice(0, 200) || 'OpenAI request failed';
-        // Strict mode: server is configured to block fallback. Re-throw so the
-        // caller sees the OpenAI error verbatim instead of silently degrading.
-        // The server signals strict mode via the error message prefix.
-        if (e?.status === 503 && /STRICT/i.test(String(e?.message || ''))) {
-          throw e;
+        // Strict mode: server is configured to block the Gemini fallback.
+        // The server signals strict mode by including 'STRICT' in the error
+        // message. Re-throw so the caller sees the OpenAI error verbatim.
+        if (/STRICT/i.test(String(e?.message || ''))) {
+          strictMode = true;
         }
+      }
+      if (strictMode) {
+        throw new Error(`OpenAI failed (strict mode — Gemini fallback disabled): ${fallbackReason}`);
       }
       // Gemini fallback.
       const response = await callProxy({

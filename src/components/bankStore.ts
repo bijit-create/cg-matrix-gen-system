@@ -18,6 +18,11 @@ export interface ImageProviderInfo {
   provider: 'openai' | 'gemini' | 'precise';
   /** Set when OpenAI failed and the call fell back to Gemini. */
   fallbackReason?: string;
+  /** Stage G3: true when the stem requires the student to read labels from
+   *  the image (anatomy diagram, "label the parts of"). When provider==='gemini'
+   *  AND requires_labels===true, the audit raises an image_material warn
+   *  because Gemini's image model frequently misspells labels. */
+  requires_labels?: boolean;
 }
 
 export interface BankState {

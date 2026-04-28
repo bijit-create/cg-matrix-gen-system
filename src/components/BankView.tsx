@@ -8,6 +8,7 @@ import { QuestionBody } from './QuestionBody';
 import { Icon } from './swiftee/atoms';
 import { AuditView } from './AuditView';
 import type { AuditResult, AuditReport } from '../agents/audit';
+import { checkImageProviderHealth, type ImageProviderHealth } from '../agents/api';
 
 export interface BankViewProps {
   /** LatexText component threaded in from App.tsx so the bank doesn't re-import katex. */
@@ -33,6 +34,24 @@ export const BankView: React.FC<BankViewProps> = ({
   const bank = useBank();
   const [auditing, setAuditing] = useState(false);
   const [auditProgress, setAuditProgress] = useState<{ done: number; total: number } | null>(null);
+  const [providerHealth, setProviderHealth] = useState<ImageProviderHealth | null>(null);
+  const [pingingProvider, setPingingProvider] = useState(false);
+
+  const pingImageProvider = async () => {
+    setPingingProvider(true);
+    try {
+      const r = await checkImageProviderHealth();
+      setProviderHealth(r);
+    } catch (e: any) {
+      setProviderHealth({
+        openai: { configured: false, model: 'unknown', reachable: false, error: e?.message?.slice(0, 120) || 'health check failed' },
+        gemini: { configured: false, keyCount: 0 },
+        strict: false,
+      });
+    } finally {
+      setPingingProvider(false);
+    }
+  };
 
   const runAudit = async () => {
     if (bank.questions.length === 0) return;
@@ -47,6 +66,7 @@ export const BankView: React.FC<BankViewProps> = ({
         profile: bank.gradeScopeProfile,
         chapterContent: bank.chapterContent,
         boardProfile: bank.boardProfile,
+        imageProviders: bank.imageProviders,
         onProgress: (done, total) => setAuditProgress({ done, total }),
       });
       bankStore.setAudit(result);
@@ -127,11 +147,74 @@ export const BankView: React.FC<BankViewProps> = ({
               ? (auditProgress ? `Auditing ${auditProgress.done}/${auditProgress.total}…` : 'Auditing…')
               : bank.audit ? 'Re-run audit' : 'Run audit'}
           </button>
+          <button
+            className="sw-btn sw-btn-ghost"
+            onClick={pingImageProvider}
+            disabled={pingingProvider}
+            title="Check whether the image-gen pipeline is using OpenAI gpt-image-2 or falling back to Gemini"
+          >
+            <Icon name="image" size="sm" />
+            {pingingProvider ? 'Checking…' : 'Image provider'}
+          </button>
           <button className="sw-btn sw-btn-ghost" onClick={onExport}>
             <Icon name="download" size="sm" /> Export ZIP
           </button>
         </div>
       </div>
+
+      {providerHealth && (
+        <div style={{
+          marginBottom: 14, padding: '10px 14px', borderRadius: 10,
+          background: '#fff', border: '1px solid var(--border-subtle)',
+          display: 'flex', flexDirection: 'column', gap: 6,
+          fontSize: 12, color: 'var(--swiftee-deep)',
+          fontFamily: 'var(--font-body)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: '50%',
+                background: providerHealth.openai.reachable ? '#27a55b'
+                  : providerHealth.openai.configured ? '#C8573B'
+                  : '#B37400',
+              }} />
+              <b>OpenAI {providerHealth.openai.model}</b>
+              <span style={{ color: 'var(--fg-secondary)' }}>
+                {providerHealth.openai.reachable
+                  ? 'configured & reachable — gpt-image-2 is the active path'
+                  : providerHealth.openai.configured
+                    ? `configured but unreachable: ${providerHealth.openai.error || 'unknown error'}`
+                    : 'OPENAI_API_KEY not set in Vercel — every image is Gemini fallback'}
+              </span>
+            </div>
+            <button
+              onClick={() => setProviderHealth(null)}
+              className="sw-btn sw-btn-ghost sw-btn-sm"
+              style={{ padding: '2px 8px' }}
+              title="Dismiss"
+            >
+              <Icon name="close" size="sm" />
+            </button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              width: 8, height: 8, borderRadius: '50%',
+              background: providerHealth.gemini.configured ? '#27a55b' : '#C8573B',
+            }} />
+            <b>Gemini</b>
+            <span style={{ color: 'var(--fg-secondary)' }}>
+              {providerHealth.gemini.configured
+                ? `configured (${providerHealth.gemini.keyCount} key${providerHealth.gemini.keyCount === 1 ? '' : 's'}) — used as fallback`
+                : 'GEMINI_API_KEY not set'}
+            </span>
+          </div>
+          {providerHealth.strict && (
+            <div style={{ marginTop: 4, color: '#B37400' }}>
+              <b>Strict mode</b> active (IMAGE_PROVIDER_STRICT=true) — OpenAI failures will not fall back to Gemini.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Audit view when results exist; otherwise a plain pre-audit question list. */}
       {bank.audit ? (

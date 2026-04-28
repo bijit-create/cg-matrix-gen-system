@@ -113,11 +113,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // failure returns the error + provider='openai' so the client can decide
       // whether to fall through to Gemini (silent default) or surface the
       // error (when IMAGE_PROVIDER_STRICT=true).
+      const strictMode = process.env.IMAGE_PROVIDER_STRICT === 'true';
       const openaiKey = process.env.OPENAI_API_KEY;
       if (!openaiKey) {
         console.warn('[image-gen] OPENAI_API_KEY not configured; client will fall back to Gemini.');
         return res.status(500).json({
-          error: 'OPENAI_API_KEY not configured on server.',
+          error: strictMode
+            ? 'STRICT: OPENAI_API_KEY not configured on server. (IMAGE_PROVIDER_STRICT=true blocks Gemini fallback.)'
+            : 'OPENAI_API_KEY not configured on server.',
           provider: 'openai',
         });
       }
@@ -145,7 +148,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // can diagnose without client-side help.
         console.warn(`[image-gen] OpenAI ${openaiModel} failed: ${oa.status} ${text.slice(0, 200)}`);
         return res.status(is429 ? 429 : oa.status).json({
-          error: `OpenAI image gen failed (${oa.status}): ${text.slice(0, 200)}`,
+          error: strictMode
+            ? `STRICT: OpenAI image gen failed (${oa.status}): ${text.slice(0, 200)}`
+            : `OpenAI image gen failed (${oa.status}): ${text.slice(0, 200)}`,
           retryable: is429,
           provider: 'openai',
         });

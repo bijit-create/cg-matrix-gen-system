@@ -720,7 +720,7 @@ const PipelineRunnerView = () => {
             if (result.status === 'generated' && result.dataUrl) {
               finalImages[qId] = result.dataUrl;
               if (result.provider) {
-                finalProviders[qId] = { provider: result.provider, fallbackReason: result.fallbackReason };
+                finalProviders[qId] = { provider: result.provider, fallbackReason: result.fallbackReason, requires_labels: result.requires_labels };
               }
               const providerTag = result.provider === 'openai'
                 ? 'openai'
@@ -873,7 +873,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
         if (result.status === 'generated' && result.dataUrl) {
           setQuestionImages(prev => ({ ...prev, [qId]: result.dataUrl! }));
           if (result.provider) {
-            setImageProviders(prev => ({ ...prev, [qId]: { provider: result.provider!, fallbackReason: result.fallbackReason } }));
+            setImageProviders(prev => ({ ...prev, [qId]: { provider: result.provider!, fallbackReason: result.fallbackReason, requires_labels: result.requires_labels } }));
           }
           setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: ${result.sizeKb}KB, ${tagFor(result)}`, time: new Date().toLocaleTimeString() }]);
         }
@@ -884,7 +884,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
         if (result.status === 'generated' && result.dataUrl) {
           setQuestionImages(prev => ({ ...prev, [qId]: result.dataUrl! }));
           if (result.provider) {
-            setImageProviders(prev => ({ ...prev, [qId]: { provider: result.provider!, fallbackReason: result.fallbackReason } }));
+            setImageProviders(prev => ({ ...prev, [qId]: { provider: result.provider!, fallbackReason: result.fallbackReason, requires_labels: result.requires_labels } }));
           }
           setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: ${result.sizeKb}KB, ${tagFor(result)}`, time: new Date().toLocaleTimeString() }]);
         } else {
@@ -2782,7 +2782,7 @@ If MCQ, options may also reference the image. For primary grades especially, pre
             if (result.status === 'generated' && result.dataUrl) {
               finalImages[q.id] = result.dataUrl;
               if (result.provider) {
-                finalProviders[q.id] = { provider: result.provider, fallbackReason: result.fallbackReason };
+                finalProviders[q.id] = { provider: result.provider, fallbackReason: result.fallbackReason, requires_labels: result.requires_labels };
               }
               const providerTag = result.provider === 'openai'
                 ? 'openai'
@@ -2955,7 +2955,7 @@ ${q.stem}`;
       if (result.status === 'generated' && result.dataUrl) {
         setQuestionImages(prev => ({ ...prev, [q.id]: result.dataUrl! }));
         if (result.provider) {
-          setImageProviders(prev => ({ ...prev, [q.id]: { provider: result.provider!, fallbackReason: result.fallbackReason } }));
+          setImageProviders(prev => ({ ...prev, [q.id]: { provider: result.provider!, fallbackReason: result.fallbackReason, requires_labels: result.requires_labels } }));
         }
         const providerTag = result.provider === 'openai'
           ? 'openai'
@@ -3263,7 +3263,7 @@ ${q.stem}`;
                                   if (result.status === 'generated' && result.dataUrl) {
                                     setQuestionImages(prev => ({ ...prev, [q.id]: result.dataUrl! }));
                                     if (result.provider) {
-                                      setImageProviders(prev => ({ ...prev, [q.id]: { provider: result.provider!, fallbackReason: result.fallbackReason } }));
+                                      setImageProviders(prev => ({ ...prev, [q.id]: { provider: result.provider!, fallbackReason: result.fallbackReason, requires_labels: result.requires_labels } }));
                                     }
                                     const providerTag = result.provider === 'openai'
                                       ? 'openai'
@@ -3559,7 +3559,7 @@ const BankRoute = () => {
       if (result.status === 'generated' && result.dataUrl) {
         const nextProviders = { ...bank.imageProviders };
         if (result.provider) {
-          nextProviders[qId] = { provider: result.provider, fallbackReason: result.fallbackReason };
+          nextProviders[qId] = { provider: result.provider, fallbackReason: result.fallbackReason, requires_labels: result.requires_labels };
         }
         bankStore.set({
           questionImages: { ...bank.questionImages, [qId]: result.dataUrl },

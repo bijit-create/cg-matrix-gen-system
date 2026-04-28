@@ -161,6 +161,19 @@ Images **cannot** reliably show **material properties**: tender vs woody, soft v
 
 If a question's correct answer depends on the student perceiving a material property, the system either moves the cue into named-plant context (mint, pumpkin, mango tree) or sets `needs_image=false`. The audit's `image_material` check enforces this.
 
+### Image-gen providers (Stage G)
+
+The image-gen pipeline tries **OpenAI gpt-image-2** first and falls back to **Gemini's gemini-2.5-flash-image** on any failure. Without `OPENAI_API_KEY`, the pipeline runs entirely on Gemini — and Gemini's image model frequently misspells anatomy / chemistry / labelled-diagram text ("ESOHAPUS" / "GALLBALLDER") and adds unsolicited answer-marker overlays (a red circled "X" pointing at the answer). For labelled-diagram items in production work, **set `OPENAI_API_KEY` in your Vercel project**.
+
+Per-image visibility:
+- Each generated image carries a small chip in its top-right corner: green `openai`, blue `svg` (deterministic precise renderer), or amber `gemini` (with the fallback reason on hover).
+- Every image-gen log line is tagged: `R1-1: image ✓ (610KB, openai)` or `R1-1: image ✓ (610KB, gemini-fallback: OPENAI_API_KEY not configured on server.)`.
+- The Bank toolbar's **Image provider** button pings live to confirm which provider is configured + reachable, including the active model and (for Gemini) how many keys are loaded for rotation.
+
+Audit-level enforcement:
+- The `image_material` audit category warns at the set level when ≥1 question has `requires_labels=true` (anatomy diagram, "label the parts of") AND was rendered by Gemini fallback. Spelling on labels can't be trusted in that combination.
+- Strict mode (`IMAGE_PROVIDER_STRICT=true` env): when set, OpenAI failures propagate to the UI instead of silently falling through to Gemini. Default off so existing batches don't break.
+
 ---
 
 ## Authoritative reference

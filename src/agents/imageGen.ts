@@ -86,6 +86,25 @@ Question: "${question}"`,
 // produced specifically to depict the answer subject (not the question text).
 // When imageDesc is set, we skip the classifier entirely for raster images and
 // build the prompt directly from it via buildImagePrompt.
+/** Stage G3: a stem requires labels (anatomy diagram, "label the parts of",
+ *  "the structure marked X") if it asks the student to read text from the
+ *  image. Used by callers and the audit to flag Gemini-fallback renders of
+ *  these items — Gemini's image model frequently misspells anatomy labels
+ *  ("ESOHAPUS" / "GALLBALLDER") which are unreliable for assessment use. */
+export function detectRequiresLabels(stem: string, imageDesc?: string): boolean {
+  const haystack = `${stem || ''} ${imageDesc || ''}`.toLowerCase();
+  // Stem cues: explicit references to labels / parts / marked structures.
+  const STEM_CUES = /\b(label(led)?|labels?|part marked|the structure marked|name the (part|structure)|identify the (part|structure)|which (part|structure) is)\b/i;
+  if (STEM_CUES.test(haystack)) return true;
+  // image_desc cues: explicit list of ≥3 quoted labels.
+  const labelMatches = (imageDesc || '').match(/"[A-Za-z][A-Za-z0-9 \-]{1,30}"/g) || [];
+  if (labelMatches.length >= 3) return true;
+  // Anatomy / labelled-diagram domain keywords combined with "diagram" or "system".
+  const ANATOMY = /\b(digestive|respiratory|circulatory|nervous|skeletal|excretory|endocrine|reproductive)\s+system\b/i;
+  if (ANATOMY.test(haystack)) return true;
+  return false;
+}
+
 export async function generateQuestionImage(
   question: string,
   opts?: { force?: boolean; subject?: string; imageDesc?: string },
@@ -100,7 +119,13 @@ export async function generateQuestionImage(
   provider?: 'openai' | 'gemini' | 'precise';
   /** Set when OpenAI failed and the call fell back to Gemini. */
   fallbackReason?: string;
+  /** Stage G3: true when the question's stem asks the student to read labels
+   *  from the image. Combined with provider==='gemini' in the audit to surface
+   *  a "labels may be misspelled" warning. */
+  requires_labels?: boolean;
 }> {
+  const requires_labels = detectRequiresLabels(question, opts?.imageDesc);
+
   // Fast path: if the question already has a concrete image_desc, skip the
   // classifier and go straight to the OpenAI image generator with the desc as
   // SUBJECT. This is the primary path now — generator-decided desc is far more
@@ -117,6 +142,7 @@ export async function generateQuestionImage(
         sizeKb,
         provider: result.provider,
         fallbackReason: result.fallbackReason,
+        requires_labels,
       };
     } catch (e: any) {
       // Fall through to classifier path on failure.
@@ -197,7 +223,7 @@ export async function generateQuestionImage(
     }
 
     const { dataUrl, sizeKb } = await normalizeToCanvas(rawDataUrl);
-    return { status: 'generated', dataUrl, sizeKb, provider, fallbackReason };
+    return { status: 'generated', dataUrl, sizeKb, provider, fallbackReason, requires_labels };
   } catch (e: any) {
     return { status: 'failed', reason: e.message };
   }

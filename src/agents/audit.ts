@@ -87,6 +87,10 @@ export interface RunFullAuditOpts {
   metadata: any;
   /** GRADE_PROFILE from GradeScopeAgent. Drives `grade` category checks. */
   profile?: any;
+  /** Stage G3: provider metadata for the rendered images, keyed by question id.
+   *  When set, the audit raises an image_material warn for items whose stem
+   *  requires labels AND were rendered by Gemini fallback. */
+  imageProviders?: Record<string, { provider: 'openai' | 'gemini' | 'precise'; fallbackReason?: string; requires_labels?: boolean }>;
   chapterContent?: string;
   boardProfile?: 'cbse' | 'state';
   /** Pass pre-computed SME results to skip the (expensive) parallel SME calls. */
@@ -298,6 +302,29 @@ export async function runFullAudit(
       message: `Visual ratio ${imagePct.toFixed(0)}% below target ${target.minPct}% for this grade.`,
       fix: 'Regenerate some text-only questions with needs_image=true, or flip visualisable ones.',
     });
+  }
+
+  // Stage G3: labelled-diagram items rendered by the Gemini fallback are
+  // unreliable because Gemini's image model frequently misspells labels.
+  // Per-question warn under image_material; set-level summary if any.
+  if (opts.imageProviders) {
+    const labelledGeminiIds: string[] = [];
+    questions.forEach(q => {
+      const qId = q.id || q.question_id;
+      const info = opts.imageProviders?.[qId];
+      if (!info) return;
+      if (info.provider === 'gemini' && info.requires_labels) {
+        labelledGeminiIds.push(qId);
+      }
+    });
+    if (labelledGeminiIds.length > 0) {
+      setFlags.push({
+        category: 'image_material',
+        severity: 'warn',
+        message: `${labelledGeminiIds.length} labelled-diagram item${labelledGeminiIds.length === 1 ? '' : 's'} rendered by Gemini fallback (${labelledGeminiIds.join(', ')}). Gemini's image model frequently misspells labels — verify each label spelling or set OPENAI_API_KEY in Vercel and regenerate.`,
+        fix: 'Set OPENAI_API_KEY in your Vercel project and regenerate these images via gpt-image-2.',
+      });
+    }
   }
 
   // F1 (set-level): no two questions in the SAME cell may target the same
