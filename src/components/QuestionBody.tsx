@@ -33,70 +33,6 @@ export interface QuestionBodyProps {
   showCopy?: boolean;
 }
 
-/** Build a full markdown representation of the question for the "Copy all"
- *  action. LaTeX delimiters are preserved verbatim — pasting into another
- *  LaTeX-aware system (or into a markdown renderer with KaTeX) gives the
- *  same rendered output. */
-function questionToMarkdown(q: any, qType: string): string {
-  const lines: string[] = [];
-  const id = q.id || q.question_id;
-  if (id) lines.push(`**${id}** · ${(qType || 'mcq').toUpperCase().replace('_', ' ')}`);
-  if (q.cell || q.cg_cell) lines.push(`Cell: ${q.cell || q.cg_cell}`);
-  lines.push('');
-  lines.push(`### Stem`);
-  lines.push(String(q.stem || ''));
-  lines.push('');
-
-  if (qType === 'mcq' && Array.isArray(q.options)) {
-    lines.push(`### Options`);
-    q.options.forEach((opt: any, i: number) => {
-      const label = opt.label || String.fromCharCode(65 + i);
-      const text = typeof opt === 'string' ? opt : opt.text;
-      const correct = opt.correct || opt.is_correct ? ' ✓' : '';
-      lines.push(`- **${label}.** ${text}${correct}`);
-      if (!correct && (opt.why_wrong || opt.why)) {
-        lines.push(`  - _Why wrong:_ ${opt.why_wrong || opt.why}`);
-      }
-    });
-    lines.push('');
-  }
-  if (qType === 'fill_blank' && q.answer) {
-    lines.push(`### Answer`);
-    lines.push(String(q.answer));
-    lines.push('');
-  }
-  if (qType === 'error_analysis' && Array.isArray(q.steps)) {
-    lines.push(`### Steps`);
-    q.steps.forEach((s: any, i: number) => {
-      const ok = s.correct || s.is_correct ? '✓' : '✗';
-      lines.push(`${i + 1}. ${ok} ${s.text}${s.error_type ? ` _(error: ${s.error_type})_` : ''}`);
-      if (s.fix || s.correct_version) lines.push(`   - Fix: ${s.fix || s.correct_version}`);
-    });
-    lines.push('');
-  }
-  if (qType === 'match' && (q.pairs || q.match_pairs)) {
-    lines.push(`### Match Pairs`);
-    (q.pairs || q.match_pairs).forEach((p: any) => {
-      const s = typeof p === 'string' ? p : (p.left && p.right ? `${p.left} → ${p.right}` : JSON.stringify(p));
-      lines.push(`- ${s}`);
-    });
-    lines.push('');
-  }
-  if (qType === 'arrange' && (q.items || q.arrange_items)) {
-    lines.push(`### Correct Order`);
-    (q.items || q.arrange_items).forEach((item: string, i: number) => {
-      lines.push(`${i + 1}. ${item}`);
-    });
-    lines.push('');
-  }
-  if (q.rationale) {
-    lines.push(`### Rationale`);
-    lines.push(String(q.rationale));
-    lines.push('');
-  }
-  return lines.join('\n').trim();
-}
-
 /** Helper: extract the left/right strings from a match pair entry, which may
  *  be a string ("X → Y" or "X => Y") OR an object {left, right}. */
 function pairToString(pair: any): string {
@@ -137,20 +73,6 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
 
   return (
     <div style={{ fontFamily: 'var(--font-body)' }}>
-      {showCopy && (
-        <div style={{
-          display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
-          gap: 6, marginBottom: 8,
-        }}>
-          <CopyButton
-            text={questionToMarkdown(q, qType)}
-            label="Copy all"
-            variant="pill"
-            title="Copy the entire question (stem + options + rationale) as markdown with LaTeX delimiters preserved"
-          />
-        </div>
-      )}
-
       {image && (
         <div style={{
           ...wrapGap,
