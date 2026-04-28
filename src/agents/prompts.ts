@@ -39,9 +39,19 @@ For each: one-line definition, count, status (active/not_required). Do NOT force
 A3/AN3: only if content supports multi-step/reasoning.
 ALLOCATION: Research (NCERT/CBSE/PISA/TIMSS) shows U2 and A2 produce the strongest items. Allocate majority to U2+A2. Keep R1 to 15-20%. AN2 10-15%. A3/AN3 only if justified.`,
 
-  MisconceptionAgent: `Select research-backed misconceptions. NEVER invent. Only use catalog_matches or research_findings.
-Select 4-8 most relevant. Preserve original IDs and sources. Each must be specific and actionable.
-Authoritative sources to prioritise (in this order for Indian curricula): HBCSE / epiSTEME (Subramaniam, Chunawala, Haydock), Eklavya HSTP, NCERT exemplars, MOSART (Sadler), AAAS Project 2061, PhysPort (FCI etc.), CINS/CANS (Anderson), CSMS (Hart, Küchemann), Pfundt & Duit bibliography, Treagust two-tier diagnostics, Eedi NeurIPS dataset, Test of Economic Literacy (Walstad). The 'incorrect_reasoning' field must capture the student's actual flawed thinking ("a student who picks this is reasoning that …"), and 'related_subskills' must point at the subskill IDs this misconception threatens.`,
+  MisconceptionAgent: `Select research-backed misconceptions. NEVER invent. Sources you may use are EXACTLY: catalog_matches (pre-vetted entries) and research_findings (fresh grounded-search results from authoritative sources). When BOTH are present, MERGE them — prefer catalog entries when they fit, supplement with research entries that the catalog lacks, and dedup near-duplicates. Pair each entry with a primary citation when available.
+
+Select 4-8 most relevant entries. Preserve original IDs and sources where they exist; mint new IDs (e.g., RES-001) only for research-derived entries.
+
+Authoritative sources to prioritise (in this order for Indian curricula): HBCSE / epiSTEME (Ramadas, Subramaniam, Chunawala, Haydock, Deshmukh, Vijapurkar, Padalkar), Eklavya HSTP, NCERT exemplars, MOSART (Sadler, Harvard), AAAS Project 2061, PhysPort (FCI / FMCE / TUG-K / BEMA / CSEM), CINS / CANS (Anderson), CSMS (Hart, Küchemann), Driver et al. Making Sense of Secondary Science, Pfundt & Duit STCSE bibliography, Treagust two-tier diagnostics, Eedi NeurIPS 2020 dataset, Test of Economic Literacy (Walstad).
+
+For each misconception:
+- 'misconception_text' = the student's belief in plain student-facing terms.
+- 'incorrect_reasoning' = the student's actual flawed thinking ("a student who picks this is reasoning that …"), NOT a teacher's correction. Tag with one theoretical framework when possible (p-prim, ontological-category, mental-model, threshold-concept, learning-progression facet, naive-folk-theory).
+- 'related_subskills' = subskill IDs this misconception threatens.
+- Each must be specific and actionable.
+
+NCERT chapter-fidelity reminder (when chapter content is provided to the generator downstream): the misconception you list will be used to build distractors. Prefer misconceptions that map to organisms / examples / contexts the chapter actually introduces (e.g., for NCERT Class 7 plant reproduction: yeast, Spirogyra, Bryophyllum, potato are in-chapter; Hydra is Class 10 and should not be required of Class 7). The CONCEPT under test is the source of truth — but EXAMPLES used to test it must match what the student has been exposed to.`,
 
   // --- Generation: TWO STAGES ---
 
@@ -74,8 +84,16 @@ LATEX (MANDATORY for any mathematical content):
 - Applies to EVERY field, including Match "pairs" (e.g., "\\(\\dfrac{1}{x^p}\\) → \\(x^{-p}\\)") and Arrange "items".
 - Plain prose (non-mathematical words) stays plain — do not LaTeX-wrap English words.
 
-CONTENT:
-- Generate ONLY from "selected_content". Use ONLY terms that appear verbatim in selected_content / chapter_content / approved_terms. Do NOT substitute synonyms (e.g., if chapter says "photosynthesis", never write "food-making process"; if it says "evaporation", never write "drying up"). If a term you want is not in the chapter, rephrase to avoid it.
+CONTENT — concept-as-source-of-truth, textbook as one representation:
+- The CONCEPT being assessed is the source of truth. The textbook is ONE representation of that concept, with one set of examples and one set of words. A good item probes the underlying concept regardless of whether the textbook covered it that exact way.
+- THIS HAS LIMITS — do not exploit it to import out-of-grade material. The reconciliation is:
+
+  TERMINOLOGY: prefer chapter-aligned terms. If the chapter says "photosynthesis", never write "food-making process"; if it says "evaporation", never write "drying up". Stay in NCERT register. But this is not a leash on cognition — the item probes whether the student understands the CONCEPT, not whether they recognise the textbook's specific phrasing.
+
+  EXAMPLES (MOST IMPORTANT): named organisms, named instances, named places, and named scenarios you put in the stem MUST match what the student's chapter / curriculum has actually introduced — or be common-knowledge for the grade. Indian Grade-7 NCERT sanity examples for plant reproduction: yeast, Spirogyra, Bryophyllum, potato, ferns, mould are IN-chapter; Hydra appears in Class 10 and SHOULD NOT be required of a Class-7 item. If you don't know whether a specific example is in the chapter, pick a common-knowledge instance for the grade (mint, tomato, money plant for plants; cricket, kitchen, bus for everyday contexts). Better still: derive the example from the provided chapter_content / selected_content / approved_terms.
+
+  COGNITIVE DEMAND: a Grade-7 chapter operationalising "fragmentation" via Spirogyra does not mean the only legitimate Grade-7 fragmentation item is one about Spirogyra. The student should be able to apply the concept to a new in-grade instance. So: novel in-grade scenarios that exercise the SAME concept with chapter-introduced or common-knowledge examples are not just allowed — they're preferred.
+
 - ONE problem per stem. Stem contains ALL info needed.
 - NEVER: negative phrasing, "Which is true/false?", passive voice, textbook verbatim.
 

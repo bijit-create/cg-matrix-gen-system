@@ -281,16 +281,16 @@ export class AgentOrchestrator {
             }));
             this.log('Misconception Agent', `${catalogMatches.length} catalog matches (top by relevance).`);
 
+            // Stage F++: ALWAYS run the grounded search to enrich the catalog.
+            // Previously gated on `catalogMatches.length < 4`, which meant
+            // common topics (e.g., plant taxonomy) skipped HBCSE / epiSTEME
+            // / Eklavya / MOSART entirely and the bank inherited only the
+            // local catalog's coverage. Concept-driven assessment requires
+            // both: catalog matches give precision, the grounded search
+            // gives recall and Indian-context replications.
             let output: any[] = [];
-            if (catalogMatches.length >= 4) {
-                output = await this.runAgent('Misconception Agent', Prompts.MisconceptionAgent, {
-                    construct: this.artifacts.construct, subskills: approvedSubskills,
-                    learning_objective: this.config.lo, skill: this.config.skill,
-                    catalog_matches: catalogMatches.slice(0, 30),
-                    instruction: 'Select 4-8 most relevant. Do NOT invent new ones.'
-                }, MisconceptionSchema);
-            } else {
-                this.log('Misconception Agent', 'Catalog insufficient. Searching online...');
+            {
+                this.log('Misconception Agent', 'Searching authoritative sources to enrich the catalog…');
                 const sourceUrls = [...new Set((misconceptionCatalog as any[])
                     .filter((m: any) => subject.includes('math') ? (m.SUBJECT || '').toLowerCase() === 'math' : subject.includes('sci') ? (m.SUBJECT || '').toLowerCase() === 'science' : true)
                     .map((m: any) => m.SOURCE_URL).filter(Boolean)
@@ -406,19 +406,38 @@ For each misconception, write incorrect_reasoning as the STUDENT'S flawed thinki
 If absolutely nothing relevant found, say "NO_MISCONCEPTIONS_FOUND".`,
                         JSON.stringify({ lo: this.config.lo, skill: this.config.skill })
                     );
-                    if (!searchResult.text.includes('NO_MISCONCEPTIONS_FOUND')) {
-                        output = await this.runAgent('Misconception Agent', Prompts.MisconceptionAgent, {
-                            instruction: 'Parse findings into structured misconceptions. Only cited sources.',
-                            research_findings: searchResult.text, catalog_matches: catalogMatches, learning_objective: this.config.lo
-                        }, MisconceptionSchema);
-                    }
+                    const hasFindings = searchResult.text && !searchResult.text.includes('NO_MISCONCEPTIONS_FOUND');
+                    // Always merge: catalog matches (precision) + search findings (recall +
+                    // Indian-context replications). MisconceptionAgent dedups, prioritises
+                    // by relevance, and emits a single 4–8 entry list.
+                    output = await this.runAgent('Misconception Agent', Prompts.MisconceptionAgent, {
+                        construct: this.artifacts.construct,
+                        subskills: approvedSubskills,
+                        learning_objective: this.config.lo,
+                        skill: this.config.skill,
+                        catalog_matches: catalogMatches.slice(0, 30),
+                        research_findings: hasFindings ? searchResult.text : '',
+                        instruction: hasFindings
+                            ? 'You have BOTH a catalog of pre-vetted misconceptions AND fresh research findings from authoritative sources (HBCSE, epiSTEME, MOSART, AAAS, Eedi, etc.). Merge them: prefer catalog entries when they fit; supplement with the most-relevant research-grounded entries that the catalog lacks. Dedup near-duplicates. Pair each entry with a primary citation. Select 4–8 most relevant. NEVER invent new misconceptions outside these inputs.'
+                            : 'Parse the catalog matches into structured misconceptions. Search returned no usable findings; prefer the catalog. Select 4–8 most relevant. NEVER invent new ones.',
+                    }, MisconceptionSchema);
                 } catch (e: any) {
                     this.log('Misconception Agent', `Search failed: ${e.message}`);
-                    output = catalogMatches.slice(0, 8).map((m: any, i: number) => ({
-                        misconception_id: m.id || `M-${i+1}`, misconception_text: m.misconception,
-                        type: (m.type || 'conceptual').toLowerCase(), prevalence: m.prevalence || 'unknown',
-                        incorrect_reasoning: `Source: ${m.source}`
-                    }));
+                    // Fallback: catalog-only.
+                    if (catalogMatches.length > 0) {
+                        output = await this.runAgent('Misconception Agent', Prompts.MisconceptionAgent, {
+                            construct: this.artifacts.construct,
+                            subskills: approvedSubskills,
+                            learning_objective: this.config.lo,
+                            skill: this.config.skill,
+                            catalog_matches: catalogMatches.slice(0, 30),
+                            instruction: 'Select 4-8 most relevant. NEVER invent new ones.',
+                        }, MisconceptionSchema).catch(() => catalogMatches.slice(0, 8).map((m: any, i: number) => ({
+                            misconception_id: m.id || `M-${i+1}`, misconception_text: m.misconception,
+                            type: (m.type || 'conceptual').toLowerCase(), prevalence: m.prevalence || 'unknown',
+                            incorrect_reasoning: `Source: ${m.source}`,
+                        })));
+                    }
                 }
             }
             this.artifacts.misconceptions = output;

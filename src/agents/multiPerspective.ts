@@ -188,19 +188,29 @@ Return: pass (true if language is appropriate), score (0-100), issues (list of l
   if (chapterContent && chapterContent.trim().length >= 80) {
     perspectives.push({
       lens: 'Terminology',
-      prompt: `You are an NCERT textbook reviewer. Check this question for TERMINOLOGY alignment ONLY.
-- List any noun or technical term in the stem, options, or answer that is NOT present verbatim in the CHAPTER CONTENT below, AND is a non-NCERT synonym for a chapter term (e.g., "food-making process" instead of "photosynthesis"; "drying up" instead of "evaporation").
-- Do NOT flag common vocabulary (articles, common verbs, grade-appropriate general words). Only flag domain-specific substitutions.
-- If every domain-specific term is chapter-aligned, return pass=true.
+      prompt: `You are an NCERT textbook reviewer. Check this question for TERMINOLOGY alignment AND CHAPTER-INTRODUCED EXAMPLES.
+
+The frame: the CONCEPT under test is the source of truth, the chapter is ONE representation of it. The item probes the concept, not the chapter's exact wording. BUT examples / named instances must match what the chapter introduces (or be common-knowledge for the grade), because the student needs to recognise them.
+
+Two distinct checks:
+
+(1) TERMINOLOGY substitutions — list any DOMAIN-SPECIFIC noun / technical term in the stem, options, or answer that is NOT present verbatim in the CHAPTER CONTENT below AND is a non-NCERT synonym for a chapter term (e.g., "food-making process" instead of "photosynthesis"; "drying up" instead of "evaporation"). Common vocabulary (articles, generic verbs, grade-appropriate words) is fine — only flag domain-specific substitutions.
+
+(2) CHAPTER-INTRODUCED EXAMPLES — list any NAMED ORGANISM, NAMED PERSON-AS-EXAMPLE, NAMED PLACE, or NAMED SPECIFIC INSTANCE in the stem or options that is NOT in the CHAPTER CONTENT below AND is also NOT obvious common-knowledge for Grade ${grade} students in India. Examples to model the rule on:
+  - For NCERT Class 7 plant reproduction: yeast, Spirogyra, Bryophyllum, potato, ferns, mould are IN-chapter and acceptable. **Hydra appears in Class 10** — if a Class-7 stem refers to Hydra and the chapter content doesn't introduce it, flag it.
+  - For any subject: a stem that names a specific scientist / historical figure / city / dataset that the chapter doesn't introduce AND that a typical student of this grade would not be expected to know — flag it.
+  - Common-knowledge instances (mint, tomato, money plant, cricket, kitchen, bus, river) at grade-appropriate level are fine even when the chapter doesn't list them.
+
+If every domain-specific term is chapter-aligned AND every named example is chapter-introduced or grade-common-knowledge, return pass=true.
 
 Question:
 ${qSummary}
 
-CHAPTER CONTENT (source of truth):
+CHAPTER CONTENT (source of truth for examples):
 ${chapterContent.slice(0, 2500)}
 
 Subject: ${subject} | Grade: ${grade}
-Return: pass (true if all domain-specific terms align with chapter), score (0-100), issues (list of non-NCERT substitutions found, each naming the wrong term and the correct chapter term).`,
+Return: pass (true if both checks clean), score (0-100), issues (list, each naming either the substituted term + correct chapter term OR the out-of-chapter example + why it's out-of-chapter / out-of-grade).`,
     });
   }
 
