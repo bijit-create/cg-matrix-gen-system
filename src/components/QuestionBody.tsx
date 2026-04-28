@@ -13,6 +13,7 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { splitPair } from '../utils/matchPairs';
 import { extractMarkdownTable } from '../utils/markdownTable';
+import { CopyButton } from './CopyButton';
 
 export type BodyDensity = 'detailed' | 'compact';
 
@@ -26,6 +27,81 @@ export interface QuestionBodyProps {
   density?: BodyDensity;
   /** LaTeX renderer. Caller supplies the app-level LatexText so we don't pull katex twice. */
   Latex: React.FC<{ text: any; className?: string; block?: boolean }>;
+  /** When true (default), copy buttons appear next to every text field and the image.
+   *  Set false for read-only previews (e.g., export previews) where the buttons would
+   *  visually clutter the layout. */
+  showCopy?: boolean;
+}
+
+/** Build a full markdown representation of the question for the "Copy all"
+ *  action. LaTeX delimiters are preserved verbatim — pasting into another
+ *  LaTeX-aware system (or into a markdown renderer with KaTeX) gives the
+ *  same rendered output. */
+function questionToMarkdown(q: any, qType: string): string {
+  const lines: string[] = [];
+  const id = q.id || q.question_id;
+  if (id) lines.push(`**${id}** · ${(qType || 'mcq').toUpperCase().replace('_', ' ')}`);
+  if (q.cell || q.cg_cell) lines.push(`Cell: ${q.cell || q.cg_cell}`);
+  lines.push('');
+  lines.push(`### Stem`);
+  lines.push(String(q.stem || ''));
+  lines.push('');
+
+  if (qType === 'mcq' && Array.isArray(q.options)) {
+    lines.push(`### Options`);
+    q.options.forEach((opt: any, i: number) => {
+      const label = opt.label || String.fromCharCode(65 + i);
+      const text = typeof opt === 'string' ? opt : opt.text;
+      const correct = opt.correct || opt.is_correct ? ' ✓' : '';
+      lines.push(`- **${label}.** ${text}${correct}`);
+      if (!correct && (opt.why_wrong || opt.why)) {
+        lines.push(`  - _Why wrong:_ ${opt.why_wrong || opt.why}`);
+      }
+    });
+    lines.push('');
+  }
+  if (qType === 'fill_blank' && q.answer) {
+    lines.push(`### Answer`);
+    lines.push(String(q.answer));
+    lines.push('');
+  }
+  if (qType === 'error_analysis' && Array.isArray(q.steps)) {
+    lines.push(`### Steps`);
+    q.steps.forEach((s: any, i: number) => {
+      const ok = s.correct || s.is_correct ? '✓' : '✗';
+      lines.push(`${i + 1}. ${ok} ${s.text}${s.error_type ? ` _(error: ${s.error_type})_` : ''}`);
+      if (s.fix || s.correct_version) lines.push(`   - Fix: ${s.fix || s.correct_version}`);
+    });
+    lines.push('');
+  }
+  if (qType === 'match' && (q.pairs || q.match_pairs)) {
+    lines.push(`### Match Pairs`);
+    (q.pairs || q.match_pairs).forEach((p: any) => {
+      const s = typeof p === 'string' ? p : (p.left && p.right ? `${p.left} → ${p.right}` : JSON.stringify(p));
+      lines.push(`- ${s}`);
+    });
+    lines.push('');
+  }
+  if (qType === 'arrange' && (q.items || q.arrange_items)) {
+    lines.push(`### Correct Order`);
+    (q.items || q.arrange_items).forEach((item: string, i: number) => {
+      lines.push(`${i + 1}. ${item}`);
+    });
+    lines.push('');
+  }
+  if (q.rationale) {
+    lines.push(`### Rationale`);
+    lines.push(String(q.rationale));
+    lines.push('');
+  }
+  return lines.join('\n').trim();
+}
+
+/** Helper: extract the left/right strings from a match pair entry, which may
+ *  be a string ("X → Y" or "X => Y") OR an object {left, right}. */
+function pairToString(pair: any): string {
+  const { left, right } = splitPair(pair);
+  return `${left} → ${right}`;
 }
 
 const SectionLabel: React.FC<{ show: boolean; children: ReactNode }> = ({ show, children }) =>
@@ -45,7 +121,7 @@ const SectionLabel: React.FC<{ show: boolean; children: ReactNode }> = ({ show, 
     : null;
 
 export const QuestionBody: React.FC<QuestionBodyProps> = ({
-  q, qType: qTypeProp, image, imageProvider, density = 'compact', Latex,
+  q, qType: qTypeProp, image, imageProvider, density = 'compact', Latex, showCopy = true,
 }) => {
   const qType = qTypeProp || q.type || 'mcq';
   const detailed = density === 'detailed';
@@ -61,6 +137,20 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
 
   return (
     <div style={{ fontFamily: 'var(--font-body)' }}>
+      {showCopy && (
+        <div style={{
+          display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
+          gap: 6, marginBottom: 8,
+        }}>
+          <CopyButton
+            text={questionToMarkdown(q, qType)}
+            label="Copy all"
+            variant="pill"
+            title="Copy the entire question (stem + options + rationale) as markdown with LaTeX delimiters preserved"
+          />
+        </div>
+      )}
+
       {image && (
         <div style={{
           ...wrapGap,
@@ -70,6 +160,15 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
           position: 'relative',
         }}>
           <img src={image} alt="Question" style={{ maxWidth: '100%', maxHeight: 192, objectFit: 'contain' }} />
+          {showCopy && (
+            <div style={{ position: 'absolute', top: 4, left: 4 }}>
+              <CopyButton
+                imageDataUrl={image}
+                label="Copy"
+                title="Copy image to clipboard (PNG)"
+              />
+            </div>
+          )}
           {imageProvider && (
             <span
               title={
@@ -99,7 +198,12 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
       {/* Stem — detects inline markdown tables and renders them as proper HTML
            tables so tabular data doesn't collapse into unreadable prose. */}
       <div style={wrapGap}>
-        <SectionLabel show={detailed}>Question Stem</SectionLabel>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: detailed ? 6 : 4 }}>
+          <SectionLabel show={detailed}>Question Stem</SectionLabel>
+          {showCopy && q.stem && (
+            <CopyButton text={String(q.stem)} title="Copy stem text (LaTeX preserved)" />
+          )}
+        </div>
         <div
           className="select-all cursor-text"
           style={{
@@ -175,7 +279,9 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
                 <div
                   key={i}
                   style={{
-                    display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 10,
+                    display: 'grid',
+                    gridTemplateColumns: showCopy ? '24px 1fr auto auto' : '24px 1fr auto',
+                    gap: 10,
                     alignItems: 'center', padding: rowPad, borderRadius: 8,
                     background: isCorrect ? '#E5F5EE' : '#FAFAFC',
                     border: `1px solid ${isCorrect ? '#9FD9B8' : 'var(--border-subtle)'}`,
@@ -199,6 +305,12 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
                       fontStyle: 'italic', maxWidth: 200, textAlign: 'right',
                     }}>→ {opt.why_wrong || opt.why}</span>
                   ) : null}
+                  {showCopy && (
+                    <CopyButton
+                      text={String(text || '')}
+                      title={`Copy option ${label} text (LaTeX preserved)`}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -221,7 +333,10 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
             }}
           >
             <span className="sw-chip sw-chip-green sw-chip-sm" style={{ fontFamily: 'var(--font-display)' }}>Answer</span>
-            <Latex text={answer} />
+            <span style={{ flex: 1 }}><Latex text={answer} /></span>
+            {showCopy && answer && (
+              <CopyButton text={String(answer)} title="Copy answer (LaTeX preserved)" />
+            )}
           </div>
         </div>
       )}
@@ -233,11 +348,15 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
           <div style={{ display: 'grid', gap: 6 }}>
             {q.steps.map((step: any, i: number) => {
               const isCorr = step.correct || step.is_correct;
+              const stepText = step.text || '';
+              const fixText = step.fix || step.correct_version;
               return (
                 <div
                   key={i}
                   style={{
-                    display: 'grid', gridTemplateColumns: '44px 1fr auto', gap: 10,
+                    display: 'grid',
+                    gridTemplateColumns: showCopy ? '44px 1fr auto auto' : '44px 1fr auto',
+                    gap: 10,
                     alignItems: 'start', padding: rowPad, borderRadius: 8,
                     background: isCorr ? '#F6FCF8' : '#FEF7F6',
                     border: `1px solid ${isCorr ? '#C6E6D5' : '#F3CBC5'}`,
@@ -252,11 +371,11 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
                       className="select-all cursor-text"
                       style={{ textDecoration: isCorr ? 'none' : 'line-through', color: isCorr ? 'var(--swiftee-deep)' : '#C8573B' }}
                     >
-                      <Latex text={step.text} />
+                      <Latex text={stepText} />
                     </span>
-                    {!isCorr && (step.fix || step.correct_version) && (
+                    {!isCorr && fixText && (
                       <div style={{ marginTop: 4, fontSize: 12, color: 'var(--green-400)' }}>
-                        Correct: <Latex text={step.fix || step.correct_version} />
+                        Correct: <Latex text={fixText} />
                       </div>
                     )}
                     {step.error_type && !isCorr && (
@@ -271,6 +390,12 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
                     )}
                   </div>
                   {!isCorr && <span className="sw-chip sw-chip-red sw-chip-sm">Error</span>}
+                  {showCopy && (
+                    <CopyButton
+                      text={isCorr ? String(stepText) : `${stepText}${fixText ? `\nCorrect: ${fixText}` : ''}`}
+                      title={`Copy step ${i + 1}${!isCorr && fixText ? ' (with correction)' : ''}`}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -282,7 +407,11 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
       {qType === 'match' && (q.pairs?.length > 0 || q.match_pairs?.length > 0) && (
         <div style={wrapGap}>
           <SectionLabel show={detailed}>Match Pairs</SectionLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 24px 1fr', gap: 10, rowGap: 8 }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: showCopy ? '1fr 24px 1fr auto' : '1fr 24px 1fr',
+            gap: 10, rowGap: 8,
+          }}>
             {(q.pairs || q.match_pairs || []).map((pair: any, i: number) => {
               const { left, right } = splitPair(pair);
               return (
@@ -305,6 +434,14 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
                   }}>
                     <Latex text={right} />
                   </div>
+                  {showCopy && (
+                    <div style={{ alignSelf: 'center' }}>
+                      <CopyButton
+                        text={pairToString(pair)}
+                        title="Copy match pair (LaTeX preserved)"
+                      />
+                    </div>
+                  )}
                 </React.Fragment>
               );
             })}
@@ -337,6 +474,9 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
                 <span className="select-all cursor-text" style={{ fontSize: 13, color: 'var(--swiftee-deep)', flex: 1 }}>
                   <Latex text={item} />
                 </span>
+                {showCopy && (
+                  <CopyButton text={String(item)} title={`Copy item ${i + 1} (LaTeX preserved)`} />
+                )}
               </div>
             ))}
           </div>
@@ -349,9 +489,18 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
           marginTop: 12, padding: '10px 12px', borderRadius: 8,
           background: '#F7F0FE', borderLeft: '3px solid var(--swiftee-purple)',
           fontSize: 12, color: 'var(--swiftee-deep)', lineHeight: 1.5,
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8,
         }}>
-          <span style={{ fontWeight: 700 }}>Rationale · </span>
-          <span className="select-all cursor-text"><Latex text={q.rationale} /></span>
+          <div style={{ flex: 1 }}>
+            <span style={{ fontWeight: 700 }}>Rationale · </span>
+            <span className="select-all cursor-text"><Latex text={q.rationale} /></span>
+          </div>
+          {showCopy && (
+            <CopyButton
+              text={String(q.rationale)}
+              title="Copy rationale (LaTeX preserved)"
+            />
+          )}
         </div>
       )}
 
