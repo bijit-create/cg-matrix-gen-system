@@ -124,53 +124,13 @@ export const BankView: React.FC<BankViewProps> = ({
   const warnCount = bank.audit?.perQuestion.filter(r => r.severity === 'warn').length ?? 0;
   const passCount = bank.audit?.perQuestion.filter(r => r.severity === 'pass').length ?? 0;
 
-  // Big visible warning when OpenAI is not actually being used. Triggers
-  // when health-check confirms either "key missing" or "key present but
-  // not reachable". Stays until the operator sets OPENAI_API_KEY in Vercel
-  // and the next health-check passes.
-  const openaiUnhealthy = providerHealth
-    && (!providerHealth.openai.configured || providerHealth.openai.reachable === false);
-
   return (
     <div style={{ padding: '20px 24px', maxWidth: 1040, margin: '0 auto' }}>
-      {openaiUnhealthy && (
-        <div style={{
-          marginBottom: 14, padding: '12px 14px', borderRadius: 10,
-          background: '#FFF4E5', border: '2px solid #C8573B',
-          color: '#7A2E18', fontSize: 13, lineHeight: 1.5,
-          fontFamily: 'var(--font-body)',
-          display: 'flex', alignItems: 'flex-start', gap: 10,
-        }}>
-          <Icon name="warning" size="md" />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontFamily: 'var(--font-display)', marginBottom: 4 }}>
-              OpenAI gpt-image-2 is NOT active — every image is rendered by Gemini fallback
-            </div>
-            <div>
-              {!providerHealth!.openai.configured
-                ? <>The <code>OPENAI_API_KEY</code> environment variable is not set on the Vercel server. Add it in your Vercel project's Environment Variables (Production + Preview), then redeploy.</>
-                : <>OpenAI is configured but unreachable: <code>{providerHealth!.openai.error || 'unknown error'}</code>. Common causes: expired key, billing limit, model not enabled on your account.</>
-              }
-            </div>
-            <div style={{ marginTop: 6, fontSize: 12, color: '#5A220F' }}>
-              Until this is fixed, expect Gemini's typical failure modes: misspelled labels (ESOHAPUS / GALLBALLDER), unsolicited answer-marker overlays, and stock-photo style on what should be diagrams.
-            </div>
-          </div>
-        </div>
-      )}
-      {providerHealth && providerHealth.openai.reachable && (
-        <div style={{
-          marginBottom: 14, padding: '8px 12px', borderRadius: 8,
-          background: '#E8F7EE', border: '1px solid #6FBE8C',
-          color: '#1F5C32', fontSize: 12, fontFamily: 'var(--font-body)',
-          display: 'flex', alignItems: 'center', gap: 8,
-        }}>
-          <Icon name="check_circle" size="sm" />
-          <span>
-            <b>OpenAI {providerHealth.openai.model} is active</b> — new images render via gpt-image-2 (Gemini stays as fallback).
-          </span>
-        </div>
-      )}
+      {/* Provider health banner is now mounted globally at App root
+          (ProviderHealthBanner) so the truth is visible on every tab,
+          not just the Bank — and on the Bank's empty state too. The
+          per-Bank "Image provider" toolbar button below remains for
+          explicit re-pings. */}
 
       {/* Header bar */}
       <div style={{

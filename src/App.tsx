@@ -53,6 +53,7 @@ import { AgentLogDrawer } from './components/swiftee/AgentLogDrawer';
 import { ExportHero } from './components/swiftee/ExportHero';
 import { BankView } from './components/BankView';
 import { useBank, bankStore } from './components/bankStore';
+import { ProviderHealthBanner } from './components/ProviderHealthBanner';
 
 // --- Types ---
 type Tab = 'dashboard' | 'generate' | 'bank';
@@ -3741,6 +3742,7 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen w-full overflow-hidden bg-[var(--bg)] text-[var(--ink)]">
       <TopNav activeTab={activeTab} setActiveTab={setActiveTab} />
+      <ProviderHealthBanner />
 
       <main className="flex-1 w-full overflow-y-auto">
         <AnimatePresence mode="wait">
