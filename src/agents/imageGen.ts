@@ -142,6 +142,10 @@ export async function generateQuestionImage(
    *  from the image. Combined with provider==='gemini' in the audit to surface
    *  a "labels may be misspelled" warning. */
   requires_labels?: boolean;
+  /** The actual enriched prompt sent to the image model. Captured so the SME
+   *  can view it in the bank, copy it, and paste into ChatGPT / gpt-image-2
+   *  for manual iteration when the auto-generated image isn't satisfactory. */
+  prompt?: string;
 }> {
   const requires_labels = detectRequiresLabels(question, opts?.imageDesc);
 
@@ -162,6 +166,7 @@ export async function generateQuestionImage(
         provider: result.provider,
         fallbackReason: result.fallbackReason,
         requires_labels,
+        prompt: enriched,
       };
     } catch (e: any) {
       // Fall through to classifier path on failure.
@@ -202,6 +207,7 @@ export async function generateQuestionImage(
     return {
       rawDataUrl: result.dataUrl,
       provider: result.provider,
+      enrichedPrompt: enriched,
       fallbackReason: `precise renderer skipped (${why}); used ${result.provider}` + (result.fallbackReason ? `: ${result.fallbackReason}` : ''),
     };
   };
@@ -210,6 +216,7 @@ export async function generateQuestionImage(
     let rawDataUrl: string;
     let provider: 'openai' | 'gemini' | 'precise' = 'precise';
     let fallbackReason: string | undefined;
+    let capturedPrompt: string | undefined;
     const promptText: string = intentPrompt as string;
 
     switch (intentStatus) {
@@ -222,35 +229,38 @@ export async function generateQuestionImage(
         const parsed = tryParse<any>(promptText);
         if (!parsed?.data) {
           const fb = await fallbackToRaster(promptText, 'render_chart JSON parse');
-          rawDataUrl = fb.rawDataUrl; provider = fb.provider; fallbackReason = fb.fallbackReason;
+          rawDataUrl = fb.rawDataUrl; provider = fb.provider; fallbackReason = fb.fallbackReason; capturedPrompt = fb.enrichedPrompt;
           break;
         }
         const { renderBarChart, renderPieChart } = await import('../utils/preciseRenderer');
         rawDataUrl = parsed.type === 'pie'
           ? renderPieChart(parsed.data, parsed.title)
           : renderBarChart(parsed.data, parsed.title);
+        capturedPrompt = promptText;
         break;
       }
       case 'render_table': {
         const parsed = tryParse<any>(promptText);
         if (!parsed?.headers || !parsed?.rows) {
           const fb = await fallbackToRaster(promptText, 'render_table JSON parse');
-          rawDataUrl = fb.rawDataUrl; provider = fb.provider; fallbackReason = fb.fallbackReason;
+          rawDataUrl = fb.rawDataUrl; provider = fb.provider; fallbackReason = fb.fallbackReason; capturedPrompt = fb.enrichedPrompt;
           break;
         }
         const { renderTable } = await import('../utils/preciseRenderer');
         rawDataUrl = renderTable(parsed.headers, parsed.rows, parsed.title);
+        capturedPrompt = promptText;
         break;
       }
       case 'render_numberline': {
         const parsed = tryParse<any>(promptText);
         if (parsed === null || typeof parsed.min !== 'number' || typeof parsed.max !== 'number') {
           const fb = await fallbackToRaster(promptText, 'render_numberline JSON parse');
-          rawDataUrl = fb.rawDataUrl; provider = fb.provider; fallbackReason = fb.fallbackReason;
+          rawDataUrl = fb.rawDataUrl; provider = fb.provider; fallbackReason = fb.fallbackReason; capturedPrompt = fb.enrichedPrompt;
           break;
         }
         const { renderNumberLine } = await import('../utils/preciseRenderer');
         rawDataUrl = renderNumberLine(parsed.min, parsed.max, parsed.marks, parsed.title);
+        capturedPrompt = promptText;
         break;
       }
       case 'render_line_graph': {
@@ -261,11 +271,12 @@ export async function generateQuestionImage(
           // field as prose ("A line graph showing..."). Fall back to the
           // AI image generator instead of skipping the image entirely.
           const fb = await fallbackToRaster(promptText, 'render_line_graph JSON parse');
-          rawDataUrl = fb.rawDataUrl; provider = fb.provider; fallbackReason = fb.fallbackReason;
+          rawDataUrl = fb.rawDataUrl; provider = fb.provider; fallbackReason = fb.fallbackReason; capturedPrompt = fb.enrichedPrompt;
           break;
         }
         const { renderLineGraph } = await import('../utils/preciseRenderer');
         rawDataUrl = renderLineGraph(parsed);
+        capturedPrompt = promptText;
         break;
       }
       case 'generate_svg': {
@@ -273,6 +284,7 @@ export async function generateQuestionImage(
         // generateSvgContent uses Gemini text-mode for the SVG body; provider
         // = gemini for accounting purposes (it's not the image-gen model).
         provider = 'gemini';
+        capturedPrompt = promptText;
         break;
       }
       default: {
@@ -284,12 +296,13 @@ export async function generateQuestionImage(
         rawDataUrl = result.dataUrl;
         provider = result.provider;
         fallbackReason = result.fallbackReason;
+        capturedPrompt = enriched;
         break;
       }
     }
 
     const { dataUrl, sizeKb } = await normalizeToCanvas(rawDataUrl);
-    return { status: 'generated', dataUrl, sizeKb, provider, fallbackReason, requires_labels };
+    return { status: 'generated', dataUrl, sizeKb, provider, fallbackReason, requires_labels, prompt: capturedPrompt };
   } catch (e: any) {
     return { status: 'failed', reason: e.message };
   }

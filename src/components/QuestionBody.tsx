@@ -14,6 +14,7 @@ import type { ReactNode } from 'react';
 import { splitPair } from '../utils/matchPairs';
 import { extractMarkdownTable } from '../utils/markdownTable';
 import { CopyButton } from './CopyButton';
+import { Icon } from './swiftee/atoms';
 
 export type BodyDensity = 'detailed' | 'compact';
 
@@ -23,7 +24,7 @@ export interface QuestionBodyProps {
   image?: string;
   /** Stage G1: optional provider info for the rendered image. When present
    *  shows a small chip in the corner (openai = green, gemini = amber). */
-  imageProvider?: { provider: 'openai' | 'gemini' | 'precise'; fallbackReason?: string };
+  imageProvider?: { provider: 'openai' | 'gemini' | 'precise'; fallbackReason?: string; prompt?: string };
   density?: BodyDensity;
   /** LaTeX renderer. Caller supplies the app-level LatexText so we don't pull katex twice. */
   Latex: React.FC<{ text: any; className?: string; block?: boolean }>;
@@ -59,6 +60,11 @@ const SectionLabel: React.FC<{ show: boolean; children: ReactNode }> = ({ show, 
 export const QuestionBody: React.FC<QuestionBodyProps> = ({
   q, qType: qTypeProp, image, imageProvider, density = 'compact', Latex, showCopy = true,
 }) => {
+  // Stage G follow-up: "Show prompt" toggle on the image. Lets the SME view
+  // and copy the exact enriched prompt sent to gpt-image-2 so they can paste
+  // into ChatGPT / a separate gpt-image-2 tool when the auto-generated
+  // image isn't satisfactory.
+  const [showImagePrompt, setShowImagePrompt] = React.useState(false);
   const qType = qTypeProp || q.type || 'mcq';
   const detailed = density === 'detailed';
   const wrapGap = { marginBottom: detailed ? 14 : 10 };
@@ -74,45 +80,104 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
   return (
     <div style={{ fontFamily: 'var(--font-body)' }}>
       {image && (
-        <div style={{
-          ...wrapGap,
-          border: '1px solid var(--border-subtle)', borderRadius: 10,
-          background: '#fff', padding: 8,
-          display: 'flex', justifyContent: 'center',
-          position: 'relative',
-        }}>
-          <img src={image} alt="Question" style={{ maxWidth: '100%', maxHeight: 192, objectFit: 'contain' }} />
-          {showCopy && (
-            <div style={{ position: 'absolute', top: 4, left: 4 }}>
-              <CopyButton
-                imageDataUrl={image}
-                label="Copy"
-                title="Copy image to clipboard (PNG)"
-              />
+        <div style={{ ...wrapGap }}>
+          <div style={{
+            border: '1px solid var(--border-subtle)', borderRadius: 10,
+            background: '#fff', padding: 8,
+            display: 'flex', justifyContent: 'center',
+            position: 'relative',
+          }}>
+            <img src={image} alt="Question" style={{ maxWidth: '100%', maxHeight: 192, objectFit: 'contain' }} />
+            {showCopy && (
+              <div style={{ position: 'absolute', top: 6, left: 6, display: 'flex', gap: 4 }}>
+                <CopyButton
+                  imageDataUrl={image}
+                  label="Copy"
+                  title="Copy image to clipboard (PNG)"
+                />
+                {imageProvider?.prompt && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setShowImagePrompt(s => !s); }}
+                    title={showImagePrompt ? 'Hide the prompt that produced this image' : 'Show the prompt that produced this image — paste into ChatGPT / gpt-image-2 to iterate manually'}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '2px 6px', fontSize: 10, fontWeight: 600,
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                      color: showImagePrompt ? 'var(--swiftee-deep)' : 'var(--fg-secondary, #6b6b76)',
+                      background: showImagePrompt ? 'var(--bg-tint, #F2EAFE)' : 'transparent',
+                      border: showImagePrompt ? '1px solid var(--border-brand-soft, #C5A8F4)' : '1px solid var(--border-subtle, #e0e0e6)',
+                      borderRadius: 6, cursor: 'pointer',
+                      fontFamily: 'var(--font-body)', lineHeight: 1,
+                    }}
+                  >
+                    <Icon name={showImagePrompt ? 'visibility_off' : 'description'} size="sm" />
+                    {showImagePrompt ? 'Hide prompt' : 'Show prompt'}
+                  </button>
+                )}
+              </div>
+            )}
+            {imageProvider && (
+              <span
+                title={
+                  imageProvider.provider === 'openai' ? 'Rendered by OpenAI gpt-image-1'
+                  : imageProvider.provider === 'precise' ? 'Rendered deterministically (SVG)'
+                  : `Gemini fallback${imageProvider.fallbackReason ? ' — ' + imageProvider.fallbackReason : ''}`
+                }
+                style={{
+                  position: 'absolute', top: 6, right: 6,
+                  fontSize: 11, fontWeight: 800, textTransform: 'uppercase',
+                  letterSpacing: '0.06em', padding: '4px 10px', borderRadius: 6,
+                  fontFamily: 'var(--font-display)',
+                  background: imageProvider.provider === 'openai' ? '#27a55b'
+                    : imageProvider.provider === 'precise' ? '#3C64B4'
+                    : '#B47800',
+                  color: '#fff',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }}
+              >
+                {imageProvider.provider === 'openai' ? 'OpenAI'
+                  : imageProvider.provider === 'precise' ? 'svg'
+                  : 'Gemini fallback'}
+              </span>
+            )}
+          </div>
+          {showImagePrompt && imageProvider?.prompt && (
+            <div style={{
+              marginTop: 6, padding: 10, borderRadius: 10,
+              background: '#FAF7FE',
+              border: '1px solid var(--border-brand-soft, #C5A8F4)',
+              display: 'flex', flexDirection: 'column', gap: 6,
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              }}>
+                <div style={{
+                  fontSize: 10, fontWeight: 800, textTransform: 'uppercase',
+                  letterSpacing: '0.08em', color: 'var(--swiftee-deep)',
+                  fontFamily: 'var(--font-display)',
+                }}>
+                  Image prompt — paste into gpt-image-2 to iterate
+                </div>
+                <CopyButton
+                  text={imageProvider.prompt}
+                  label="Copy prompt"
+                  variant="pill"
+                  title="Copy the full enriched prompt to clipboard"
+                />
+              </div>
+              <pre style={{
+                margin: 0, padding: '8px 10px',
+                background: '#fff',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 6,
+                fontSize: 11, lineHeight: 1.5,
+                color: 'var(--swiftee-deep)',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
+                maxHeight: 240, overflowY: 'auto',
+              }}>{imageProvider.prompt}</pre>
             </div>
-          )}
-          {imageProvider && (
-            <span
-              title={
-                imageProvider.provider === 'openai' ? 'Rendered by OpenAI gpt-image-2'
-                : imageProvider.provider === 'precise' ? 'Rendered deterministically (SVG)'
-                : `Gemini fallback${imageProvider.fallbackReason ? ' — ' + imageProvider.fallbackReason : ''}`
-              }
-              style={{
-                position: 'absolute', top: 4, right: 4,
-                fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
-                letterSpacing: '0.06em', padding: '2px 6px', borderRadius: 4,
-                fontFamily: 'var(--font-body)',
-                background: imageProvider.provider === 'openai' ? 'rgba(40, 140, 60, 0.92)'
-                  : imageProvider.provider === 'precise' ? 'rgba(60, 100, 180, 0.92)'
-                  : 'rgba(180, 120, 0, 0.92)',
-                color: '#fff',
-              }}
-            >
-              {imageProvider.provider === 'openai' ? 'openai'
-                : imageProvider.provider === 'precise' ? 'svg'
-                : 'gemini'}
-            </span>
           )}
         </div>
       )}

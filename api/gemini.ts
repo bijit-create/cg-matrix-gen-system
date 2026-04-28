@@ -124,10 +124,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           provider: 'openai',
         });
       }
-      const openaiModel = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2';
-      // Native 4:3 size — matches the post-process 800x600 normalize target,
-      // avoids wasted pixels from cropping a square render.
-      const size = (req.body.size as string) || '1024x768';
+      // Default to gpt-image-1 — OpenAI's production image-gen model on
+      // /v1/images/generations. gpt-image-2 was documented in some forward-
+      // looking blog posts but is not accepted by the public API for most
+      // accounts; calling it returns 404 silently and the client falls back
+      // to Gemini. Operators who DO have gpt-image-2 access can override
+      // with OPENAI_IMAGE_MODEL=gpt-image-2 in Vercel env.
+      const openaiModel = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
+      // gpt-image-1 only accepts 1024x1024 (square), 1536x1024 (landscape),
+      // 1024x1536 (portrait), or 'auto'. The previous '1024x768' returned 400
+      // which the silent fallback hid — every image was actually Gemini.
+      // 1024x1024 is safest and post-process normalizeToCanvas crops to 4:3.
+      const size = (req.body.size as string) || '1024x1024';
       // 'high' is OpenAI's recommended quality for diagrams with small text /
       // multiple labels / dense information panels (cookbook: image-gen
       // prompting guide). Worth the latency for our use case.
@@ -149,15 +157,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!oa.ok) {
         const text = await oa.text();
         const is429 = oa.status === 429;
+        const is404 = oa.status === 404;
         // Surface every OpenAI failure to the Vercel function log so operators
         // can diagnose without client-side help.
         console.warn(`[image-gen] OpenAI ${openaiModel} failed: ${oa.status} ${text.slice(0, 200)}`);
+        // 404 specifically means the model name isn't recognised on this
+        // account / endpoint. Make that diagnosable in the client error.
+        const hint = is404
+          ? ` (the model "${openaiModel}" was not found on this account; try OPENAI_IMAGE_MODEL=gpt-image-1 in Vercel env)`
+          : '';
         return res.status(is429 ? 429 : oa.status).json({
           error: strictMode
-            ? `STRICT: OpenAI image gen failed (${oa.status}): ${text.slice(0, 200)}`
-            : `OpenAI image gen failed (${oa.status}): ${text.slice(0, 200)}`,
+            ? `STRICT: OpenAI image gen failed (${oa.status}): ${text.slice(0, 200)}${hint}`
+            : `OpenAI image gen failed (${oa.status}): ${text.slice(0, 200)}${hint}`,
           retryable: is429,
           provider: 'openai',
+          model: openaiModel,
         });
       }
       const data: any = await oa.json();

@@ -23,6 +23,11 @@ export interface ImageProviderInfo {
    *  AND requires_labels===true, the audit raises an image_material warn
    *  because Gemini's image model frequently misspells labels. */
   requires_labels?: boolean;
+  /** The exact enriched prompt sent to the image model. Surfaced via the
+   *  "Show prompt" button on the image card — the SME can copy it and paste
+   *  into ChatGPT / gpt-image-2 to manually iterate when the auto-generated
+   *  image isn't satisfactory. */
+  prompt?: string;
 }
 
 export interface BankState {
