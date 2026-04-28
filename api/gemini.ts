@@ -77,10 +77,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
       for (const part of (response as any).candidates?.[0]?.content?.parts || []) {
         if (part.inlineData) {
-          return res.status(200).json({ image: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` });
+          return res.status(200).json({
+            image: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`,
+            provider: 'gemini',
+          });
         }
       }
-      return res.status(500).json({ error: 'No image generated' });
+      return res.status(500).json({ error: 'No image generated', provider: 'gemini' });
 
     } else if (action === 'editImage') {
       const { imageData, imageMimeType, editPrompt } = req.body;
@@ -106,13 +109,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     } else if (action === 'generateImageOpenAI') {
       // Primary image-gen path. Uses gpt-image-2 by default (overridable via
-      // OPENAI_IMAGE_MODEL env). Falls through to the caller's fallback chain
-      // on any failure so the client can retry via Gemini.
+      // OPENAI_IMAGE_MODEL env). Returns provider='openai' on success; on any
+      // failure returns the error + provider='openai' so the client can decide
+      // whether to fall through to Gemini (silent default) or surface the
+      // error (when IMAGE_PROVIDER_STRICT=true).
       const openaiKey = process.env.OPENAI_API_KEY;
       if (!openaiKey) {
-        return res.status(500).json({ error: 'OPENAI_API_KEY not configured on server.' });
+        console.warn('[image-gen] OPENAI_API_KEY not configured; client will fall back to Gemini.');
+        return res.status(500).json({
+          error: 'OPENAI_API_KEY not configured on server.',
+          provider: 'openai',
+        });
       }
-      const model = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2';
+      const openaiModel = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2';
       const size = (req.body.size as string) || '1024x1024';
       const quality = (req.body.quality as string) || 'standard';
       const oa = await fetch('https://api.openai.com/v1/images/generations', {
@@ -122,7 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           Authorization: `Bearer ${openaiKey}`,
         },
         body: JSON.stringify({
-          model,
+          model: openaiModel,
           prompt: userPayload || '',
           size,
           quality,
@@ -132,24 +141,80 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!oa.ok) {
         const text = await oa.text();
         const is429 = oa.status === 429;
+        // Surface every OpenAI failure to the Vercel function log so operators
+        // can diagnose without client-side help.
+        console.warn(`[image-gen] OpenAI ${openaiModel} failed: ${oa.status} ${text.slice(0, 200)}`);
         return res.status(is429 ? 429 : oa.status).json({
           error: `OpenAI image gen failed (${oa.status}): ${text.slice(0, 200)}`,
           retryable: is429,
+          provider: 'openai',
         });
       }
       const data: any = await oa.json();
       const item = data?.data?.[0];
       if (item?.b64_json) {
-        return res.status(200).json({ image: `data:image/png;base64,${item.b64_json}` });
+        return res.status(200).json({
+          image: `data:image/png;base64,${item.b64_json}`,
+          provider: 'openai',
+          model: openaiModel,
+        });
       }
       if (item?.url) {
         // Fetch and convert to base64 so the client gets the same shape.
         const imgResp = await fetch(item.url);
         const buf = Buffer.from(await imgResp.arrayBuffer());
         const mime = imgResp.headers.get('content-type') || 'image/png';
-        return res.status(200).json({ image: `data:${mime};base64,${buf.toString('base64')}` });
+        return res.status(200).json({
+          image: `data:${mime};base64,${buf.toString('base64')}`,
+          provider: 'openai',
+          model: openaiModel,
+        });
       }
-      return res.status(500).json({ error: 'OpenAI returned no image data.' });
+      console.warn('[image-gen] OpenAI returned no image data; returning 500.');
+      return res.status(500).json({ error: 'OpenAI returned no image data.', provider: 'openai' });
+
+    } else if (action === 'imageProviderHealth') {
+      // Health probe for the image-gen pipeline. Reports whether each provider
+      // is configured and (for OpenAI only) whether the key actually works.
+      // Gemini's text key already gets exercised by every other action, so
+      // a separate ping here would just be noise.
+      const geminiKeys = getApiKeys();
+      const openaiKey = process.env.OPENAI_API_KEY;
+      const openaiModel = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2';
+      const strict = process.env.IMAGE_PROVIDER_STRICT === 'true';
+
+      let openaiReachable: boolean | null = null;
+      let openaiError: string | undefined;
+      if (openaiKey) {
+        try {
+          // Cheap probe — list available models. No image gen, no tokens charged.
+          const probe = await fetch('https://api.openai.com/v1/models', {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${openaiKey}` },
+          });
+          openaiReachable = probe.ok;
+          if (!probe.ok) {
+            const text = await probe.text();
+            openaiError = `${probe.status}: ${text.slice(0, 160)}`;
+          }
+        } catch (e: any) {
+          openaiReachable = false;
+          openaiError = e?.message?.slice(0, 160) || 'network error';
+        }
+      }
+      return res.status(200).json({
+        openai: {
+          configured: !!openaiKey,
+          model: openaiModel,
+          reachable: openaiReachable,
+          error: openaiError,
+        },
+        gemini: {
+          configured: geminiKeys.length > 0,
+          keyCount: geminiKeys.length,
+        },
+        strict,
+      });
 
     } else {
       return res.status(400).json({ error: `Unknown action: ${action}` });

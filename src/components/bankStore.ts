@@ -11,6 +11,15 @@ import type { AuditResult } from '../agents/audit';
 
 export type BankMode = 'pipeline' | 'quick';
 
+/** Stage G1: provider metadata for a generated image. Stored in a parallel
+ *  map (`imageProviders`) so readers that only need the dataUrl keep using
+ *  `questionImages` unchanged. */
+export interface ImageProviderInfo {
+  provider: 'openai' | 'gemini' | 'precise';
+  /** Set when OpenAI failed and the call fell back to Gemini. */
+  fallbackReason?: string;
+}
+
 export interface BankState {
   mode: BankMode | null;
   questions: any[];
@@ -22,6 +31,8 @@ export interface BankState {
   gradeScopeProfile: any | null;
   chapterContent?: string;
   questionImages: Record<string, string>;
+  /** Stage G1 — keyed by the same question id as questionImages. */
+  imageProviders: Record<string, ImageProviderInfo>;
   /** Last audit run against the current questions, or null if never audited */
   audit: AuditResult | null;
   /** Monotonic version bumped on every set() so useSyncExternalStore fires */
@@ -38,6 +49,7 @@ const INITIAL: BankState = {
   gradeScopeProfile: null,
   chapterContent: '',
   questionImages: {},
+  imageProviders: {},
   audit: null,
   version: 0,
 };

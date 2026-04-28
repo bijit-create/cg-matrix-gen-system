@@ -139,6 +139,7 @@ export const BankView: React.FC<BankViewProps> = ({
           questions={bank.questions}
           audit={bank.audit}
           questionImages={bank.questionImages}
+          imageProviders={bank.imageProviders}
           Latex={Latex}
           onRegenerateWithFeedback={onRegenerateWithFeedback}
           onBulkRegen={onBulkRegen}
@@ -190,6 +191,7 @@ export const BankView: React.FC<BankViewProps> = ({
                   q={q}
                   qType={q.type || 'mcq'}
                   image={bank.questionImages[qId]}
+                  imageProvider={bank.imageProviders?.[qId]}
                   density="compact"
                   Latex={Latex}
                 />

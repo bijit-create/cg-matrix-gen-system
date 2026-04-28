@@ -94,6 +94,12 @@ export async function generateQuestionImage(
   dataUrl?: string;
   sizeKb?: number;
   reason?: string;
+  /** Stage G1: which provider rendered the bytes. 'precise' = deterministic
+   *  SVG renderer (math/chart/table/numberline/line graph); 'openai' or
+   *  'gemini' for raster paths. */
+  provider?: 'openai' | 'gemini' | 'precise';
+  /** Set when OpenAI failed and the call fell back to Gemini. */
+  fallbackReason?: string;
 }> {
   // Fast path: if the question already has a concrete image_desc, skip the
   // classifier and go straight to the OpenAI image generator with the desc as
@@ -103,9 +109,15 @@ export async function generateQuestionImage(
     try {
       const { buildImagePrompt } = await import('./prompts');
       const enriched = buildImagePrompt(opts.imageDesc.trim(), opts?.subject || '', '');
-      const rawDataUrl = await generateImageContent(enriched);
-      const { dataUrl, sizeKb } = await normalizeToCanvas(rawDataUrl);
-      return { status: 'generated', dataUrl, sizeKb };
+      const result = await generateImageContent(enriched);
+      const { dataUrl, sizeKb } = await normalizeToCanvas(result.dataUrl);
+      return {
+        status: 'generated',
+        dataUrl,
+        sizeKb,
+        provider: result.provider,
+        fallbackReason: result.fallbackReason,
+      };
     } catch (e: any) {
       // Fall through to classifier path on failure.
     }
@@ -128,6 +140,8 @@ export async function generateQuestionImage(
 
   try {
     let rawDataUrl: string;
+    let provider: 'openai' | 'gemini' | 'precise' = 'precise';
+    let fallbackReason: string | undefined;
     const promptText: string = intentPrompt as string;
 
     switch (intentStatus) {
@@ -164,6 +178,9 @@ export async function generateQuestionImage(
       }
       case 'generate_svg': {
         rawDataUrl = await generateSvgContent(promptText);
+        // generateSvgContent uses Gemini text-mode for the SVG body; provider
+        // = gemini for accounting purposes (it's not the image-gen model).
+        provider = 'gemini';
         break;
       }
       default: {
@@ -171,13 +188,16 @@ export async function generateQuestionImage(
         // sending to OpenAI. buildImagePrompt is in prompts.ts.
         const { buildImagePrompt } = await import('./prompts');
         const enriched = buildImagePrompt(promptText, opts?.subject || '', '');
-        rawDataUrl = await generateImageContent(enriched);
+        const result = await generateImageContent(enriched);
+        rawDataUrl = result.dataUrl;
+        provider = result.provider;
+        fallbackReason = result.fallbackReason;
         break;
       }
     }
 
     const { dataUrl, sizeKb } = await normalizeToCanvas(rawDataUrl);
-    return { status: 'generated', dataUrl, sizeKb };
+    return { status: 'generated', dataUrl, sizeKb, provider, fallbackReason };
   } catch (e: any) {
     return { status: 'failed', reason: e.message };
   }
@@ -189,20 +209,34 @@ export async function generateFromPrompt(prompt: string): Promise<{
   dataUrl?: string;
   sizeKb?: number;
   reason?: string;
+  provider?: 'openai' | 'gemini' | 'precise';
+  fallbackReason?: string;
 }> {
   // Enrich with NCERT style rules if not already present
   const ncertRules = `\n\nSTYLE: Clean flat design, cartoon/vector style, bright child-friendly colours, plain white background, proper alignment, 4:3 ratio.\nSTRICT: ABSOLUTELY NO text, labels, numbers, letters, words, captions. NO answers. NO decorations, shadows, or background objects. Minimal, focused on learning.`;
   const enrichedPrompt = prompt.includes('STRICT') ? prompt : prompt + ncertRules;
 
   try {
-    const rawDataUrl = await generateImageContent(enrichedPrompt);
-    const { dataUrl, sizeKb } = await normalizeToCanvas(rawDataUrl);
-    return { status: 'generated', dataUrl, sizeKb };
+    const result = await generateImageContent(enrichedPrompt);
+    const { dataUrl, sizeKb } = await normalizeToCanvas(result.dataUrl);
+    return {
+      status: 'generated',
+      dataUrl,
+      sizeKb,
+      provider: result.provider,
+      fallbackReason: result.fallbackReason,
+    };
   } catch (e: any) {
     try {
       const svgUrl = await generateSvgContent(prompt);
       const { dataUrl, sizeKb } = await normalizeToCanvas(svgUrl);
-      return { status: 'generated', dataUrl, sizeKb };
+      return {
+        status: 'generated',
+        dataUrl,
+        sizeKb,
+        provider: 'gemini',
+        fallbackReason: `OpenAI image-gen failed: ${e?.message?.slice(0, 120) || 'unknown'} — used Gemini SVG.`,
+      };
     } catch {
       return { status: 'failed', reason: e.message };
     }

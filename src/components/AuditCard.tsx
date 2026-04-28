@@ -23,6 +23,8 @@ export interface AuditCardProps {
   q: any;
   report?: AuditReport;
   image?: string;
+  /** Stage G1 — passed to QuestionBody so the corner chip renders. */
+  imageProvider?: { provider: 'openai' | 'gemini' | 'precise'; fallbackReason?: string };
   Latex: React.FC<{ text: any; className?: string; block?: boolean }>;
   onRegenerateWithFeedback?: (q: any, report: AuditReport) => void | Promise<void>;
   onEdit?: (q: any) => void;
@@ -34,7 +36,7 @@ export interface AuditCardProps {
 }
 
 export const AuditCard: React.FC<AuditCardProps> = ({
-  q, report, image, Latex, onRegenerateWithFeedback, onEdit, onGenerateImage, imageBusy, busy,
+  q, report, image, imageProvider, Latex, onRegenerateWithFeedback, onEdit, onGenerateImage, imageBusy, busy,
 }) => {
   const sev = report?.severity;
   const qId = q.id || q.question_id;
@@ -85,7 +87,7 @@ export const AuditCard: React.FC<AuditCardProps> = ({
 
       {/* Body */}
       <div style={{ padding: '14px' }}>
-        <QuestionBody q={q} qType={q.type || 'mcq'} image={image} density="compact" Latex={Latex} />
+        <QuestionBody q={q} qType={q.type || 'mcq'} image={image} imageProvider={imageProvider} density="compact" Latex={Latex} />
       </div>
 
       {/* Flag list + actions */}

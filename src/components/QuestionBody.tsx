@@ -20,6 +20,9 @@ export interface QuestionBodyProps {
   q: any;
   qType?: string;
   image?: string;
+  /** Stage G1: optional provider info for the rendered image. When present
+   *  shows a small chip in the corner (openai = green, gemini = amber). */
+  imageProvider?: { provider: 'openai' | 'gemini' | 'precise'; fallbackReason?: string };
   density?: BodyDensity;
   /** LaTeX renderer. Caller supplies the app-level LatexText so we don't pull katex twice. */
   Latex: React.FC<{ text: any; className?: string; block?: boolean }>;
@@ -42,7 +45,7 @@ const SectionLabel: React.FC<{ show: boolean; children: ReactNode }> = ({ show, 
     : null;
 
 export const QuestionBody: React.FC<QuestionBodyProps> = ({
-  q, qType: qTypeProp, image, density = 'compact', Latex,
+  q, qType: qTypeProp, image, imageProvider, density = 'compact', Latex,
 }) => {
   const qType = qTypeProp || q.type || 'mcq';
   const detailed = density === 'detailed';
@@ -64,8 +67,32 @@ export const QuestionBody: React.FC<QuestionBodyProps> = ({
           border: '1px solid var(--border-subtle)', borderRadius: 10,
           background: '#fff', padding: 8,
           display: 'flex', justifyContent: 'center',
+          position: 'relative',
         }}>
           <img src={image} alt="Question" style={{ maxWidth: '100%', maxHeight: 192, objectFit: 'contain' }} />
+          {imageProvider && (
+            <span
+              title={
+                imageProvider.provider === 'openai' ? 'Rendered by OpenAI gpt-image-2'
+                : imageProvider.provider === 'precise' ? 'Rendered deterministically (SVG)'
+                : `Gemini fallback${imageProvider.fallbackReason ? ' — ' + imageProvider.fallbackReason : ''}`
+              }
+              style={{
+                position: 'absolute', top: 4, right: 4,
+                fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
+                letterSpacing: '0.06em', padding: '2px 6px', borderRadius: 4,
+                fontFamily: 'var(--font-body)',
+                background: imageProvider.provider === 'openai' ? 'rgba(40, 140, 60, 0.92)'
+                  : imageProvider.provider === 'precise' ? 'rgba(60, 100, 180, 0.92)'
+                  : 'rgba(180, 120, 0, 0.92)',
+                color: '#fff',
+              }}
+            >
+              {imageProvider.provider === 'openai' ? 'openai'
+                : imageProvider.provider === 'precise' ? 'svg'
+                : 'gemini'}
+            </span>
+          )}
         </div>
       )}
 

@@ -267,6 +267,9 @@ const PipelineRunnerView = () => {
   const [questions, setQuestions] = useState<any[]>([]);
   const [qaResults, setQaResults] = useState<any[]>([]);
   const [questionImages, setQuestionImages] = useState<Record<string, string>>({});
+  // Stage G1: parallel map of which provider rendered each image. Same key
+  // domain as questionImages. Surfaces as the chip on the per-question card.
+  const [imageProviders, setImageProviders] = useState<Record<string, import('./components/bankStore').ImageProviderInfo>>({});
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
 
   // --- Cell-by-cell generation ---
@@ -705,6 +708,7 @@ const PipelineRunnerView = () => {
     // questions with no image attached when the audit surface opens.
     const imageNeedQs = questions.filter((q: any) => q.needs_image && !questionImages[q.id || q.question_id]);
     const finalImages: Record<string, string> = { ...questionImages };
+    const finalProviders: Record<string, import('./components/bankStore').ImageProviderInfo> = { ...imageProviders };
     if (imageNeedQs.length > 0) {
       setLogs(prev => [...prev, { agent: 'Image Agent', action: `Auto-generating ${imageNeedQs.length} image(s) via gpt-image-2 before sending to Bank…`, time: new Date().toLocaleTimeString() }]);
       try {
@@ -715,13 +719,22 @@ const PipelineRunnerView = () => {
             const result = await generateQuestionImage(q.stem, { force: true, subject: parsedMetadata?.subjectCode, imageDesc: q.image_desc });
             if (result.status === 'generated' && result.dataUrl) {
               finalImages[qId] = result.dataUrl;
-              setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: image ✓ (${result.sizeKb}KB)`, time: new Date().toLocaleTimeString() }]);
+              if (result.provider) {
+                finalProviders[qId] = { provider: result.provider, fallbackReason: result.fallbackReason };
+              }
+              const providerTag = result.provider === 'openai'
+                ? 'openai'
+                : result.fallbackReason
+                  ? `gemini-fallback: ${result.fallbackReason.slice(0, 80)}`
+                  : (result.provider || 'gemini');
+              setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: image ✓ (${result.sizeKb}KB, ${providerTag})`, time: new Date().toLocaleTimeString() }]);
             }
           } catch (e: any) {
             setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: image failed — ${e.message?.slice(0, 40)}`, time: new Date().toLocaleTimeString() }]);
           }
         }));
         setQuestionImages(finalImages);
+        setImageProviders(finalProviders);
       } catch { /* fall through with whatever images we have */ }
     }
 
@@ -736,6 +749,7 @@ const PipelineRunnerView = () => {
       gradeScopeProfile: null,
       chapterContent,
       questionImages: finalImages,
+      imageProviders: finalProviders,
       audit: null,
     });
 
@@ -846,13 +860,22 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
     if (!q) return;
     setGeneratingImageId(qId);
     try {
+      const tagFor = (r: { provider?: string; fallbackReason?: string }) =>
+        r.provider === 'openai'
+          ? 'openai'
+          : r.fallbackReason
+            ? `gemini-fallback: ${r.fallbackReason.slice(0, 80)}`
+            : (r.provider || 'gemini');
       if (customPrompt) {
         // Direct prompt (for option images, edits, etc.)
         const { generateFromPrompt } = await import('./agents/imageGen');
         const result = await generateFromPrompt(customPrompt);
         if (result.status === 'generated' && result.dataUrl) {
           setQuestionImages(prev => ({ ...prev, [qId]: result.dataUrl! }));
-          setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: ${result.sizeKb}KB (800x600 PNG)`, time: new Date().toLocaleTimeString() }]);
+          if (result.provider) {
+            setImageProviders(prev => ({ ...prev, [qId]: { provider: result.provider!, fallbackReason: result.fallbackReason } }));
+          }
+          setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: ${result.sizeKb}KB, ${tagFor(result)}`, time: new Date().toLocaleTimeString() }]);
         }
       } else {
         // Analyze question and generate
@@ -860,7 +883,10 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
         const result = await generateQuestionImage(q.stem, { subject: parsedMetadata?.subjectCode, imageDesc: q.image_desc });
         if (result.status === 'generated' && result.dataUrl) {
           setQuestionImages(prev => ({ ...prev, [qId]: result.dataUrl! }));
-          setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: ${result.sizeKb}KB (800x600 PNG)`, time: new Date().toLocaleTimeString() }]);
+          if (result.provider) {
+            setImageProviders(prev => ({ ...prev, [qId]: { provider: result.provider!, fallbackReason: result.fallbackReason } }));
+          }
+          setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: ${result.sizeKb}KB, ${tagFor(result)}`, time: new Date().toLocaleTimeString() }]);
         } else {
           setLogs(prev => [...prev, { agent: 'Image Agent', action: `${qId}: ${result.reason || 'skipped'}`, time: new Date().toLocaleTimeString() }]);
         }
@@ -1944,7 +1970,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                               </div>
 
                               <div className="p-4">
-                                <QuestionBody q={q} qType={qType} image={questionImages[qId]} density="detailed" Latex={LatexText} />
+                                <QuestionBody q={q} qType={qType} image={questionImages[qId]} imageProvider={imageProviders[qId]} density="detailed" Latex={LatexText} />
 
                                 {/* QA Issues */}
                                 {qa && qa.issues?.length > 0 && (
@@ -2079,7 +2105,7 @@ LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
                           </div>
 
                           <div className="p-4">
-                            <QuestionBody q={q} qType={qType} image={questionImages[q.id]} density="detailed" Latex={LatexText} />
+                            <QuestionBody q={q} qType={qType} image={questionImages[q.id]} imageProvider={imageProviders[q.id]} density="detailed" Latex={LatexText} />
 
                             {qa && qa.issues?.length > 0 && (
                               <div className={`mt-2 text-xs p-2 tech-border ${qa.severity === 'critical' ? 'bg-[#FFEBEE]' : qa.severity === 'major' ? 'bg-[#FFF3E0]' : 'bg-[var(--surface)]'}`}>
@@ -2355,6 +2381,8 @@ const QuickGenerateView = () => {
   const [progress, setProgress] = useState('');
   const [questions, setQuestions] = useState<any[]>([]);
   const [questionImages, setQuestionImages] = useState<Record<string, string>>({});
+  // Stage G1: parallel provider-metadata map (Quick mode).
+  const [imageProviders, setImageProviders] = useState<Record<string, import('./components/bankStore').ImageProviderInfo>>({});
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
 
@@ -2741,6 +2769,7 @@ If MCQ, options may also reference the image. For primary grades especially, pre
       // we can fire all in parallel without blowing the rate limit.
       const imageNeedQs = latestQs.filter((q: any) => q.needs_image && !questionImages[q.id]);
       const finalImages: Record<string, string> = { ...questionImages };
+      const finalProviders: Record<string, import('./components/bankStore').ImageProviderInfo> = { ...imageProviders };
       if (imageNeedQs.length > 0) {
         log(`Auto-generating ${imageNeedQs.length} image(s) via gpt-image-2…`);
         setProgress(`Generating images (0/${imageNeedQs.length})…`);
@@ -2752,7 +2781,15 @@ If MCQ, options may also reference the image. For primary grades especially, pre
             const result = await generateQuestionImage(q.stem, { force: true, subject: metadata?.subjectCode, imageDesc: q.image_desc });
             if (result.status === 'generated' && result.dataUrl) {
               finalImages[q.id] = result.dataUrl;
-              log(`${q.id}: image ✓ (${result.sizeKb}KB)`);
+              if (result.provider) {
+                finalProviders[q.id] = { provider: result.provider, fallbackReason: result.fallbackReason };
+              }
+              const providerTag = result.provider === 'openai'
+                ? 'openai'
+                : result.fallbackReason
+                  ? `gemini-fallback: ${result.fallbackReason.slice(0, 80)}`
+                  : (result.provider || 'gemini');
+              log(`${q.id}: image ✓ (${result.sizeKb}KB, ${providerTag})`);
             } else {
               log(`${q.id}: image skipped — ${result.reason || 'no visual'}`);
             }
@@ -2764,6 +2801,7 @@ If MCQ, options may also reference the image. For primary grades especially, pre
           }
         }));
         setQuestionImages(finalImages);
+        setImageProviders(finalProviders);
       }
 
       // Land this batch in the Bank so the user can audit / regen / export.
@@ -2778,6 +2816,7 @@ If MCQ, options may also reference the image. For primary grades especially, pre
         gradeScopeProfile,
         chapterContent: content,
         questionImages: finalImages,
+        imageProviders: finalProviders,
         audit: null,
       });
 
@@ -2903,6 +2942,11 @@ ${q.stem}`;
       delete next[q.id];
       return next;
     });
+    setImageProviders(prev => {
+      const next = { ...prev };
+      delete next[q.id];
+      return next;
+    });
     if (!q?.needs_image || !q?.stem) return;
     setGeneratingImageId(q.id);
     try {
@@ -2910,7 +2954,15 @@ ${q.stem}`;
       const result = await generateQuestionImage(q.stem, { force: true, subject: metadata?.subjectCode, imageDesc: q.image_desc });
       if (result.status === 'generated' && result.dataUrl) {
         setQuestionImages(prev => ({ ...prev, [q.id]: result.dataUrl! }));
-        log(`${q.id}: image refreshed (${result.sizeKb}KB)`);
+        if (result.provider) {
+          setImageProviders(prev => ({ ...prev, [q.id]: { provider: result.provider!, fallbackReason: result.fallbackReason } }));
+        }
+        const providerTag = result.provider === 'openai'
+          ? 'openai'
+          : result.fallbackReason
+            ? `gemini-fallback: ${result.fallbackReason.slice(0, 80)}`
+            : (result.provider || 'gemini');
+        log(`${q.id}: image refreshed (${result.sizeKb}KB, ${providerTag})`);
       } else {
         log(`${q.id}: image skipped — ${result.reason}`);
       }
@@ -3210,7 +3262,15 @@ ${q.stem}`;
                                   const result = await generateQuestionImage(q.stem, { force: true, subject: metadata?.subjectCode, imageDesc: q.image_desc });
                                   if (result.status === 'generated' && result.dataUrl) {
                                     setQuestionImages(prev => ({ ...prev, [q.id]: result.dataUrl! }));
-                                    log(`${q.id}: image generated (${result.sizeKb}KB)`);
+                                    if (result.provider) {
+                                      setImageProviders(prev => ({ ...prev, [q.id]: { provider: result.provider!, fallbackReason: result.fallbackReason } }));
+                                    }
+                                    const providerTag = result.provider === 'openai'
+                                      ? 'openai'
+                                      : result.fallbackReason
+                                        ? `gemini-fallback: ${result.fallbackReason.slice(0, 80)}`
+                                        : (result.provider || 'gemini');
+                                    log(`${q.id}: image generated (${result.sizeKb}KB, ${providerTag})`);
                                   } else {
                                     log(`${q.id}: image skipped — ${result.reason}`);
                                   }
@@ -3343,7 +3403,7 @@ ${q.stem}`;
                           )}
                         </>
                       ) : (
-                        <QuestionBody q={q} qType={qType} image={questionImages[q.id]} density="compact" Latex={LatexText} />
+                        <QuestionBody q={q} qType={qType} image={questionImages[q.id]} imageProvider={imageProviders[q.id]} density="compact" Latex={LatexText} />
                       )}
                     </div>
                   </div>
@@ -3497,8 +3557,13 @@ const BankRoute = () => {
         imageDesc: q.image_desc,
       });
       if (result.status === 'generated' && result.dataUrl) {
+        const nextProviders = { ...bank.imageProviders };
+        if (result.provider) {
+          nextProviders[qId] = { provider: result.provider, fallbackReason: result.fallbackReason };
+        }
         bankStore.set({
           questionImages: { ...bank.questionImages, [qId]: result.dataUrl },
+          imageProviders: nextProviders,
         });
       }
     } catch {

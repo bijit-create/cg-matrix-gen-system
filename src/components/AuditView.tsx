@@ -6,6 +6,7 @@ import React, { useState, useMemo } from 'react';
 import { AuditSummary } from './AuditSummary';
 import { AuditCard } from './AuditCard';
 import type { AuditResult, AuditReport } from '../agents/audit';
+import type { ImageProviderInfo } from './bankStore';
 
 type SevFilter = 'all' | 'fail' | 'warn' | 'pass';
 
@@ -13,6 +14,8 @@ export interface AuditViewProps {
   questions: any[];
   audit: AuditResult;
   questionImages: Record<string, string>;
+  /** Stage G1: provider metadata keyed by question id; surfaces as a corner chip. */
+  imageProviders?: Record<string, ImageProviderInfo>;
   Latex: React.FC<{ text: any; className?: string; block?: boolean }>;
   onRegenerateWithFeedback?: (q: any, report: AuditReport) => void | Promise<void>;
   onBulkRegen?: (sev: 'fail' | 'warn') => void | Promise<void>;
@@ -25,7 +28,7 @@ export interface AuditViewProps {
 }
 
 export const AuditView: React.FC<AuditViewProps> = ({
-  questions, audit, questionImages, Latex,
+  questions, audit, questionImages, imageProviders, Latex,
   onRegenerateWithFeedback, onBulkRegen, onEdit, onGenerateImage,
   busyQuestionId, imageBusyQuestionId, bulkBusy,
 }) => {
@@ -77,6 +80,7 @@ export const AuditView: React.FC<AuditViewProps> = ({
               q={q}
               report={reportByQid.get(qId)}
               image={questionImages[qId]}
+              imageProvider={imageProviders?.[qId]}
               Latex={Latex}
               onRegenerateWithFeedback={onRegenerateWithFeedback}
               onEdit={onEdit}

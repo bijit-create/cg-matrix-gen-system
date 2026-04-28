@@ -123,29 +123,69 @@ export const generateWithGroundedSearch = async (
 // Image generation. Primary: OpenAI gpt-image-2 (server uses OPENAI_API_KEY +
 // OPENAI_IMAGE_MODEL env vars). Falls back to Gemini if OpenAI errors so a
 // quota hit / outage on one provider doesn't break the run.
-export const generateImageContent = async (prompt: string): Promise<string> => {
+//
+// Returns provider + (when fallback fires) fallbackReason so the UI can show a
+// chip and the audit can flag labelled diagrams that landed on the Gemini
+// fallback. Set IMAGE_PROVIDER_STRICT=true on the server to disable the
+// fallback entirely (OpenAI errors propagate to the caller).
+export interface ImageGenResult {
+  dataUrl: string;
+  provider: 'openai' | 'gemini';
+  /** Set when OpenAI failed and the call fell back to Gemini. Surfaces the
+   *  raw error message so operators can diagnose without the Vercel logs. */
+  fallbackReason?: string;
+}
+
+export const generateImageContent = async (prompt: string): Promise<ImageGenResult> => {
   return requestQueue.enqueue(
     async () => {
       // Try OpenAI first.
+      let fallbackReason: string | undefined;
       try {
         const response = await callProxy({
           action: 'generateImageOpenAI',
           userPayload: prompt,
         });
-        if (response.image) return response.image;
-      } catch {
-        // fall through to Gemini
+        if (response.image) {
+          return { dataUrl: response.image, provider: 'openai' as const };
+        }
+        // Server returned 200 but no image — extremely unlikely. Treat as fall-through.
+        fallbackReason = 'OpenAI returned 200 with no image data.';
+      } catch (e: any) {
+        // Capture the reason so the UI / audit can surface why we fell back.
+        fallbackReason = e?.message?.slice(0, 200) || 'OpenAI request failed';
+        // Strict mode: server is configured to block fallback. Re-throw so the
+        // caller sees the OpenAI error verbatim instead of silently degrading.
+        // The server signals strict mode via the error message prefix.
+        if (e?.status === 503 && /STRICT/i.test(String(e?.message || ''))) {
+          throw e;
+        }
       }
       // Gemini fallback.
       const response = await callProxy({
         action: 'generateImage',
         userPayload: prompt,
       });
-      if (response.image) return response.image;
-      throw new Error('No image');
+      if (response.image) {
+        return { dataUrl: response.image, provider: 'gemini' as const, fallbackReason };
+      }
+      throw new Error('No image (both providers failed)');
     },
     { maxRetries: 2, baseDelay: 4000 }
   );
+};
+
+/** Image-provider health probe. Calls the server's `imageProviderHealth`
+ *  action and returns the structured status so the Bank toolbar can render
+ *  a one-glance OK/missing/error indicator per provider. */
+export interface ImageProviderHealth {
+  openai: { configured: boolean; model: string; reachable: boolean | null; error?: string };
+  gemini: { configured: boolean; keyCount: number };
+  strict: boolean;
+}
+
+export const checkImageProviderHealth = async (): Promise<ImageProviderHealth> => {
+  return callProxy({ action: 'imageProviderHealth' });
 };
 
 // Image editing
