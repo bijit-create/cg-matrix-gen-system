@@ -207,7 +207,7 @@ Question:
 ${qSummary}
 
 CHAPTER CONTENT (source of truth for examples):
-${chapterContent.slice(0, 2500)}
+${chapterContent.slice(0, 10000)}
 
 Subject: ${subject} | Grade: ${grade}
 Return: pass (true if both checks clean), score (0-100), issues (list, each naming either the substituted term + correct chapter term OR the out-of-chapter example + why it's out-of-chapter / out-of-grade).`,

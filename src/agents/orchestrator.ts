@@ -44,7 +44,12 @@ export class AgentOrchestrator {
     }
 
     // Summarize chapter content to avoid JSON overflow in payloads
-    private summarizeContent(content: string, maxLen = 8000): string {
+    /** Truncate content to a head-slice of maxLen characters. NOT a real
+     *  summary — the function name was previously `summarizeContent` which
+     *  was misleading; renamed for honesty. Stage H raised the maxLen
+     *  defaults at every call-site so the chapter is no longer truncated
+     *  to the first ~2K chars before any agent reasons over it. */
+    private truncateContent(content: string, maxLen = 30000): string {
         if (!content || content.length <= maxLen) return content;
         return content.slice(0, maxLen) + '\n\n[... content truncated for payload size ...]';
     }
@@ -58,7 +63,7 @@ export class AgentOrchestrator {
                 learning_objective: this.config.lo,
                 skill: this.config.skill,
                 target_question_count: this.config.count,
-                chapter_content: this.summarizeContent(this.config.chapterContent || "Not provided.", 3000),
+                chapter_content: this.truncateContent(this.config.chapterContent || "Not provided.", 8000),
                 ...this.config.metadata
             };
             const intakeOutput = await this.runAgent('Intake Agent', Prompts.IntakeAgent, intakePayload, IntakeSchema);
@@ -140,7 +145,7 @@ export class AgentOrchestrator {
                 skill: this.config.skill,
                 grade, subject,
                 subskill: subskillText,
-                chapter_content: this.summarizeContent(relevantContent, 2000),
+                chapter_content: this.truncateContent(relevantContent, 30000),
                 instruction: `Extract 3-8 testable knowledge points for THIS specific subskill: "${subskillText}". Only include points from the chapter content that relate to this subskill.`
             };
 
@@ -407,6 +412,12 @@ If absolutely nothing relevant found, say "NO_MISCONCEPTIONS_FOUND".`,
                         JSON.stringify({ lo: this.config.lo, skill: this.config.skill })
                     );
                     const hasFindings = searchResult.text && !searchResult.text.includes('NO_MISCONCEPTIONS_FOUND');
+                    // Stage H3: pass a chapter excerpt so the agent can prefer
+                    // misconceptions tied to examples the chapter actually
+                    // introduces (e.g., "if the chapter teaches plant
+                    // reproduction via banana / sugarcane / Bryophyllum, prefer
+                    // misconceptions that map to those").
+                    const chapterExcerpt = this.truncateContent(this.config.chapterContent || '', 8000);
                     // Always merge: catalog matches (precision) + search findings (recall +
                     // Indian-context replications). MisconceptionAgent dedups, prioritises
                     // by relevance, and emits a single 4–8 entry list.
@@ -415,23 +426,26 @@ If absolutely nothing relevant found, say "NO_MISCONCEPTIONS_FOUND".`,
                         subskills: approvedSubskills,
                         learning_objective: this.config.lo,
                         skill: this.config.skill,
+                        chapter_excerpt: chapterExcerpt,
                         catalog_matches: catalogMatches.slice(0, 30),
                         research_findings: hasFindings ? searchResult.text : '',
                         instruction: hasFindings
-                            ? 'You have BOTH a catalog of pre-vetted misconceptions AND fresh research findings from authoritative sources (HBCSE, epiSTEME, MOSART, AAAS, Eedi, etc.). Merge them: prefer catalog entries when they fit; supplement with the most-relevant research-grounded entries that the catalog lacks. Dedup near-duplicates. Pair each entry with a primary citation. Select 4–8 most relevant. NEVER invent new misconceptions outside these inputs.'
-                            : 'Parse the catalog matches into structured misconceptions. Search returned no usable findings; prefer the catalog. Select 4–8 most relevant. NEVER invent new ones.',
+                            ? 'You have BOTH a catalog of pre-vetted misconceptions AND fresh research findings from authoritative sources (HBCSE, epiSTEME, MOSART, AAAS, Eedi, etc.). Merge them: prefer catalog entries when they fit; supplement with the most-relevant research-grounded entries that the catalog lacks. Dedup near-duplicates. Pair each entry with a primary citation. Select 4–8 most relevant. NEVER invent new misconceptions outside these inputs. When chapter_excerpt is provided, prefer misconceptions that tie to examples / terminology the chapter actually uses.'
+                            : 'Parse the catalog matches into structured misconceptions. Search returned no usable findings; prefer the catalog. Select 4–8 most relevant. NEVER invent new ones. When chapter_excerpt is provided, prefer misconceptions that tie to examples / terminology the chapter actually uses.',
                     }, MisconceptionSchema);
                 } catch (e: any) {
                     this.log('Misconception Agent', `Search failed: ${e.message}`);
                     // Fallback: catalog-only.
                     if (catalogMatches.length > 0) {
+                        const chapterExcerpt = this.truncateContent(this.config.chapterContent || '', 8000);
                         output = await this.runAgent('Misconception Agent', Prompts.MisconceptionAgent, {
                             construct: this.artifacts.construct,
                             subskills: approvedSubskills,
                             learning_objective: this.config.lo,
                             skill: this.config.skill,
+                            chapter_excerpt: chapterExcerpt,
                             catalog_matches: catalogMatches.slice(0, 30),
-                            instruction: 'Select 4-8 most relevant. NEVER invent new ones.',
+                            instruction: 'Select 4-8 most relevant. NEVER invent new ones. When chapter_excerpt is provided, prefer misconceptions that tie to examples / terminology the chapter actually uses.',
                         }, MisconceptionSchema).catch(() => catalogMatches.slice(0, 8).map((m: any, i: number) => ({
                             misconception_id: m.id || `M-${i+1}`, misconception_text: m.misconception,
                             type: (m.type || 'conceptual').toLowerCase(), prevalence: m.prevalence || 'unknown',

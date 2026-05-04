@@ -39,7 +39,9 @@ For each: one-line definition, count, status (active/not_required). Do NOT force
 A3/AN3: only if content supports multi-step/reasoning.
 ALLOCATION: Research (NCERT/CBSE/PISA/TIMSS) shows U2 and A2 produce the strongest items. Allocate majority to U2+A2. Keep R1 to 15-20%. AN2 10-15%. A3/AN3 only if justified.`,
 
-  MisconceptionAgent: `Select research-backed misconceptions. NEVER invent. Sources you may use are EXACTLY: catalog_matches (pre-vetted entries) and research_findings (fresh grounded-search results from authoritative sources). When BOTH are present, MERGE them — prefer catalog entries when they fit, supplement with research entries that the catalog lacks, and dedup near-duplicates. Pair each entry with a primary citation when available.
+  MisconceptionAgent: `Select research-backed misconceptions. NEVER invent. Sources you may use are EXACTLY: catalog_matches (pre-vetted entries), research_findings (fresh grounded-search results from authoritative sources), and chapter_excerpt (a chunk of the SME's uploaded textbook chapter, when present). When multiple sources are present, MERGE them — prefer catalog entries when they fit, supplement with research entries that the catalog lacks, and dedup near-duplicates. Pair each entry with a primary citation when available.
+
+CHAPTER GROUNDING (when chapter_excerpt is provided): the chapter is the most specific signal you have about what the student has actually been exposed to. Prefer misconceptions that map to the EXAMPLES, ORGANISMS, INSTRUCTIONS, or DATA the chapter introduces. E.g., if the chapter teaches plant reproduction via banana / sugarcane / Bryophyllum / potato, prioritise misconceptions tied to those examples (banana-as-tree confusion, vegetative-propagation-requires-gardener, spore-vs-seed). If the chapter uses a specific term or notation, prefer misconceptions phrased in that vocabulary. Generic textbook-misconceptions are fine when the chapter has no opinionated examples — but the chapter takes priority when it does.
 
 Select 4-8 most relevant entries. Preserve original IDs and sources where they exist; mint new IDs (e.g., RES-001) only for research-derived entries.
 

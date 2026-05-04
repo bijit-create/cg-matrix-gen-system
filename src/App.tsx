@@ -2518,7 +2518,9 @@ const QuickGenerateView = () => {
         construct: skill, subskills: [skill], target_questions: total,
         grade: metadata?.gradeCode || '', subject: metadata?.subjectCode || '',
         learning_objective: lo, skill,
-        approved_knowledge_points: content.slice(0, 2000) || lo,
+        // Stage H1: cap raised 2K → 30K so the matrix planner sees enough of
+        // the chapter to allocate cells against real content depth.
+        approved_knowledge_points: content.slice(0, 30000) || lo,
       }), CGMapperSchema);
 
       const cgPlan = matrix.matrix || {};
@@ -2555,6 +2557,33 @@ const QuickGenerateView = () => {
         exemplarBank = (res.text || '').slice(0, 1500);
         log(exemplarBank.length > 50 ? 'Found exemplar questions.' : 'No exemplars found.');
       } catch { log('Exemplar search failed. Continuing.'); }
+
+      // Stage H2: Quick-Gen now runs ContentScopingAgent ONCE on the full
+      // chapter (capped at 30K) before generation. Pipeline already does this
+      // per-subskill; Quick-Gen previously skipped it entirely and the
+      // generator had to invent knowledge points from a 1.5K head-slice. After
+      // this pass, the generator gets a structured list of knowledge points
+      // PLUS a 12K chapter excerpt, materially closing the "SME uploaded a
+      // chapter" / "model actually used the chapter" gap.
+      let scopedKnowledgePoints: any[] = [];
+      if (content.trim().length >= 200) {
+        try {
+          setProgress('Extracting knowledge points from chapter...');
+          log('Extracting knowledge points from chapter (Content Scoping)...');
+          const { ContentScopeSchema } = await import('./agents/schemas');
+          const scopePayload = JSON.stringify({
+            subskill: skill,
+            chapter_content: content.slice(0, 30000),
+            instruction: `Extract 8-15 testable knowledge points from the chapter for the skill: "${skill}". Each point = a complete, testable fact with specific examples / names / numbers — NOT a topic heading. Mark scope_type (core / supporting / advanced) and grade_level (primary / middle / high). Flag boundary / edge-case points with flag="edge-case".`,
+          });
+          scopedKnowledgePoints = await generateAgentResponse(
+            'Content Scoping Agent', Prompts.ContentScopingAgent, scopePayload, ContentScopeSchema,
+          );
+          log(`Knowledge points: ${scopedKnowledgePoints.length} extracted (${scopedKnowledgePoints.filter((p: any) => p.flag === 'edge-case').length} edge-case).`);
+        } catch (e: any) {
+          log(`Content Scoping skipped: ${e?.message?.slice(0, 60) || 'unknown error'}`);
+        }
+      }
 
       // Step 3: Generate questions cell by cell
       const allQs: any[] = [];
@@ -2604,7 +2633,9 @@ const QuickGenerateView = () => {
             subject: metadata?.subjectCode,
             skill,
             learning_objective: lo,
-            chapter_content: content ? content.slice(0, 2500) : '',
+            // Stage H1: cap raised 2.5K → 10K so the grade-profile agent
+            // sees enough of the chapter's actual register / vocabulary.
+            chapter_content: content ? content.slice(0, 10000) : '',
           });
           const profile = await generateAgentResponse('Grade Scope Agent', Pr.GradeScopeAgent, scopeInput, GradeScopeSchema);
           setGradeScopeProfile(profile);
@@ -2701,9 +2732,19 @@ If MCQ, options may also reference the image. For primary grades especially, pre
 
           try {
             const exemplarNote = exemplarBank ? `\nEXEMPLAR QUESTIONS (match this quality):\n${exemplarBank.slice(0, 400)}` : '';
-            const contentSlice = content.length > 0 ? content.slice(0, 1500) : lo;
+            // Stage H1: chapter excerpt cap raised 1.5K → 12K. The model now
+            // sees roughly 4 pages of the chapter on every generation call,
+            // not just the opening paragraph.
+            const contentSlice = content.length > 0 ? content.slice(0, 12000) : lo;
+            // Stage H2: structured knowledge points from the ContentScoping
+            // pass above, threaded into every cell's prompt. The generator
+            // grounds each question in a specific extracted fact rather than
+            // inventing one from the chapter excerpt alone.
+            const knowledgePointsNote = scopedKnowledgePoints.length > 0
+              ? `\nAPPROVED_KNOWLEDGE_POINTS (each question MUST ground in one of these specific facts from the chapter — NOT invent new ones):\n${scopedKnowledgePoints.slice(0, 15).map((p: any, i: number) => `  ${i + 1}. ${p.knowledge_point}${p.flag === 'edge-case' ? ' [EDGE CASE]' : ''}`).join('\n')}`
+              : '';
             const q = await generateAgentResponse('Generation Agent',
-              `${Prompts.GenerationStage1}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\n${difficultyInstr[difficulty]}${gradeHint}${gradeMathBoundary}${stateBoardNote}${approvedTermsNote}${noScenarioNote}${imageDirectiveNote}\nContent: ${contentSlice}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''} | Subject: ${metadata?.subjectCode || ''}\nUK English (colour, favourite, organise, centre). Indian names. Grade-appropriate.${avoidNote}${customNote}${exemplarNote}`,
+              `${Prompts.GenerationStage1}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\n${difficultyInstr[difficulty]}${gradeHint}${gradeMathBoundary}${stateBoardNote}${approvedTermsNote}${knowledgePointsNote}${noScenarioNote}${imageDirectiveNote}\nContent: ${contentSlice}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''} | Subject: ${metadata?.subjectCode || ''}\nUK English (colour, favourite, organise, centre). Indian names. Grade-appropriate.${avoidNote}${customNote}${exemplarNote}`,
               JSON.stringify({ id: qId, type: schemaType, cell }),
               GenerationSchema
             );
@@ -2874,7 +2915,8 @@ If MCQ, options may also reference the image. For primary grades especially, pre
             grade: metadata?.gradeCode,
             subject: metadata?.subjectCode,
             skill, learning_objective: lo,
-            chapter_content: content ? content.slice(0, 2500) : '',
+            // Stage H1: cap raised 2.5K → 10K (matches handleGenerate path).
+            chapter_content: content ? content.slice(0, 10000) : '',
           });
           const profile = await generateAgentResponse('Grade Scope Agent', Prompts.GradeScopeAgent, scopeInput, GradeScopeSchema);
           setGradeScopeProfile(profile);

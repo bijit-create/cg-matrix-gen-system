@@ -152,6 +152,22 @@ The model regenerates with these constraints baked in. After regen, that single 
 
 The system cannot invent what it doesn't have. It generates **FROM your content, not ABOUT your topic.**
 
+### How much of the uploaded content is actually used (Stage H caps)
+
+The system reads the full PDF/text but feeds bounded slices to each agent — model context isn't infinite, and downstream agents read structured knowledge points rather than raw chapter text. Effective per-agent caps after Stage H:
+
+| Agent | Cap | Why |
+|---|---|---|
+| Intake (detect grade / subject) | 8,000 chars | Just needs the opening to identify register. |
+| Content Scoping (extract knowledge points) | **30,000 chars / subskill** | The most consequential cap — these knowledge points drive everything downstream. Captures ~10 pages of a typical NCERT chapter. |
+| Grade Scope Profile (Quick) | 10,000 chars | Sees enough of the chapter's actual vocabulary register. |
+| Generation (Quick) | 12,000 chars **+ structured knowledge points** | Quick-Gen now runs Content Scoping once before generation, so the generator gets both the chapter excerpt AND the extracted knowledge-point list. |
+| Misconception Agent | 8,000 char chapter excerpt | So in-chapter examples (banana / sugarcane / Bryophyllum) ground the misconception list, not just generic textbook errors. |
+| Terminology audit lens | 10,000 chars | Verifies question terms appear in the chapter — needs enough chapter visibility to catch substitutions. |
+| Global payload cap (`fitToWindow`) | 180,000 chars | Last-resort safety net. Rarely fires — per-agent caps are well under. |
+
+For chapters longer than 30,000 characters (~10+ pages), the tail still gets head-truncated — paragraph-relevance ranking is the natural Stage H4 follow-up if a long chapter's later sections aren't being used.
+
 ---
 
 ## Image Discipline
