@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: cg-matrix-gen-system
+    runtime: node
+    repo: https://github.com/bijit-create/cg-matrix-gen-system
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: NODE_ENV=production node --loader tsx/esm server.ts
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: APP_SECRET
+        sync: false
+      - key: PORT
+        value: "10000"
