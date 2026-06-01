@@ -679,7 +679,7 @@ ${CellRules[cell] || ''}
 Cell: ${thisCellDef}
 Generate 1 "${qType}". ${TypeInstructions[qType] || TypeInstructions.mcq}
 Content: "${contentPoint}"
-use_name: ${useName}
+name_if_person: ${useName} — use this name ONLY if the question genuinely involves a person's action (e.g. evaluating a student's claim, a transaction). For a question about an object, plant, or fact, use NO name.
 Other questions test: ${otherPoints}. DO NOT overlap. DO NOT test the same fact.
 Grade: ${grade}, Subject: ${subjectName}, Skill: ${this.config.skill}
 ${subjectHint}
@@ -715,6 +715,21 @@ Question to review: ${JSON.stringify(draft).slice(0, 1500)}`;
         const cellQuestions = results
             .filter(r => r.status === 'fulfilled' && r.value)
             .map(r => (r as PromiseFulfilledResult<any>).value);
+
+        // --- Deterministic de-framing guardrail ---
+        // The LLM ignores the soft "no names / no scenario framing" rule, so strip
+        // construct-irrelevant person framing ("Meera is learning about… Which…")
+        // here. deframeStem returns the original on any failure — never throws.
+        try {
+            const { needsDeframing, deframeStem } = await import('./stemTightener');
+            await Promise.allSettled(cellQuestions.map(async (q: any, i: number) => {
+                if (!needsDeframing(q.stem || '')) return;
+                cellQuestions[i] = await deframeStem(q, grade);
+                this.log('Stem Tightener', `${q.id}: removed narrative framing`);
+            }));
+        } catch (e: any) {
+            this.log('Stem Tightener', `Skipped: ${e.message?.slice(0, 40)}`);
+        }
 
         // --- Multi-perspective image decision (3 AI calls per question, parallel) ---
         this.log('Image Evaluator', `Evaluating image need for ${cellQuestions.length} questions...`);
@@ -779,6 +794,17 @@ Question to review: ${JSON.stringify(draft).slice(0, 1500)}`;
         if (this.config.onStateChange) this.config.onStateChange('running', 8);
 
         this.log('QA Summary', `All cells complete. ${allQuestions.length} total items. Running final QA...`);
+
+        // De-framing guardrail over the full bank — catch any framed stems that
+        // slipped through individual cells before final QA scores them.
+        try {
+            const { needsDeframing, deframeStem } = await import('./stemTightener');
+            const grade = this.artifacts.intake?.grade || '';
+            await Promise.allSettled(allQuestions.map(async (q: any, i: number) => {
+                if (!needsDeframing(q.stem || '')) return;
+                allQuestions[i] = await deframeStem(q, grade);
+            }));
+        } catch { /* guardrail must never block final QA */ }
 
         // Rule-based QA on full set (catches cross-question duplicates)
         const ruleResults = runRuleBasedQA(allQuestions, this.config.lo);

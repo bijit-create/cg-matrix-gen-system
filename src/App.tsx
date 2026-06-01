@@ -796,7 +796,7 @@ Regenerate this question as a "${newType}" question. Same topic and content, dif
 ${typeInstructions[newType] || typeInstructions.mcq}
 Original question: "${q.stem}"
 Cell: ${q.cell}. Grade: ${parsedMetadata?.gradeCode || 'unknown'}.
-LANGUAGE: Simple English, Indian names, short stem, no negative phrasing.`;
+LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if the question involves a person's action; otherwise no name.`;
 
       const newQ = await generateAgentResponse('Generation Agent', prompt, JSON.stringify({ id: qId, type: newType, cell: q.cell }), GenerationSchema);
 
@@ -2270,7 +2270,7 @@ USER FEEDBACK (apply this to improve the question):
 Generate an improved version of this question applying the feedback.
 Keep the same type (${q.type}), cell (${q.cell}), and ID (${q.id}).
 If the feedback doesn't apply to this question, return it unchanged.
-Simple English, Indian names, short stems.`;
+Simple English, short stems. Use an Indian name ONLY when the question involves a person's action; otherwise no name.`;
 
           const typeInstr: Record<string, string> = {
             mcq: 'MCQ with 4 options. Fill "options" array.',
@@ -2744,7 +2744,7 @@ If MCQ, options may also reference the image. For primary grades especially, pre
               ? `\nAPPROVED_KNOWLEDGE_POINTS (each question MUST ground in one of these specific facts from the chapter — NOT invent new ones):\n${scopedKnowledgePoints.slice(0, 15).map((p: any, i: number) => `  ${i + 1}. ${p.knowledge_point}${p.flag === 'edge-case' ? ' [EDGE CASE]' : ''}`).join('\n')}`
               : '';
             const q = await generateAgentResponse('Generation Agent',
-              `${Prompts.GenerationStage1}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\n${difficultyInstr[difficulty]}${gradeHint}${gradeMathBoundary}${stateBoardNote}${approvedTermsNote}${knowledgePointsNote}${noScenarioNote}${imageDirectiveNote}\nContent: ${contentSlice}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''} | Subject: ${metadata?.subjectCode || ''}\nUK English (colour, favourite, organise, centre). Indian names. Grade-appropriate.${avoidNote}${customNote}${exemplarNote}`,
+              `${Prompts.GenerationStage1}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\n${difficultyInstr[difficulty]}${gradeHint}${gradeMathBoundary}${stateBoardNote}${approvedTermsNote}${knowledgePointsNote}${noScenarioNote}${imageDirectiveNote}\nContent: ${contentSlice}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''} | Subject: ${metadata?.subjectCode || ''}\nUK English (colour, favourite, organise, centre). Grade-appropriate. Use an Indian name ONLY when the question involves a person's action; otherwise no name.${avoidNote}${customNote}${exemplarNote}`,
               JSON.stringify({ id: qId, type: schemaType, cell }),
               GenerationSchema
             );
@@ -2931,7 +2931,7 @@ Type: ${q.type}. ${typeInstr[q.type] || typeInstr.mcq}${gradeHint}
 Skill: ${skill}
 LO: ${lo}
 Grade: ${metadata?.gradeCode || ''} | Subject: ${metadata?.subjectCode || ''}
-UK English. Indian names. Grade-appropriate.${extraNoteLine}
+UK English. Grade-appropriate. Use an Indian name ONLY when the question involves a person's action; otherwise no name.${extraNoteLine}
 
 CURRENT QUESTION (${action === 'regenerate' ? 'replace with something different' : 'rewrite'}):
 ${q.stem}`;
@@ -3672,7 +3672,7 @@ Type: ${qType}. ${typeInstr[qType] || typeInstr.mcq}${gradeHint}
 Skill: ${bank.skill}
 LO: ${bank.lo}
 Grade: ${bank.metadata?.gradeCode || ''} | Subject: ${bank.metadata?.subjectCode || ''}
-UK English. Indian names. Grade-appropriate.
+UK English. Grade-appropriate. Use an Indian name ONLY when the question involves a person's action; otherwise no name.
 ${extraNote}
 
 CURRENT QUESTION:

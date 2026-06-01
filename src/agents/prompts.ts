@@ -151,11 +151,13 @@ DIFFICULTY (CRITICAL):
 - Complex questions ONLY for A3/AN2/AN3 cells where the cognitive demand genuinely requires it.
 - R1/U1 questions should feel EASY. U2/A2 should feel MODERATE. Only AN2+ should feel HARD.
 
-STEM VARIETY (CRITICAL — read carefully):
-- Use the Indian name specified in "use_name" field. Do NOT always use Riya.
-- NEVER start stems the same way. Vary between: direct question, scenario, statement-then-question, data-then-question, observation-then-question.
-- BAD: "Riya is learning about X. Which..." (every question starts this way)
-- GOOD: Direct: "Which nutrient provides energy?" / Scenario: "Kabir ate only rice for a week. What nutrient is he missing?" / Observation: "A doctor notices a patient has weak bones. Which mineral deficiency..."
+STEM ECONOMY & VARIETY (CRITICAL — read carefully):
+- EVERY word in the stem must be necessary to answer it. Before finalising, DELETE any name, place, or timeframe that does not change the answer. Such window dressing measures reading stamina, not the assessed skill (construct-irrelevant load).
+- A name/character belongs in the stem ONLY when the action genuinely involves a person (evaluating a student's claim, a transaction, a person performing a step). For a question about a plant, object, or fact, use NO name. The "name_if_person" field is a SUGGESTION for when a name is warranted — it is NOT a requirement to insert one.
+- Vary the cognitive FORM, not the decoration: direct question / compare-two-cases / resolve-a-conflict / evaluate-a-claim / read-from-data. Do NOT manufacture "variety" by adding narrative dressing.
+- NEVER start two stems the same way.
+- BAD (window dressing): "In Priya's home, a money plant grows taller every month, but only by winding around a wooden stick fixed in its pot. What type of plant is it?"
+- GOOD (load-bearing cues only): "A money plant grows upward only by winding around a support, and flops over without one. What type of plant is it?"
 - Each question must feel COMPLETELY DIFFERENT from the others in this set.
 
 COGNITIVE PROGRESSION (each cell MUST feel different):
@@ -190,17 +192,19 @@ REPETITION PREVENTION (CRITICAL):
 IMAGE (CRITICAL — read carefully):
 - Set needs_image=true ONLY when a visual genuinely helps the student answer (most science / geometry / data / map questions). For pure language, abstract reasoning, or vocabulary: needs_image=false.
 - For text-heavy subjects (grammar, vocabulary, history dates): needs_image is usually false.
-- When needs_image=true, write the stem ASSUMING the student sees a picture. Example: "Look at the plant in the picture. What type of plant is this?" NOT "A plant has a green tender stem. What type is it?"
+- When needs_image=true, the image is a SUPPORTING REFERENCE that is part of the question. The stem MUST explicitly direct the student to it ("Look at the image below…", "Study the diagram and…") AND must be answerable only by reading the image — do not also describe in words the very thing the image shows. Example: "Look at the plant in the image. What type of plant is it?" NOT "A plant has a green tender stem. What type is it?"
 
 IMAGE_DESC (REQUIRED when needs_image=true; otherwise empty string):
 The image_desc field tells the image generator EXACTLY what subject to draw. Follow these rules with no exceptions:
 
-  RULE 1 — Depict the CORRECT ANSWER, not the question scene.
-    BAD (literal scene of question text):
-      Question: "Divya observes a tall woody plant. Is it herb / shrub / TREE?"  Answer: shrub.
-      image_desc: "A girl named Divya looking at a tree."   ← WRONG (drew the wrong answer because 'tree' was in the question)
-    GOOD (depicts the answer):
-      image_desc: "A single shrub: a multi-stemmed bushy plant about chest-high, with several woody branches splitting near the ground, leaves, and small flowers. Stems are brown and woody. Plain white background."
+  RULE 1 — Depict the SUBJECT the question asks about (the thing the student must look at to answer), never an announcement of the answer.
+    The image is a SUPPORTING REFERENCE, not an answer key. Draw the exact subject the stem points to, plainly and UNLABELLED. Reveal nothing: no answer word on the tested element, no tick / star / circle, no option letter (A/B/C/D), no computed value (see CONSTRAINTS: "zero answer hints"). Where a quantity is unknown, render it as "?" or "□".
+    For a classify-this item the subject shown IS the correct category's exemplar — that is correct and expected: from the student's side it is the question (the thing to classify), not the answer being given away.
+    BAD (drew a stray object lifted from the option wording):
+      Question: "Look at the plant in the image. Is it a herb, shrub or tree?"  Answer: shrub.
+      image_desc: "A girl looking at a tall tree."   ← WRONG (drew 'tree' just because the word was an option; the subject to classify is the shrub)
+    GOOD (depicts the subject to classify, unlabelled):
+      image_desc: "A single shrub: a multi-stemmed bushy plant about chest-high, with several woody branches splitting near the ground, leaves, and small flowers. Plain white background. No labels."
 
   RULE 2 — Be a noun-phrase description, not a directive.
     Write what should appear in the frame: subjects, key features, proportions. Do NOT include "create an image of...", "draw a picture showing..." — the generator handles that wrapper.
@@ -249,6 +253,7 @@ CHECK AND FIX:
 2. DISTRACTORS: Each wrong option must target a SPECIFIC misconception. "why_wrong" is REQUIRED. Each wrong option must also have either a misconception_id (from the list provided to the generator) or a typed reasoning_error. If a distractor has neither, rewrite it.
 3. OPTIONS: Similar length/grammar. Correct NOT longer. No "all/none of the above".
 4. GRADE FIT: Would a Grade N student understand every word?
+4b. STEM ECONOMY: Delete any name, place, or timeframe not required to answer. If a name isn't doing work (the question isn't about a person's action), remove it — keep only load-bearing cues. Strip openers like "In a garden,…" / "One day,…" that add nothing.
 5. COGNITIVE DEPTH: Does this question test THINKING or just RECALL? If the cell is U2 or higher but the question is just "What is X?" — rewrite to require comparison, reasoning, or conflict resolution. KEYWORD-MATCH TEST: if a student who only memorised definitions could answer the question by matching a word in the stem to a definition, the question is functionally R1 — rewrite for the labelled cell.
 6. TRUE/FALSE: If type is true_false and the statement is an obvious definition — rewrite to be a partial truth, misconception, or conflict statement that requires thinking.
 7. REPETITION: If this tests the SAME skill as the "Other questions" list — flag and suggest a different angle.
@@ -316,7 +321,7 @@ OPERATIONAL TEST: The stem must present DATA (table, graph, observed values, lis
 
   AN3: `AN3 — Analyse / Evaluate Reasoning (DOK3). Student JUDGES an argument or claim.
 OPERATIONAL TEST: The stem must present a CLAIM (often by a fictional student, often deliberately wrong) and ask the student to evaluate the reasoning, identify the flaw, or compare two interpretations.
-Surface form: "Riya claims X because Y. Is her reasoning correct?" / "Two students disagree …".`,
+Surface form: "A student claims X because Y. Is this reasoning correct?" / "Two students disagree …". A name is OPTIONAL here — use one only if it aids clarity; the impersonal "A student claims …" is preferred when no name is needed.`,
 };
 
 export const TypeInstructions: Record<string, string> = {
