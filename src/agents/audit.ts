@@ -8,7 +8,7 @@
 // module normalizes their outputs into one shape and decides per-question
 // overall severity = worst(pass|warn|fail).
 
-import { runRuleBasedQA, checkNumericalDiversity } from './ruleBasedQA';
+import { runRuleBasedQA, checkNumericalDiversity, checkContentDiversity, checkAnswerRevealPairs, looksLikeAssertionReason } from './ruleBasedQA';
 import type { QAFlag as RuleFlag } from './ruleBasedQA';
 import { evaluateQuestionQuality } from './multiPerspective';
 import { getImageRatioForGrade } from './prompts';
@@ -278,6 +278,61 @@ export async function runFullAudit(
         category: 'diversity',
         severity: 'warn',
         message: `Numerical-diversity check: ${diag.join(' | ')}`,
+      });
+    }
+  } catch { /* optional */ }
+
+  // Concept overlap across ALL stems (not just numericals): two questions testing
+  // the same concept under different wording.
+  try {
+    const dup = checkContentDiversity(questions);
+    if (dup.length > 0) {
+      setFlags.push({
+        category: 'diversity',
+        severity: 'warn',
+        message: `Concept-overlap check: ${dup.join(' | ')}`,
+        fix: 'Regenerate one of each flagged pair to test a different concept or skill.',
+      });
+    }
+  } catch { /* optional */ }
+
+  // Reciprocal answer-reveal: each question's answer sits in the other's stem.
+  try {
+    const reveal = checkAnswerRevealPairs(questions);
+    if (reveal.length > 0) {
+      setFlags.push({
+        category: 'diversity',
+        severity: 'warn',
+        message: `Answer-reveal check: ${reveal.join(' | ')}`,
+        fix: 'Rewrite one of each flagged pair so its answer is not contained in the other question\'s stem.',
+      });
+    }
+  } catch { /* optional */ }
+
+  // Assertion-Reason answer-key distribution: A&R items default to "both true, R
+  // explains A" (option A). Warn if ≥3 A&R items share the same correct option.
+  try {
+    const arItems = questions.filter(looksLikeAssertionReason);
+    if (arItems.length >= 3) {
+      const buckets = new Map<string, string[]>();
+      for (const q of arItems) {
+        const opts = Array.isArray(q.options) ? q.options : [];
+        const correct = opts.find((o: any) => o && o.correct);
+        const key = correct
+          ? (correct.label || correct.text || 'unknown').toString().toLowerCase().trim().slice(0, 60)
+          : 'unknown';
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key)!.push(q.id || q.question_id);
+      }
+      buckets.forEach((ids) => {
+        if (ids.length >= 3) {
+          setFlags.push({
+            category: 'diversity',
+            severity: 'warn',
+            message: `${ids.length} Assertion-Reason items share the same correct option (${ids.join(', ')}). The key should be distributed across all four A/R relationships.`,
+            fix: 'Vary the Assertion/Reason pairs so the correct answer lands on the "R-not-explanation", "A-true-R-false", and "A-false-R-true" options too.',
+          });
+        }
       });
     }
   } catch { /* optional */ }

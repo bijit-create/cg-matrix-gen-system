@@ -25,6 +25,80 @@ export interface RuleQAResult {
   flags: QAFlag[];
 }
 
+// === SHARED TEXT HELPERS ===
+// Lifted to module scope (previously inline in checkAnswerLeak / checkNumericalDiversity)
+// so the cross-question checks below reuse the SAME tokenisation and morphology.
+
+// Drop trailing English suffixes to expose a word's root. Order matters — strip the
+// longest suffixes first ("vegetative" → "vegetativ", not "vegetat").
+const LEAK_SUFFIXES = ['ically','ation','ition','ative','tions','ities','ical','ment','ness','ful','ing','ied','ies','tion','sion','est','ed','en','es','er','ly','al','y','s'];
+function rootWord(w: string): string {
+  const lw = w.toLowerCase();
+  for (const suf of LEAK_SUFFIXES) {
+    if (lw.length - suf.length >= 3 && lw.endsWith(suf)) return lw.slice(0, lw.length - suf.length);
+  }
+  return lw;
+}
+
+const LEAK_STOP = new Set(['the','a','an','of','to','in','is','are','it','this','that','and','or','for','on','with','as','by','be','was','were','at','from','one','two','three']);
+function tokeniseLeak(s: string): string[] {
+  return s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 3 && !LEAK_STOP.has(w));
+}
+
+const DIV_STOP = new Set(['the','a','an','of','is','are','was','were','be','to','in','on','at','and','or','if','then','for','with','by','as','from','this','that','it']);
+function tokenizeDiv(s: string): Set<string> {
+  return new Set(
+    s.toLowerCase()
+      .replace(/[^a-z\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length >= 3 && !DIV_STOP.has(w))
+  );
+}
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  a.forEach(w => { if (b.has(w)) inter++; });
+  return inter / (a.size + b.size - inter);
+}
+
+// === ASSERTION-REASON DETECTOR (shared) ===
+// A&R items are emitted organically (not a declared `type`). Detect by the A/R text
+// shape AND relationship-style options so a generic MCQ that merely says "true" won't
+// match. Used to (a) carve A&R out of the distractor-source / answer-leak checks
+// (its relationship options aren't misconception-traced distractors) and (b) drive
+// the set-level answer-key-distribution check in audit.ts.
+export function looksLikeAssertionReason(q: any): boolean {
+  const stem = (q?.stem || '').toString();
+  const hasAR = /\bassertion\b[\s\S]*\breason\b/i.test(stem) || /\bA\s*[:.)\-].*\bR\s*[:.)\-]/.test(stem);
+  const opts = (Array.isArray(q?.options) ? q.options : [])
+    .map((o: any) => (typeof o === 'string' ? o : o?.text || '').toLowerCase());
+  const relOpt = opts.some((t: string) =>
+    /both .*true/.test(t) || /correct explanation/.test(t) || /(assertion|reason).*(true|false)/.test(t));
+  return hasAR && relOpt;
+}
+
+// === TERMINAL PUNCTUATION (interrogative stems must end with "?") ===
+// Only the FINAL sentence is examined — context sentences legitimately end with
+// ".". Imperative stems ("Choose…", "Arrange…", "Match…") and true/false
+// statements don't open with an interrogative, so they are left alone, as are
+// fill-blank stems (## / _____) whose blank may sit mid-sentence.
+const INTERROGATIVE_OPENER_RE = /^(which|what|who|whose|whom|when|where|why|how|is|are|was|were|do|does|did|can|will|should)\b/i;
+function interrogativeWithoutQuestionMark(stem: string): boolean {
+  const s = (stem || '').trim();
+  if (!s || s.endsWith('?') || s.includes('##') || s.includes('_____')) return false;
+  const parts = s.split(/[.!?]+["')\]]*\s+/);
+  const last = (parts[parts.length - 1] || '').trim();
+  return INTERROGATIVE_OPENER_RE.test(last);
+}
+// Deterministic repair for the above — swap a trailing "." for "?" or append a
+// missing "?". Returns the stem unchanged when no interrogative is detected.
+export function fixTerminalPunctuation(stem: string): string {
+  if (!interrogativeWithoutQuestionMark(stem)) return stem;
+  const s = stem.trim();
+  if (/[.!]+$/.test(s)) return s.replace(/[.!]+$/, '?');
+  return s + '?';
+}
+
 // === FORMATTING & TYPOGRAPHY ===
 function checkFormatting(stem: string, options: any[]): QAFlag[] {
   const flags: QAFlag[] = [];
@@ -47,6 +121,12 @@ function checkFormatting(stem: string, options: any[]): QAFlag[] {
   // FIB: single underscore
   if (stem.includes('_') && !stem.includes('_____') && !stem.includes('##')) {
     flags.push({ rule: 'fib_format', category: 'formatting', severity: 'major', message: 'Use _____ (5+) or ##answer## for blanks, not single _.', field: 'stem' });
+  }
+
+  // Interrogative stem not ending with "?" — normally auto-repaired by
+  // fixTerminalPunctuation during generation; this flags SME-edited stems.
+  if (interrogativeWithoutQuestionMark(stem)) {
+    flags.push({ rule: 'missing_question_mark', category: 'formatting', severity: 'minor', message: 'Interrogative stem does not end with a question mark.', field: 'stem' });
   }
 
   // Stem too long (>150 chars) — readability concern
@@ -82,6 +162,15 @@ function checkContent(stem: string): QAFlag[] {
   // "Which of the following is true/false" [Haladyna Rule 5]
   if (/which of the following (is|are)\s+(true|false|correct|incorrect)/i.test(stem)) {
     flags.push({ rule: 'vague_stem', category: 'content', severity: 'major', message: '"Which of the following is true/false?" is too vague (Haladyna Rule 5). Ask a specific question.', field: 'stem' });
+  }
+
+  // Open-ended importance/role/significance stem — invites an essay, not a selection.
+  // Requires BOTH a "why…" opener AND an importance adjective before the "?", so
+  // "Why is a tomato classified as a fruit?" does NOT fire (legitimate U1 framing).
+  const openImportanceRe = /\b(why is|why are|why was|why does|why do)\b[^?]*\b(important|significant|necessary|essential|useful|matters?)\b/i;
+  const openRoleRe = /\b(what is|what are|what's)\b[^?]*\b(importance|significance|role|purpose|value|benefit|need)\s+of\b/i;
+  if (openImportanceRe.test(stem) || openRoleRe.test(stem)) {
+    flags.push({ rule: 'open_importance_stem', category: 'content', severity: 'major', message: 'Open-ended importance/role stem invites an essay. Reframe to "Which statement best explains the importance/role of X?".', field: 'stem' });
   }
 
   return flags;
@@ -369,23 +458,10 @@ function checkAnswerLeak(q: any): QAFlag[] {
   const correct = options.find((o: any) => o && o.correct);
   if (correct && typeof correct.text === 'string' && correct.text.trim()) candidates.push(correct.text);
 
-  // Drop trailing English suffixes to expose the root. Order matters — strip
-  // longest suffixes first so "vegetative" → "vegetativ" not "vegetativ" → "vegetat".
-  const SUFFIXES = ['ically','ation','ition','ative','tions','ities','ical','ment','ness','ful','ing','ied','ies','tion','sion','est','ed','en','es','er','ly','al','y','s'];
-  const root = (w: string): string => {
-    const lw = w.toLowerCase();
-    for (const suf of SUFFIXES) {
-      if (lw.length - suf.length >= 3 && lw.endsWith(suf)) return lw.slice(0, lw.length - suf.length);
-    }
-    return lw;
-  };
-
-  const stop = new Set(['the','a','an','of','to','in','is','are','it','this','that','and','or','for','on','with','as','by','be','was','were','at','from','one','two','three']);
-  const tokenise = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w: string) => w.length > 3 && !stop.has(w));
-  const stemTokens = new Set(tokenise(stem));
+  const stemTokens = new Set(tokeniseLeak(stem));
 
   for (const c of candidates) {
-    const ansTokens = tokenise(c);
+    const ansTokens = tokeniseLeak(c);
     if (ansTokens.length < 1) continue;
 
     // (a) Root-word substring match — catches morphological leaks. We test
@@ -393,7 +469,7 @@ function checkAnswerLeak(q: any): QAFlag[] {
     // "Vegetative propagation" → roots ["vegetativ", "propagat"] both probed.
     let rootLeak: { word: string; root: string } | null = null;
     for (const t of ansTokens) {
-      const r = root(t);
+      const r = rootWord(t);
       if (r.length < 3) continue;
       // Whole-word boundary match so "bud" doesn't false-match "budget".
       const re = new RegExp(`\\b${r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\w*\\b`, 'i');
@@ -455,15 +531,20 @@ export function runRuleBasedQA(questions: any[], lo: string, profile: 'cbse' | '
     const options = q.options || [];
     const flags: QAFlag[] = [];
 
+    // A&R relationship options are not misconception-traced distractors and the
+    // assertion text legitimately restates concepts, so the distractor-source and
+    // answer-leak checks would fire spuriously — skip them for A&R items.
+    const isAR = looksLikeAssertionReason(q);
+
     // Run ALL checks
     flags.push(...checkFormatting(stem, options));
     flags.push(...checkContent(stem));
     flags.push(...checkQuality(stem, options, profile));
     flags.push(...checkDistractors(options));
-    flags.push(...checkDistractorSource(options));
+    if (!isAR) flags.push(...checkDistractorSource(options));
     flags.push(...checkMisconceptionCoverage(q));
     flags.push(...checkRationaleHygiene(q));
-    flags.push(...checkAnswerLeak(q));
+    if (!isAR) flags.push(...checkAnswerLeak(q));
     flags.push(...checkImageMaterial(q));
     flags.push(...checkLocalization(stem, options));
     flags.push(...checkAlignment(stem, lo, options));
@@ -495,23 +576,7 @@ export function checkNumericalDiversity(questions: any[]): string[] {
   const nums = questions.filter(q => /\d/.test(q.stem || ''));
   if (nums.length < 3) return findings;
 
-  const tokenize = (s: string): Set<string> => {
-    const stop = new Set(['the', 'a', 'an', 'of', 'is', 'are', 'was', 'were', 'be', 'to', 'in', 'on', 'at', 'and', 'or', 'if', 'then', 'for', 'with', 'by', 'as', 'from', 'this', 'that', 'it']);
-    return new Set(
-      s.toLowerCase()
-        .replace(/[^a-z\s]/g, ' ')
-        .split(/\s+/)
-        .filter(w => w.length >= 3 && !stop.has(w))
-    );
-  };
-  const jaccard = (a: Set<string>, b: Set<string>): number => {
-    if (a.size === 0 || b.size === 0) return 0;
-    let inter = 0;
-    a.forEach(w => { if (b.has(w)) inter++; });
-    return inter / (a.size + b.size - inter);
-  };
-
-  const sets = nums.map(q => tokenize(q.stem));
+  const sets = nums.map(q => tokenizeDiv(q.stem));
   let highSimPairs = 0;
   for (let i = 0; i < sets.length; i++) {
     for (let j = i + 1; j < sets.length; j++) {
@@ -535,5 +600,65 @@ export function checkNumericalDiversity(questions: any[]): string[] {
     if (ids.length >= 3) findings.push(`${ids.length} numericals share opener "${key}..." — ${ids.join(', ')}.`);
   });
 
+  return findings;
+}
+
+// === CONTENT DIVERSITY (concept overlap across ALL stems) ===
+// Generalises checkNumericalDiversity to every question (not just numericals).
+// Flags stem pairs whose content-word Jaccard is >= CONTENT_DIVERSITY_THRESHOLD —
+// the same concept asked twice. Conservative threshold; advisory (set-level warn).
+export const CONTENT_DIVERSITY_THRESHOLD = 0.6;
+export function checkContentDiversity(questions: any[]): string[] {
+  const findings: string[] = [];
+  const items = questions.filter(q => (q.stem || '').trim().length > 0);
+  if (items.length < 2) return findings;
+  const sets = items.map(q => tokenizeDiv(q.stem));
+  for (let i = 0; i < sets.length; i++) {
+    for (let j = i + 1; j < sets.length; j++) {
+      const s = jaccard(sets[i], sets[j]);
+      if (s >= CONTENT_DIVERSITY_THRESHOLD) {
+        findings.push(`High concept overlap (Jaccard=${s.toFixed(2)}) between ${items[i].id || items[i].question_id} and ${items[j].id || items[j].question_id}.`);
+      }
+    }
+  }
+  return findings;
+}
+
+// === RECIPROCAL ANSWER-REVEAL (cross-question) ===
+// Flags a pair (i, j) when EACH question's correct answer is reproduced inside the
+// OTHER question's stem — answering one hands you the other. Example: "Which rock
+// forms when heat and pressure change existing rocks?" → metamorphic, paired with
+// "What turns sedimentary rock into metamorphic rock?" → heat and pressure. Requires
+// BOTH directions to fire, which keeps false positives near zero (a one-direction
+// variant over-fires on shared vocabulary and overlaps single-question answer-leak).
+const REVEAL_COVERAGE = 0.6;
+function answerTokensOf(q: any): string[] {
+  let ans = '';
+  if (typeof q.answer === 'string' && q.answer.trim()) ans = q.answer;
+  else {
+    const opts = Array.isArray(q.options) ? q.options : [];
+    const correct = opts.find((o: any) => o && o.correct);
+    if (correct && typeof correct.text === 'string') ans = correct.text;
+  }
+  return tokeniseLeak(ans);
+}
+export function checkAnswerRevealPairs(questions: any[]): string[] {
+  const findings: string[] = [];
+  const items = questions.filter(q => (q.stem || '').trim().length > 0);
+  if (items.length < 2) return findings;
+  const stemSets = items.map(q => new Set(tokeniseLeak(q.stem)));
+  const ansTokens = items.map(answerTokensOf);
+  const covers = (stemSet: Set<string>, ans: string[]): boolean => {
+    if (ans.length === 0) return false;
+    const hits = ans.filter(t => stemSet.has(t)).length;
+    return hits / ans.length >= REVEAL_COVERAGE;
+  };
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      if (covers(stemSets[j], ansTokens[i]) && covers(stemSets[i], ansTokens[j])) {
+        findings.push(`${items[i].id || items[i].question_id} and ${items[j].id || items[j].question_id} reveal each other's answers (each answer appears in the other's stem).`);
+      }
+    }
+  }
   return findings;
 }

@@ -3,7 +3,7 @@ import { Prompts, CellRules, TypeInstructions, TypeRotation, MathTypeRotation, g
 import { IntakeSchema, ConstructSchema, SubskillSchema, CGMapperSchema, MisconceptionSchema, ContentScopeSchema, GenerationSchema, QASchema } from './schemas';
 import misconceptionCatalog from '../knowledge_base/student_misconceptions_catalog.json';
 // questionFormatter.ts available for client-side type switching
-import { runRuleBasedQA } from './ruleBasedQA';
+import { runRuleBasedQA, fixTerminalPunctuation } from './ruleBasedQA';
 
 export type PipelineState = 'idle' | 'running' | 'waiting' | 'error' | 'completed';
 
@@ -649,6 +649,14 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
             });
         }
 
+        // Compact brief of questions already generated in earlier cells, so the model
+        // avoids re-testing a concept or producing a reciprocal answer-reveal across
+        // cells. Capped (last 12, stem→80 chars, answer→30) to honour the per-prompt
+        // size budget; empty on the first cell.
+        const priorBrief = (this.artifacts.allQuestions || []).slice(-12)
+            .map((q: any) => `${q.id}: ${(q.stem || '').slice(0, 80)} [ans: ${(q.answer || '').toString().slice(0, 30)}]`)
+            .join('\n');
+
         // --- TWO-STAGE GENERATION (parallel Stage 1, then sequential Stage 2) ---
         const questionPromises = Array.from({ length: count }, (_, qi) => {
             const qType = typesForCell[qi % typesForCell.length];
@@ -672,6 +680,12 @@ R1=facts/definitions, U1/U2=concepts to explain/compare, A2=rules to apply, AN2=
                 ? `PREFERRED TARGET for this slot: misconception_id_targeted="${targetMisconception.id}" (${targetMisconception.text}). Use this ID unless it genuinely does not fit; in that case set misconception_id_targeted="" and pick a typed reasoning_error per the prompt.`
                 : 'No misconceptions available for this cell — set misconception_id_targeted="" and pick a typed reasoning_error per the prompt.';
 
+            // Per-slot Assertion-Reason relationship, rotated so that organic A&R
+            // items distribute their correct answer across all four relationships
+            // instead of always keying to "both true, R explains A".
+            const arRelations = ['R is the correct explanation of A', 'R is true but NOT the explanation of A', 'A is true but R is false', 'A is false but R is true'];
+            const arRelationLine = `PREFERRED A&R RELATIONSHIP for this slot (only if you write an Assertion-Reason item): build A and R so the correct relationship is "${arRelations[qi % arRelations.length]}". Do not default to "both true and R explains A".`;
+
             // STAGE 1: Create question (creative, temp 0.4)
             const subjectHint = getSubjectHint(subjectName);
             const stage1Prompt = `${Prompts.GenerationStage1}
@@ -680,11 +694,12 @@ Cell: ${thisCellDef}
 Generate 1 "${qType}". ${TypeInstructions[qType] || TypeInstructions.mcq}
 Content: "${contentPoint}"
 name_if_person: ${useName} — use this name ONLY if the question genuinely involves a person's action (e.g. evaluating a student's claim, a transaction). For a question about an object, plant, or fact, use NO name.
-Other questions test: ${otherPoints}. DO NOT overlap. DO NOT test the same fact.
+Other questions test: ${otherPoints}. DO NOT overlap. DO NOT test the same fact.${priorBrief ? `\nAlready generated (do NOT duplicate the concept; keep your correct answer OUT of these stems and their answers OUT of your stem):\n${priorBrief}` : ''}
 Grade: ${grade}, Subject: ${subjectName}, Skill: ${this.config.skill}
 ${subjectHint}
 ${misconceptionMenu}
-${targetLine}`;
+${targetLine}
+${arRelationLine}`;
 
             const isEdgeSlot = !!distributedIsEdge[qi];
             return generateAgentResponse('Generation Agent', stage1Prompt, JSON.stringify({ id: qId, type: qType, cell }), GenerationSchema)
@@ -730,6 +745,9 @@ Question to review: ${JSON.stringify(draft).slice(0, 1500)}`;
         } catch (e: any) {
             this.log('Stem Tightener', `Skipped: ${e.message?.slice(0, 40)}`);
         }
+
+        // Interrogative stems must end with "?" — deterministic repair, never throws.
+        cellQuestions.forEach((q: any) => { if (q?.stem) q.stem = fixTerminalPunctuation(q.stem); });
 
         // --- Multi-perspective image decision (3 AI calls per question, parallel) ---
         this.log('Image Evaluator', `Evaluating image need for ${cellQuestions.length} questions...`);
@@ -805,6 +823,10 @@ Question to review: ${JSON.stringify(draft).slice(0, 1500)}`;
                 allQuestions[i] = await deframeStem(q, grade);
             }));
         } catch { /* guardrail must never block final QA */ }
+
+        // Terminal-punctuation repair over the full bank — covers stems edited at
+        // the per-cell SME gate after the in-cell fix ran.
+        allQuestions.forEach((q: any) => { if (q?.stem) q.stem = fixTerminalPunctuation(q.stem); });
 
         // Rule-based QA on full set (catches cross-question duplicates)
         const ruleResults = runRuleBasedQA(allQuestions, this.config.lo);
