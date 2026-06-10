@@ -72,6 +72,11 @@ DISTRACTOR SOURCING:
 - Every wrong option must trace to a NAMED misconception_id from the list above OR a typed reasoning_error. If you cannot name the error, the distractor is filler — replace it.
 - Each distractor's why_wrong must read as a prediction of student thinking ("A student picking this is reasoning that …"), not a tautology ("This is wrong because the answer is X").
 
+OPTION RELEVANCE (CRITICAL):
+- EVERY option must be plausible within the same SUBJECT, and ideally the same topic, as the stem. An option a student can eliminate without knowing the topic is a giveaway, not a distractor.
+- BAD: stem "Which situation best reflects the scope of political theory?" with options "Measuring rainfall patterns", "Studying chemical reactions", "Calculating business profits" — three off-subject throwaways hand the answer to the one same-subject option.
+- If you cannot find a plausible same-topic distractor, use a same-subject one — NEVER reach into another discipline.
+
 RATIONALE HYGIENE:
 - The rationale explains why the correct answer is correct using ONLY facts present in the stem, the options, or chapter_content/approved_terms.
 - It must NAME the misconception(s) that wrong-option-pickers held — reference them by what the student likely believed, not by the misconception_id itself ("A student who classifies by height alone would pick X — but the criterion is stem texture, not height.").
@@ -167,6 +172,12 @@ COGNITIVE PROGRESSION (each cell MUST feel different):
 - A2: Apply to a NEW, real-world, possibly tricky case. "A money plant grows upward using support. Why is it NOT a creeper?" Student must REASON, not just label.
 - AN2: Analyse data or evidence to draw a conclusion. Multi-step: observe → infer → conclude.
 
+CLOSED-FORM IMPORTANCE/SIGNIFICANCE (CRITICAL):
+- An MCQ must be answerable by SELECTING one option, never by writing an explanation. NEVER phrase a stem as an open invitation to explain importance / role / significance / purpose.
+- BAD (open essay-prompt): "Why is the amendment process important in a democracy?"
+- GOOD (select-one): "Which statement best explains the importance of the amendment process in a democracy?"
+- This does NOT ban "Why" questions — "Why is X classified as Y?" / "Why is X NOT a Z?" stay legitimate. The target is ONLY open importance/role/significance/purpose essay-prompts. Convert them to "Which statement best explains the importance/role of X?".
+
 QUESTION DESIGN PATTERNS (vary these — do NOT repeat the same pattern):
 - IDENTIFICATION: "What type of plant is X?" (use sparingly — max 2 per set)
 - REASONING: "Why is X NOT a Y?" or "What makes X different from Y?"
@@ -181,12 +192,18 @@ TRUE/FALSE RULES:
 - GOOD: "A plant that grows along the ground must be a creeper." (FALSE — could be a spreading herb)
 - The student must THINK, not just remember.
 
+ASSERTION-REASON (only when you choose this format):
+- An A&R item gives an Assertion (A) and a Reason (R), then asks how they relate. The four standard options are: (1) Both A and R true, R IS the correct explanation of A; (2) Both A and R true, R is NOT the correct explanation of A; (3) A true, R false; (4) A false, R true.
+- DECIDE the intended relationship FIRST, then write A and R to fit it. Do NOT default every A&R item to option (1). Across a set, the correct answer must land on (2), (3) and (4) as often as (1).
+- If a PREFERRED A&R RELATIONSHIP is given for this slot below, build A and R so that relationship is the correct one.
+
 LANGUAGE VARIETY:
 - NEVER repeat the same descriptive phrase across questions. Vary: "soft green stem" → "thin flexible stem" → "non-woody stem" → "tender stem that bends easily"
 
 REPETITION PREVENTION (CRITICAL):
-- Read "Other questions test:" — NEVER test the same concept or skill.
+- Read "Other questions test:" AND "Already generated (do not duplicate):" — NEVER test the same concept or skill as any of them.
 - Two questions asking "identify plant type from stem description" = UNACCEPTABLE.
+- ANSWER-REVEAL: your correct answer must NOT already appear in an earlier question's stem, and your stem must NOT contain the answer to any earlier question. (BAD pair: Q1 "Which rock forms when heat and pressure change existing rocks?" → metamorphic, Q2 "What turns sedimentary rock into metamorphic rock?" → heat and pressure — each answer sits in the other's stem.)
 - Vary: the SKILL (identify vs compare vs reason vs apply), the CONTEXT (garden/forest/farm/kitchen), the COGNITIVE DEMAND.
 
 IMAGE (CRITICAL — read carefully):
@@ -264,6 +281,10 @@ CHECK AND FIX:
    COVER-THE-STEM TEST: cover the stem; can the answer be identified from option text alone? If yes, the stem is decorative.
 9. RATIONALE HYGIENE: The rationale must reference the misconception that wrong-option-pickers held, must use only facts from stem/options/chapter, and must contain NO author meta-commentary ("higher grades", "though that's an exception", "note to teacher").
 10. PRESERVE FIELDS: Keep misconception_id_targeted, misconception_reasoning_error, and per-option misconception_id / reasoning_error. Do not blank them out.
+11. OPEN IMPORTANCE/SIGNIFICANCE: If the stem is an open invitation to explain importance / role / significance / purpose (e.g. "Why is X important?", "What is the role of X?"), rewrite it to select-one form ("Which statement best explains the importance/role of X?") while preserving the options and answer. Leave "Why is X classified/considered Y?" untouched.
+12. ASSERTION-REASON: If this is an Assertion-Reason item, verify the marked-correct relationship actually holds — check the truth of A, the truth of R, and whether R genuinely explains A. Do NOT lazily mark "both true and R explains A"; if A and R do not fit that, mark the relationship that is actually true.
+13. QUESTION MARK: Every interrogative stem must end with a question mark. If the final sentence asks a question ("Which field does this work belong to.") but ends with a full stop or nothing, change it to "?".
+14. OPTION RELEVANCE: If any option belongs to a different subject/discipline than the stem (e.g. a rainfall-measurement option under a political-theory stem), replace it with a plausible same-topic distractor traced to a misconception or typed reasoning_error.
 
 Return improved question. If already good, return unchanged.`,
 
