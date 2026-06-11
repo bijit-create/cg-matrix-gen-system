@@ -104,6 +104,14 @@ CONTENT — concept-as-source-of-truth, textbook as one representation:
 - ONE problem per stem. Stem contains ALL info needed.
 - NEVER: negative phrasing, "Which is true/false?", passive voice, textbook verbatim.
 
+PLAIN LANGUAGE (CRITICAL — state-board register, applies to EVERY board and grade):
+- Write the way Indian state-board papers do: short, direct, concrete.
+- Max 25 words per stem. If a scenario genuinely needs more, split it into two short sentences and stay tight.
+- BANNED filler: "In the context of…", "With respect to…", "In order to…", "It is important/essential to…", "the essential first step", "first and foremost", "ensure that" used as padding.
+- BAD: "What is the essential first step to ensure the correct balancing of a chemical equation?"
+- GOOD: "What is the first step in balancing a chemical equation?"
+- Active voice only. No nested clauses ("which, given that…"). Grade-appropriate vocabulary; no jargon that needs its own explanation.
+
 ANSWER LEAK (CRITICAL — non-negotiable):
 - The stem MUST NOT contain the defining word(s) of the correct answer, a morphological variant, OR the textbook DEFINITION-PHRASE of the correct answer.
 
@@ -285,6 +293,7 @@ CHECK AND FIX:
 12. ASSERTION-REASON: If this is an Assertion-Reason item, verify the marked-correct relationship actually holds — check the truth of A, the truth of R, and whether R genuinely explains A. Do NOT lazily mark "both true and R explains A"; if A and R do not fit that, mark the relationship that is actually true.
 13. QUESTION MARK: Every interrogative stem must end with a question mark. If the final sentence asks a question ("Which field does this work belong to.") but ends with a full stop or nothing, change it to "?".
 14. OPTION RELEVANCE: If any option belongs to a different subject/discipline than the stem (e.g. a rainfall-measurement option under a political-theory stem), replace it with a plausible same-topic distractor traced to a misconception or typed reasoning_error.
+15. PLAIN LANGUAGE: If the stem exceeds 25 words or uses filler ("In the context of", "With respect to", "In order to", "It is important/essential to", "the essential first step"), rewrite it state-board style — short, direct, active voice — keeping every load-bearing fact. "What is the essential first step to ensure the correct balancing of a chemical equation?" becomes "What is the first step in balancing a chemical equation?".
 
 Return improved question. If already good, return unchanged.`,
 

@@ -2645,12 +2645,9 @@ const QuickGenerateView = () => {
         }
       }
 
-      // State-board language profile (Divyansh) — applied for grades 9/10 only
-      const gradeNum = parseInt(String(metadata?.gradeCode || '').match(/\d+/)?.[0] || '0', 10);
-      const stateBoardNote = (boardProfile === 'state' && gradeNum >= 9 && gradeNum <= 10)
-        ? `\nSTATE-BOARD LANGUAGE PROFILE:\n- Max 25 words per stem.\n- Grade-8 vocabulary ceiling — no technical jargon that requires explanation.\n- NO nested clauses (avoid "which, given that..."). Use active voice.\n- Concrete nouns; no filler ("In the context of...", "With respect to...").\n- Break any longer idea into two sentences.`
-        : '';
-      if (stateBoardNote) log('Applying state-board language profile.');
+      // The state-board plain-language profile (Divyansh) is now baked into
+      // GenerationStage1 itself (PLAIN LANGUAGE block) and applies to every
+      // board, grade, and mode — no per-run note needed here.
 
       // Approved terms from uploaded content (Bhanu Priya — NCERT terminology)
       const approvedTerms = approvedTermsFromContent(content);
@@ -2742,7 +2739,7 @@ If MCQ, options may also reference the image. For primary grades especially, pre
               ? `\nAPPROVED_KNOWLEDGE_POINTS (each question MUST ground in one of these specific facts from the chapter — NOT invent new ones):\n${scopedKnowledgePoints.slice(0, 15).map((p: any, i: number) => `  ${i + 1}. ${p.knowledge_point}${p.flag === 'edge-case' ? ' [EDGE CASE]' : ''}`).join('\n')}`
               : '';
             const q = await generateAgentResponse('Generation Agent',
-              `${Prompts.GenerationStage1}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\n${difficultyInstr[difficulty]}${gradeHint}${gradeMathBoundary}${stateBoardNote}${approvedTermsNote}${knowledgePointsNote}${noScenarioNote}${imageDirectiveNote}\nContent: ${contentSlice}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''} | Subject: ${metadata?.subjectCode || ''}\nUK English (colour, favourite, organise, centre). Grade-appropriate. Use an Indian name ONLY when the question involves a person's action; otherwise no name.${avoidNote}${customNote}${exemplarNote}`,
+              `${Prompts.GenerationStage1}\nCell ${cell}: ${def || cell}\nGenerate 1 "${qType}". ${typeInstr[qType] || typeInstr.mcq}\n${difficultyInstr[difficulty]}${gradeHint}${gradeMathBoundary}${approvedTermsNote}${knowledgePointsNote}${noScenarioNote}${imageDirectiveNote}\nContent: ${contentSlice}\nSkill: ${skill}\nGrade: ${metadata?.gradeCode || ''} | Subject: ${metadata?.subjectCode || ''}\nUK English (colour, favourite, organise, centre). Grade-appropriate. Use an Indian name ONLY when the question involves a person's action; otherwise no name.${avoidNote}${customNote}${exemplarNote}`,
               JSON.stringify({ id: qId, type: schemaType, cell }),
               GenerationSchema
             );
@@ -3204,7 +3201,7 @@ ${q.stem}`;
                     ))}
                   </div>
                   <p className="text-[9px] text-[var(--ink-muted)] mt-1">
-                    State Board (grades 9–10) enforces ≤25-word stems, grade-8 vocabulary ceiling, active voice.
+                    Plain state-board language (≤25-word stems, no filler, active voice) is always applied. Board choice is saved as bank metadata.
                   </p>
                 </div>
                 <div>

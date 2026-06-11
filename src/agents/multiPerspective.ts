@@ -175,6 +175,7 @@ Return: pass (true if pedagogically sound), score (0-100), issues (list of pedag
 - Is it written in correct UK English? (colour not color, organise not organize)
 - Is the vocabulary appropriate for Grade ${grade}?
 - Is the sentence structure simple enough for the grade level?
+- PLAIN LANGUAGE (state-board register): Is the stem short and direct? Flag stems over 25 words and filler phrasing ("in the context of", "with respect to", "in order to", "it is important/essential to", "the essential first step") — these must be rewritten as plain questions.
 - Are there any cultural biases or unfamiliar contexts for Indian government school students?
 - Is the language gender-neutral and inclusive?
 
