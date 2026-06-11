@@ -164,6 +164,14 @@ function checkContent(stem: string): QAFlag[] {
     flags.push({ rule: 'vague_stem', category: 'content', severity: 'major', message: '"Which of the following is true/false?" is too vague (Haladyna Rule 5). Ask a specific question.', field: 'stem' });
   }
 
+  // Filler phrasing — the state-board register (now the default for all
+  // boards) bans empty connective padding like "ensure the essential first
+  // step". Each listed phrase deletes cleanly without losing meaning.
+  const fillerMatch = stem.match(/\b(in the context of|with respect to|in order to|it is (?:important|essential) to|the essential first step|first and foremost)\b/i);
+  if (fillerMatch) {
+    flags.push({ rule: 'filler_phrase', category: 'content', severity: 'major', message: `Filler phrasing ("${fillerMatch[0]}") — write the stem short and direct, state-board style.`, field: 'stem' });
+  }
+
   // Open-ended importance/role/significance stem — invites an essay, not a selection.
   // Requires BOTH a "why…" opener AND an importance adjective before the "?", so
   // "Why is a tomato classified as a fruit?" does NOT fire (legitimate U1 framing).
@@ -202,15 +210,18 @@ function checkQuality(stem: string, options: any[], profile: 'cbse' | 'state' = 
     }
   });
 
-  // Stem word count. State-board profile tightens cap 40 → 25 and raises severity (Divyansh).
+  // Stem word count. The state-board plain-language register (25-word cap,
+  // major severity) now applies to ALL boards — SME feedback: CBSE output was
+  // unnecessarily wordy compared to the state-board profile. The `profile`
+  // parameter is kept for call-site compatibility but no longer varies the cap.
   const wordCount = stem.trim().split(/\s+/).length;
-  const cap = profile === 'state' ? 25 : 40;
+  const cap = 25;
   if (wordCount > cap) {
     flags.push({
       rule: 'high_language_load',
       category: 'quality',
-      severity: profile === 'state' ? 'major' : 'minor',
-      message: `Stem is ${wordCount} words. ${profile === 'state' ? 'State-board profile' : 'For non-language subjects'}, keep under ${cap}.`,
+      severity: 'major',
+      message: `Stem is ${wordCount} words. Plain-language register: keep under ${cap} (split a long scenario into two short sentences).`,
       field: 'stem',
     });
   }
