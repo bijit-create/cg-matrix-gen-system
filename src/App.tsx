@@ -98,6 +98,20 @@ const LatexText: React.FC<{ text: any; className?: string; block?: boolean }> = 
 
 // --- Components ---
 
+// Badge colour variants for metadata tags (see .sw-badge-* in index.css).
+// Keeps the semantic→colour mapping in one place instead of inline ternaries.
+const badgeClass = {
+  misconceptionType: (t: string) =>
+    `sw-badge ${t === 'conceptual' ? 'sw-badge-info' : t === 'procedural' ? 'sw-badge-warning' : 'sw-badge-brand'}`,
+  prevalence: (p: string) =>
+    `sw-badge ${p === 'common' ? 'sw-badge-danger' : p === 'moderate' ? 'sw-badge-warning' : 'sw-badge-success'}`,
+  scopeType: (s: string) =>
+    `sw-badge ${s === 'core' ? 'sw-badge-success' : s === 'advanced' ? 'sw-badge-warning' : 'sw-badge-neutral'}`,
+  gradeLevel: (g: string) =>
+    `sw-badge ${g === 'primary' ? 'sw-badge-info' : g === 'middle' ? 'sw-badge-brand' : 'sw-badge-warning'}`,
+  questionType: () => 'sw-badge sw-badge-info',
+};
+
 // Swiftee topbar. Three primary tabs: Workspace · Bank · Overview.
 const TopNav = ({ activeTab, setActiveTab }: { activeTab: Tab, setActiveTab: (t: Tab) => void }) => (
   <div className="sw-topbar">
@@ -127,22 +141,22 @@ const TopNav = ({ activeTab, setActiveTab }: { activeTab: Tab, setActiveTab: (t:
 // Dashboard (Overview) — only secondary view still wired.
 const MetricCard = ({ title, value, status, target }: { title: string, value: string | number, status: 'good' | 'warning' | 'danger', target?: string }) => {
   const statusColors = {
-    good: 'text-[var(--success)]',
+    good: 'text-[var(--green-400)]',
     warning: 'text-[var(--warning)]',
     danger: 'text-[var(--danger)]'
   };
 
   return (
-    <div className="tech-border p-5 bg-[var(--surface)] flex flex-col justify-between hover:bg-[var(--ink)] hover:text-[var(--bg)] transition-colors group cursor-default">
+    <div className="sw-card flex flex-col justify-between">
       <div className="flex justify-between items-start mb-4">
-        <span className="col-header group-hover:text-[var(--bg)] group-hover:opacity-70">{title}</span>
+        <span className="sw-card-h-sub">{title}</span>
         {status === 'good' && <CheckCircle2 size={16} className={statusColors.good} />}
         {status === 'warning' && <Clock size={16} className={statusColors.warning} />}
         {status === 'danger' && <AlertCircle size={16} className={statusColors.danger} />}
       </div>
       <div>
-        <div className="text-4xl font-light tracking-tight mb-1">{value}</div>
-        {target && <div className="text-xs font-mono opacity-60">TARGET: {target}</div>}
+        <div className="text-4xl font-light tracking-tight mb-1 text-[var(--swiftee-deep)]" style={{ fontFamily: 'var(--font-display)' }}>{value}</div>
+        {target && <div className="text-xs font-mono text-[var(--fg-muted)]">Target: {target}</div>}
       </div>
     </div>
   );
@@ -150,7 +164,7 @@ const MetricCard = ({ title, value, status, target }: { title: string, value: st
 
 const DashboardView = () => {
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
@@ -158,21 +172,21 @@ const DashboardView = () => {
     >
       <header className="mb-8 flex justify-between items-end">
         <div>
-          <h2 className="text-4xl font-light tracking-tight mb-2">System Overview</h2>
-          <p className="col-header">Current Run: Grade 8 Math - Linear Equations (LO-8.EE.C.7)</p>
+          <h2 className="t-h3 mb-1">System overview</h2>
+          <p className="t-micro">Session metrics — populated as a pipeline run progresses</p>
         </div>
         <div className="flex gap-4">
           <div className="text-right">
-            <div className="col-header">System Status</div>
-            <div className="data-value text-[var(--success)] flex items-center gap-2 justify-end">
-              <span className="w-2 h-2 rounded-full bg-[var(--success)] animate-pulse"></span>
+            <div className="sw-card-h-sub">System status</div>
+            <div className="data-value text-[var(--green-400)] flex items-center gap-2 justify-end">
+              <span className="w-2 h-2 rounded-full bg-[var(--green-400)] animate-pulse"></span>
               IDLE
             </div>
           </div>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-12">
         <MetricCard title="Total Items Generated" value="0" target="18" status="warning" />
         <MetricCard title="CG Coverage" value="0/7" target="7/7 Cells" status="warning" />
         <MetricCard title="Misconception Coverage" value="0" target="6" status="warning" />
@@ -994,7 +1008,7 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
               value={tsvInput}
               onChange={handlePasteTSV}
               className="sw-textarea"
-              style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11, minHeight: tsvInput ? 84 : 44, background: '#FAFAFC' }}
+              style={{ fontFamily: 'var(--font-mono)', fontSize: 11, minHeight: tsvInput ? 84 : 44, background: 'var(--bg-app)' }}
               placeholder="Paste Excel/Sheets row here to auto-fill…"
               rows={tsvInput ? 4 : 1}
               spellCheck={false}
@@ -1033,7 +1047,7 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="sw-field-label">
-                Grade <span style={{ color: '#C8573B' }}>*</span>
+                Grade <span style={{ color: 'var(--red-500)' }}>*</span>
               </label>
               <input
                 required
@@ -1117,12 +1131,12 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                     <div key={src.id} style={{
                       display: 'grid', gridTemplateColumns: '36px 1fr auto auto', gap: 12,
                       alignItems: 'center', padding: '10px 12px',
-                      border: '1px solid var(--border-subtle)', borderRadius: 10, background: '#FAFAFC',
+                      border: '1px solid var(--border-subtle)', borderRadius: 10, background: 'var(--bg-app)',
                     }}>
                       <div style={{
                         width: 36, height: 36, borderRadius: 8, background: '#fff',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: src.type === 'youtube' ? '#FF0000' : src.type === 'website' ? '#1976D2' : 'var(--swiftee-purple)',
+                        color: src.type === 'youtube' ? 'var(--icon-youtube)' : src.type === 'website' ? 'var(--icon-web)' : 'var(--swiftee-purple)',
                       }}>
                         {src.type === 'youtube' && <Youtube size={16} />}
                         {src.type === 'website' && <Globe size={16} />}
@@ -1200,7 +1214,7 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
             Initialize pipeline
           </button>
           {!grade && (lo || skill) && (
-            <p style={{ fontSize: 10, color: '#C8573B', marginTop: -6 }}>Grade is required before initialization.</p>
+            <p style={{ fontSize: 10, color: 'var(--red-500)', marginTop: -6 }}>Grade is required before initialization.</p>
           )}
         </form>
       </motion.div>
@@ -1457,7 +1471,7 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                             <button
                               type="button"
                               onClick={() => removeSubskill(idx)}
-                              className="p-1 hover:bg-[#FFEBEE] hover:text-[var(--danger)] text-[var(--ink-muted)] transition-colors shrink-0"
+                              className="p-1 hover:bg-[var(--danger-tint)] hover:text-[var(--danger)] text-[var(--ink-muted)] transition-colors shrink-0"
                             >
                               <Trash2 size={14} />
                             </button>
@@ -1502,7 +1516,7 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                                 onClick={() => toggleSearchResult(idx)}
                                 className={`flex items-start gap-3 p-3 tech-border cursor-pointer transition-colors ${
                                   result.selected
-                                    ? 'bg-[#E8F5E9] border-[var(--success)]'
+                                    ? 'bg-[var(--success-tint)] border-[var(--success)]'
                                     : 'bg-[var(--surface)] hover:bg-[var(--line)]'
                                 }`}
                               >
@@ -1514,9 +1528,9 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                                   onClick={e => e.stopPropagation()}
                                 />
                                 <div className="shrink-0 mt-0.5">
-                                  {result.type === 'youtube' && <Youtube size={16} className="text-[#FF0000]" />}
-                                  {result.type === 'pdf' && <FileDown size={16} className="text-[#D32F2F]" />}
-                                  {result.type === 'web' && <Globe size={16} className="text-[#1976D2]" />}
+                                  {result.type === 'youtube' && <Youtube size={16} className="text-[var(--icon-youtube)]" />}
+                                  {result.type === 'pdf' && <FileDown size={16} className="text-[var(--icon-pdf)]" />}
+                                  {result.type === 'web' && <Globe size={16} className="text-[var(--icon-web)]" />}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2">
@@ -1533,8 +1547,8 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                             ))}
                           </div>
                           {searchResults.some(r => r.selected) && (
-                            <div className="flex items-center justify-between p-2 bg-[#E8F5E9] tech-border border-[var(--success)]">
-                              <span className="text-xs font-mono text-[#2E7D32]">
+                            <div className="flex items-center justify-between p-2 bg-[var(--success-tint)] tech-border border-[var(--success)]">
+                              <span className="text-xs font-mono text-[var(--success-text)]">
                                 {searchResults.filter(r => r.selected).length} resource(s) selected — content will be fed to downstream agents
                               </span>
                               <CheckCircle2 size={16} className="text-[var(--success)]" />
@@ -1597,9 +1611,9 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                     <div className="flex flex-col gap-0">
                       {/* Header */}
                       <div className="grid grid-cols-4 bg-[var(--ink)] text-[var(--bg)]">
-                        <div className="p-2.5 text-xs font-bold uppercase tracking-wider border-r border-[#333]">Bloom's Level</div>
-                        <div className="p-2.5 text-xs font-bold uppercase tracking-wider text-center border-r border-[#333]">DOK 1</div>
-                        <div className="p-2.5 text-xs font-bold uppercase tracking-wider text-center border-r border-[#333]">DOK 2</div>
+                        <div className="p-2.5 text-xs font-bold uppercase tracking-wider border-r border-white/15">Bloom's Level</div>
+                        <div className="p-2.5 text-xs font-bold uppercase tracking-wider text-center border-r border-white/15">DOK 1</div>
+                        <div className="p-2.5 text-xs font-bold uppercase tracking-wider text-center border-r border-white/15">DOK 2</div>
                         <div className="p-2.5 text-xs font-bold uppercase tracking-wider text-center">DOK 3</div>
                       </div>
                       {/* Rows */}
@@ -1655,11 +1669,11 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                   <div>
                     <label className="block col-header mb-2">Diagnostic Misconception Bank</label>
                     {misconceptionsNotFound && misconceptions.length === 0 && (
-                      <div className="tech-border bg-[#FFF8E1] border-[#F57F17] p-4 flex items-start gap-3">
-                        <AlertCircle size={20} className="text-[#F57F17] shrink-0 mt-0.5" />
+                      <div className="tech-border bg-[var(--warning-tint)] border-[var(--warning)] p-4 flex items-start gap-3">
+                        <AlertCircle size={20} className="text-[var(--warning)] shrink-0 mt-0.5" />
                         <div>
-                          <p className="text-sm font-bold text-[#E65100] mb-1">No research-backed misconceptions found for these skills.</p>
-                          <p className="text-xs text-[#BF360C]">
+                          <p className="text-sm font-bold text-[var(--warning-text)] mb-1">No research-backed misconceptions found for these skills.</p>
+                          <p className="text-xs text-[var(--warning-text)]">
                             The misconception catalog and internet search of research sources (MOSART, AAAS Project 2061, Ryan & Williams, etc.) did not return results matching this specific topic.
                             You may proceed without misconceptions, or upload additional research material using the file upload on the input form.
                           </p>
@@ -1672,20 +1686,12 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                           <div className="flex items-center gap-2 mb-2">
                             <span className="font-bold text-sm font-mono bg-[var(--ink)] text-[var(--bg)] px-2 py-0.5">{m.id}</span>
                             {(m as any).type && (
-                              <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded ${
-                                (m as any).type === 'conceptual' ? 'bg-[#E3F2FD] text-[#1565C0]' :
-                                (m as any).type === 'procedural' ? 'bg-[#FFF3E0] text-[#E65100]' :
-                                'bg-[#F3E5F5] text-[#7B1FA2]'
-                              }`}>
+                              <span className={badgeClass.misconceptionType((m as any).type)}>
                                 {(m as any).type}
                               </span>
                             )}
                             {(m as any).prevalence && (
-                              <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded ${
-                                (m as any).prevalence === 'common' ? 'bg-[#FFEBEE] text-[#C62828]' :
-                                (m as any).prevalence === 'moderate' ? 'bg-[#FFF8E1] text-[#F57F17]' :
-                                'bg-[#E8F5E9] text-[#2E7D32]'
-                              }`}>
+                              <span className={badgeClass.prevalence((m as any).prevalence)}>
                                 {(m as any).prevalence}
                               </span>
                             )}
@@ -1767,8 +1773,8 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                               key={k.id}
                               className={`flex items-start gap-2 p-2.5 tech-border text-sm transition-all cursor-pointer ${
                                 !selectedScope[k._idx] ? 'opacity-40 bg-[var(--bg)]' :
-                                k.scope_type === 'advanced' ? 'bg-[#FFF3E0] border-[#F57F17]' :
-                                k.scope_type === 'core' ? 'bg-[#E8F5E9] border-[var(--success)]' :
+                                k.scope_type === 'advanced' ? 'bg-[var(--warning-tint)] border-[var(--warning)]' :
+                                k.scope_type === 'core' ? 'bg-[var(--success-tint)] border-[var(--success)]' :
                                 'bg-[var(--surface)]'
                               }`}
                               onClick={() => {
@@ -1788,20 +1794,12 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                               <div className="flex-1 min-w-0">
                                 <span>{k.knowledge_point}</span>
                                 {k.flag && (
-                                  <span className="text-[10px] text-[#E65100] ml-2 italic">{k.flag}</span>
+                                  <span className="text-[10px] text-[var(--warning-text)] ml-2 italic">{k.flag}</span>
                                 )}
                               </div>
                               <div className="flex items-center gap-1.5 shrink-0">
-                                <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded ${
-                                  k.scope_type === 'core' ? 'bg-[#E8F5E9] text-[#2E7D32]' :
-                                  k.scope_type === 'advanced' ? 'bg-[#FFEBEE] text-[#C62828]' :
-                                  'bg-[var(--line)] text-[var(--ink-muted)]'
-                                }`}>{k.scope_type}</span>
-                                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                                  k.grade_level === 'primary' ? 'bg-[#E3F2FD] text-[#1565C0]' :
-                                  k.grade_level === 'middle' ? 'bg-[#F3E5F5] text-[#7B1FA2]' :
-                                  'bg-[#FFF8E1] text-[#F57F17]'
-                                }`}>{k.grade_level}</span>
+                                <span className={badgeClass.scopeType(k.scope_type)}>{k.scope_type}</span>
+                                <span className={badgeClass.gradeLevel(k.grade_level)}>{k.grade_level}</span>
                               </div>
                             </div>
                           ))}
@@ -1858,7 +1856,7 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                                   style={{
                                     padding: '5px 9px', borderRadius: 6, fontSize: 11,
                                     border: `1px solid ${isActive ? 'var(--swiftee-deep)' : 'var(--border-subtle)'}`,
-                                    background: isActive ? 'var(--swiftee-deep)' : '#FAFAFC',
+                                    background: isActive ? 'var(--swiftee-deep)' : 'var(--bg-app)',
                                     color: isActive ? '#fff' : 'var(--swiftee-deep)',
                                     display: 'inline-flex', alignItems: 'center', gap: 6,
                                   }}
@@ -1941,13 +1939,13 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                           return (
                             <div key={qId} className={`bg-white rounded-[12px] border border-[var(--border-subtle)] ${q.needs_image ? 'border-l-4 border-l-[var(--swiftee-purple)]' : ''} ${qa && !qa.pass ? 'border-[var(--swiftee-gold)]' : ''}`}>
                               {/* Header bar */}
-                              <div className={`flex justify-between items-center px-4 py-2 border-b border-[var(--line-dark)] ${q.needs_image ? 'bg-[#E3F2FD]' : 'bg-[var(--surface)]'}`}>
+                              <div className={`flex justify-between items-center px-4 py-2 border-b border-[var(--border-subtle)] ${q.needs_image ? 'bg-[var(--bg-tint)]' : 'bg-[var(--surface)]'}`}>
                                 <div className="flex items-center gap-2">
                                   <span className="font-bold text-sm font-mono bg-[var(--ink)] text-[var(--bg)] px-2 py-0.5">{qId}</span>
-                                  <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#E3F2FD] text-[#1565C0] font-bold">{qType.replace('_', ' ')}</span>
+                                  <span className={badgeClass.questionType()}>{qType.replace('_', ' ')}</span>
                                   <span className="text-xs font-mono text-[var(--ink-muted)]">{q.cg_cell || q.cell}</span>
                                   {q.needs_image && (
-                                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[#1565C0] text-white flex items-center gap-1">
+                                    <span className="sw-badge sw-badge-solid flex items-center gap-1">
                                       <BrainCircuit size={10} /> Image Required
                                     </span>
                                   )}
@@ -1955,9 +1953,9 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                                 <div className="flex items-center gap-2">
                                   {q.needs_image && (
                                     generatingImageId === qId ? (
-                                      <span className="text-[10px] text-[#1565C0] flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Generating...</span>
+                                      <span className="text-[10px] text-[var(--swiftee-purple)] flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Generating...</span>
                                     ) : !questionImages[qId] ? (
-                                      <button onClick={() => handleGenerateImage(qId)} className="px-2 py-0.5 text-[10px] font-bold uppercase border border-[#1565C0] text-[#1565C0] hover:bg-white flex items-center gap-1">
+                                      <button onClick={() => handleGenerateImage(qId)} className="px-2 py-0.5 text-[10px] font-bold uppercase rounded border border-[var(--swiftee-purple)] text-[var(--swiftee-purple)] hover:bg-[var(--bg-tint)] flex items-center gap-1">
                                         <BrainCircuit size={10} /> Generate Image
                                       </button>
                                     ) : (
@@ -1975,7 +1973,7 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
 
                                 {/* QA Issues */}
                                 {qa && qa.issues?.length > 0 && (
-                                  <div className="mt-2 text-xs text-[#E65100] bg-[#FFF3E0] p-2 tech-border">
+                                  <div className="mt-2 text-xs text-[var(--warning-text)] bg-[var(--warning-tint)] p-2 tech-border">
                                     {qa.issues.map((issue: string, i: number) => <div key={i}>{issue}</div>)}
                                   </div>
                                 )}
@@ -1990,7 +1988,7 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                                       questions: prev.questions.filter((cq: any) => (cq.question_id || cq.id) !== qId)
                                     } : prev);
                                   }}
-                                  className="px-2.5 py-1 text-[10px] font-bold uppercase border border-[var(--danger)] text-[var(--danger)] hover:bg-[#FFEBEE] flex items-center gap-1"
+                                  className="px-2.5 py-1 text-[10px] font-bold uppercase border border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--danger-tint)] flex items-center gap-1"
                                 >
                                   <Trash2 size={10} /> Reject
                                 </button>
@@ -2074,19 +2072,19 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                       const qa = qaResults.find((r: any) => r.question_id === q.id);
                       const qType = q.type || 'mcq';
                       const typeLabel: Record<string, string> = { mcq: 'MCQ', true_false: 'True / False', fill_blank: 'Fill in the Blank', one_word: 'One Word', match: 'Match the Following', arrange: 'Arrange in Order' };
-                      const typeBg: Record<string, string> = { mcq: 'bg-[#E3F2FD] text-[#1565C0]', true_false: 'bg-[#E8EAF6] text-[#283593]', fill_blank: 'bg-[#F3E5F5] text-[#7B1FA2]', one_word: 'bg-[#E8F5E9] text-[#2E7D32]', match: 'bg-[#E0F7FA] text-[#00695C]', arrange: 'bg-[#FFF8E1] text-[#F57F17]' };
+                      const typeBadge: Record<string, string> = { mcq: 'sw-badge-info', true_false: 'sw-badge-brand', fill_blank: 'sw-badge-brand', one_word: 'sw-badge-success', match: 'sw-badge-info', arrange: 'sw-badge-warning' };
 
                       return (
                         <div key={q.id} className={`bg-white rounded-[12px] border border-[var(--border-subtle)] ${q.needs_image ? 'border-l-4 border-l-[var(--swiftee-purple)]' : ''} ${qa && !qa.pass ? 'border-[var(--swiftee-gold)]' : ''}`}>
                           {/* Header bar */}
-                          <div className={`flex justify-between items-center px-4 py-2 border-b border-[var(--line-dark)] ${q.needs_image ? 'bg-[#E3F2FD]' : 'bg-[var(--surface)]'}`}>
+                          <div className={`flex justify-between items-center px-4 py-2 border-b border-[var(--border-subtle)] ${q.needs_image ? 'bg-[var(--bg-tint)]' : 'bg-[var(--surface)]'}`}>
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-sm font-mono bg-[var(--ink)] text-[var(--bg)] px-2 py-0.5">{q.id}</span>
-                              <span className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded font-bold ${typeBg[qType] || 'bg-[var(--line)]'}`}>{typeLabel[qType] || qType}</span>
+                              <span className={`sw-badge ${typeBadge[qType] || 'sw-badge-neutral'}`}>{typeLabel[qType] || qType}</span>
                               <span className="text-xs font-mono text-[var(--ink-muted)]">{q.cell}</span>
-                              {qa && <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${qa.pass ? 'bg-[#E8F5E9] text-[#2E7D32]' : 'bg-[#FFF3E0] text-[#E65100]'}`}>{qa.pass ? 'QA ✓' : 'QA ✗'}</span>}
+                              {qa && <span className={`sw-badge ${qa.pass ? 'sw-badge-success' : 'sw-badge-warning'}`}>{qa.pass ? 'QA ✓' : 'QA ✗'}</span>}
                               {q.needs_image && (
-                                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[#1565C0] text-white flex items-center gap-1">
+                                <span className="sw-badge sw-badge-solid flex items-center gap-1">
                                   <BrainCircuit size={10} /> Image Required
                                 </span>
                               )}
@@ -2096,7 +2094,7 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                                 questionImages[q.id] ? (
                                   <span className="text-[10px] text-[var(--success)] flex items-center gap-1"><CheckCircle2 size={10} /> Image Ready</span>
                                 ) : currentStep === 9 && status === 'waiting' ? (
-                                  <button onClick={() => handleGenerateImage(q.id)} disabled={generatingImageId === q.id} className="px-2 py-0.5 text-[10px] font-bold uppercase border border-[#1565C0] text-[#1565C0] hover:bg-white flex items-center gap-1 disabled:opacity-50">
+                                  <button onClick={() => handleGenerateImage(q.id)} disabled={generatingImageId === q.id} className="px-2 py-0.5 text-[10px] font-bold uppercase rounded border border-[var(--swiftee-purple)] text-[var(--swiftee-purple)] hover:bg-[var(--bg-tint)] flex items-center gap-1 disabled:opacity-50">
                                     {generatingImageId === q.id ? <><Loader2 size={10} className="animate-spin" /> Generating...</> : <><BrainCircuit size={10} /> Generate Image</>}
                                   </button>
                                 ) : null
@@ -2109,7 +2107,7 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                             <QuestionBody q={q} qType={qType} image={questionImages[q.id]} imageProvider={imageProviders[q.id]} density="detailed" Latex={LatexText} />
 
                             {qa && qa.issues?.length > 0 && (
-                              <div className={`mt-2 text-xs p-2 tech-border ${qa.severity === 'critical' ? 'bg-[#FFEBEE]' : qa.severity === 'major' ? 'bg-[#FFF3E0]' : 'bg-[var(--surface)]'}`}>
+                              <div className={`mt-2 text-xs p-2 tech-border ${qa.severity === 'critical' ? 'bg-[var(--danger-tint)]' : qa.severity === 'major' ? 'bg-[var(--warning-tint)]' : 'bg-[var(--surface)]'}`}>
                                 <strong>QA ({qa.issues.length}):</strong> {qa.issues.slice(0, 3).join(' | ')}
                               </div>
                             )}
@@ -2118,7 +2116,7 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                           {/* Action bar */}
                           {currentStep === 9 && status === 'waiting' && (
                             <div className="px-4 py-2 border-t border-[var(--line-dark)] bg-[var(--surface)] flex items-center gap-2 flex-wrap">
-                              <button onClick={() => handleRejectQuestion(q.id)} className="px-2.5 py-1 text-[10px] font-bold uppercase border border-[var(--danger)] text-[var(--danger)] hover:bg-[#FFEBEE] flex items-center gap-1">
+                              <button onClick={() => handleRejectQuestion(q.id)} className="px-2.5 py-1 text-[10px] font-bold uppercase border border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--danger-tint)] flex items-center gap-1">
                                 <Trash2 size={10} /> Reject
                               </button>
                               <span className="text-[10px] text-[var(--ink-muted)]">Switch to:</span>
@@ -2204,9 +2202,9 @@ LANGUAGE: Simple English, short stem, no negative phrasing. Use a name ONLY if t
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
-                  className="absolute bottom-0 left-0 right-0 px-4 py-2.5 bg-[#FFF4E5] border-t border-[#F59E0B] text-[#92400E] text-xs font-mono flex items-center gap-2 z-50"
+                  className="absolute bottom-0 left-0 right-0 px-4 py-2.5 bg-[var(--warning-tint)] border-t border-[var(--warning)] text-[var(--warning-text)] text-xs font-mono flex items-center gap-2 z-50"
                 >
-                  <ShieldCheck size={14} className="text-[#D97706]" />
+                  <ShieldCheck size={14} className="text-[var(--warning)]" />
                   Paused at <strong>{PIPELINE_STATES[currentStep].gate}</strong> — review and approve above to continue.
                 </motion.div>
               )}
@@ -2316,9 +2314,9 @@ Simple English, short stems. Use an Indian name ONLY when the question involves 
   };
 
   return (
-    <div className="tech-border bg-[#FFF8E1] border-[#F57F17] p-4">
+    <div className="tech-border bg-[var(--warning-tint)] border-[var(--warning)] p-4">
       <div className="flex items-center gap-2 mb-2">
-        <AlertCircle size={16} className="text-[#F57F17]" />
+        <AlertCircle size={16} className="text-[var(--warning)]" />
         <label className="text-sm font-bold">Feedback & Refine</label>
       </div>
       <p className="text-xs text-[var(--ink-muted)] mb-2">
@@ -3286,11 +3284,11 @@ ${q.stem}`;
                 const qType = q.type || 'mcq';
                 return (
                   <div key={q.id} className={`bg-white rounded-[12px] border border-[var(--border-subtle)] overflow-hidden ${q.needs_image ? 'border-l-4 border-l-[var(--swiftee-purple)]' : ''}`}>
-                    <div className={`flex justify-between items-center px-3 py-1.5 border-b border-[var(--border-subtle)] ${q.needs_image ? 'bg-[var(--bg-tint)]' : 'bg-[#FAFAFC]'}`}>
+                    <div className={`flex justify-between items-center px-3 py-1.5 border-b border-[var(--border-subtle)] ${q.needs_image ? 'bg-[var(--bg-tint)]' : 'bg-[var(--bg-app)]'}`}>
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-xs font-mono bg-[var(--ink)] text-[var(--bg)] px-1.5 py-0.5">{q.id}</span>
-                        <span className="text-[10px] font-mono uppercase px-1 py-0.5 rounded bg-[#E3F2FD] text-[#1565C0] font-bold">{qType.replace('_', ' ')}</span>
-                        {q.needs_image && <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#1565C0] text-white">IMG</span>}
+                        <span className={badgeClass.questionType()}>{qType.replace('_', ' ')}</span>
+                        {q.needs_image && <span className="sw-badge sw-badge-solid">IMG</span>}
                       </div>
                       <div className="flex items-center gap-2">
                         {q.needs_image && (
@@ -3324,7 +3322,7 @@ ${q.stem}`;
                                 }
                               }}
                               disabled={generatingImageId === q.id}
-                              className="px-2 py-0.5 text-[10px] font-bold uppercase border border-[#1565C0] text-[#1565C0] hover:bg-white flex items-center gap-1 disabled:opacity-50"
+                              className="px-2 py-0.5 text-[10px] font-bold uppercase rounded border border-[var(--swiftee-purple)] text-[var(--swiftee-purple)] hover:bg-[var(--bg-tint)] flex items-center gap-1 disabled:opacity-50"
                             >
                               {generatingImageId === q.id ? <><Loader2 size={10} className="animate-spin" /> Generating...</> : <><BrainCircuit size={10} /> Generate Image</>}
                             </button>
@@ -3405,7 +3403,7 @@ ${q.stem}`;
                               {editDraft.options.map((opt: any, i: number) => {
                                 const isCorrect = opt.correct || opt.is_correct;
                                 return (
-                                  <div key={i} className={`text-sm p-2 tech-border flex items-start gap-1.5 ${isCorrect ? 'border-2 border-[var(--success)] bg-[#E8F5E9] shadow-sm' : 'bg-white'}`}>
+                                  <div key={i} className={`text-sm p-2 tech-border flex items-start gap-1.5 ${isCorrect ? 'border-2 border-[var(--success)] bg-[var(--success-tint)] shadow-sm' : 'bg-white'}`}>
                                     <span className={`font-bold text-xs shrink-0 ${isCorrect ? 'text-[var(--success)]' : ''}`}>
                                       {opt.label || String.fromCharCode(65 + i)}{isCorrect ? ' ✓ CORRECT' : '.'}
                                     </span>
@@ -3441,7 +3439,7 @@ ${q.stem}`;
                             <input
                               value={editDraft?.answer || ''}
                               onChange={e => setEditDraft({ ...editDraft, answer: e.target.value })}
-                              className="w-full tech-border bg-[#E8F5E9] border-2 border-[var(--success)] p-2 text-sm font-mono mb-2"
+                              className="w-full tech-border bg-[var(--success-tint)] border-2 border-[var(--success)] p-2 text-sm font-mono mb-2"
                             />
                           )}
                         </>
@@ -3495,33 +3493,37 @@ const LoginGate = ({ onLogin }: { onLogin: () => void }) => {
   };
 
   return (
-    <div className="h-screen w-full bg-[var(--bg)] text-[var(--ink)] flex items-center justify-center">
+    <div className="h-screen w-full bg-[var(--bg-app)] flex items-center justify-center">
       <div className="max-w-sm w-full p-8">
-        <div className="flex items-center gap-3 mb-8">
-          <BrainCircuit className="text-[var(--accent)]" size={32} />
-          <h1 className="font-bold text-xl uppercase tracking-tight">CG-Matrix Gen</h1>
+        <div className="flex items-center gap-3 mb-6 justify-center">
+          <div className="sw-brand-mark" style={{ width: 36, height: 36, fontSize: 17 }}>M</div>
+          <div>
+            <div className="sw-brand-name" style={{ fontSize: 17 }}>CG-Matrix Gen</div>
+            <div className="sw-brand-sub">Assessment Studio</div>
+          </div>
         </div>
-        <div className="tech-border bg-[var(--surface)] p-6">
-          <label className="block col-header mb-2">Access Token</label>
+        <div className="sw-card" style={{ boxShadow: 'var(--shadow-md)' }}>
+          <label className="sw-field-label">Access token</label>
           <input
             type="password"
             value={token}
             onChange={e => setToken(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            placeholder="Enter your access token..."
-            className="w-full tech-border bg-[var(--bg)] p-3 font-mono text-sm focus:outline-none focus:border-[var(--accent)] mb-4"
+            placeholder="Enter your access token…"
+            className="sw-input mb-4"
+            style={{ fontFamily: 'var(--font-mono)' }}
             autoFocus
           />
           {error && <p className="text-sm text-[var(--danger)] mb-3">{error}</p>}
           <button
             onClick={handleLogin}
             disabled={!token.trim() || checking}
-            className="w-full bg-[var(--ink)] text-[var(--bg)] py-3 font-bold uppercase tracking-wide hover:bg-[var(--accent)] transition-colors disabled:opacity-50"
+            className="sw-btn sw-btn-primary w-full"
           >
-            {checking ? 'Verifying...' : 'Enter'}
+            {checking ? 'Verifying…' : 'Enter'}
           </button>
         </div>
-        <p className="text-xs text-[var(--ink-muted)] mt-4 text-center">Contact your admin for the access token.</p>
+        <p className="text-xs text-[var(--fg-muted)] mt-4 text-center">Contact your admin for the access token.</p>
       </div>
     </div>
   );

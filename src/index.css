@@ -58,6 +58,22 @@
     --border-brand-soft:    #E3D7F2;
     --border-brand:         #7624C2;
 
+    /* Semantic status tints — single source for badge/callout/row colours.
+       Previously these hexes were repeated inline across App.tsx. */
+    --info-tint:            #E3F2FD;
+    --info-text:            #1565C0;
+    --success-tint:         #E8F5E9;
+    --success-text:         #2E7D32;
+    --warning-tint:         #FFF3E0;
+    --warning-text:         #B45309;
+    --danger-tint:          #FFEBEE;
+    --danger-text:          #C62828;
+
+    /* Content-source icon colours */
+    --icon-youtube:         #FF0000;
+    --icon-pdf:             #D32F2F;
+    --icon-web:             #1976D2;
+
     --shadow-sm:            0 1px 2px 0 rgba(46,2,90,0.06), 0 1px 3px 0 rgba(46,2,90,0.05);
     --shadow-md:            0 4px 12px 0 rgba(46,2,90,0.08);
     --shadow-brand:         0 8px 20px 0 rgba(118,36,194,0.4);
@@ -178,6 +194,30 @@
 .sw-chip-grey { background: #F0F1F4; color: var(--fg-secondary); }
 .sw-chip-outline { background: #fff; color: var(--swiftee-deep); border-color: var(--border-subtle); }
 .sw-chip-sm { padding: 2px 7px; font-size: 10px; }
+
+/* Badges — small mono metadata tags (misconception type, prevalence, scope,
+   grade level, question type). One base + semantic colour variants replaces
+   the per-callsite tailwind ternaries that used raw hexes. */
+.sw-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.sw-badge-info    { background: var(--info-tint);    color: var(--info-text); }
+.sw-badge-success { background: var(--success-tint); color: var(--success-text); }
+.sw-badge-warning { background: var(--warning-tint); color: var(--warning-text); }
+.sw-badge-danger  { background: var(--danger-tint);  color: var(--danger-text); }
+.sw-badge-brand   { background: var(--bg-tint);      color: var(--swiftee-purple); }
+.sw-badge-neutral { background: #F0F1F4;             color: var(--fg-secondary); }
+.sw-badge-solid   { background: var(--swiftee-purple); color: #fff; }
 
 /* Cards */
 .sw-card {
